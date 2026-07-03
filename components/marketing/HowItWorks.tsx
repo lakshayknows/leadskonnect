@@ -60,7 +60,7 @@ export default function HowItWorks() {
                   <s.icon className="h-6 w-6 text-brand" />
                 </div>
                 <div className="pt-1.5">
-                  <div className="font-mono text-xs tracking-widest text-action">{s.n}</div>
+                  <div className="font-mono text-xs tracking-widest text-brand">{s.n}</div>
                   <h3 className="font-display mt-1 text-2xl font-bold">{s.title}</h3>
                   <p className="mt-2 max-w-xl leading-relaxed text-ink-soft">{s.body}</p>
                 </div>

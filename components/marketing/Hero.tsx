@@ -126,12 +126,7 @@ export default function Hero() {
       <div className="relative mx-auto grid max-w-6xl items-center gap-14 px-6 lg:grid-cols-[1.05fr_0.95fr]">
         {/* Left: copy */}
         <div>
-          <span className="lk-rise eyebrow inline-flex items-center gap-2 rounded-full border border-line bg-white px-3 py-1.5">
-            <span className="h-1.5 w-1.5 rounded-full" style={{ background: "var(--color-action)" }} />
-            Multi-channel outreach, on autopilot
-          </span>
-
-          <h1 className="font-display mt-6 text-[clamp(2.6rem,6vw,4.6rem)] font-extrabold">
+          <h1 className="font-display text-[clamp(2.6rem,6vw,4.6rem)] font-extrabold">
             <span className="lk-rise block">Reach every lead</span>
             <span className="lk-rise block">
               where they actually{" "}

@@ -24,7 +24,9 @@ export async function getQueue(): Promise<import("bullmq").Queue<SendJob> | null
   const { Queue } = await import("bullmq");
   const IORedis = (await import("ioredis")).default;
   const connection = new IORedis(env.redisUrl!, { maxRetriesPerRequest: null });
-  queue = new Queue<SendJob>(SEND_QUEUE, { connection });
+  queue = new Queue<SendJob>(SEND_QUEUE, {
+    connection: connection as unknown as import("bullmq").ConnectionOptions,
+  });
   return queue;
 }
 

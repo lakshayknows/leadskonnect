@@ -5,10 +5,11 @@ import Link from "next/link";
 import { Menu, X } from "lucide-react";
 
 const LINKS = [
-  { label: "Channels", href: "#channels" },
-  { label: "How it works", href: "#how" },
-  { label: "Safety", href: "#safety" },
-  { label: "Docs", href: "/dashboard" },
+  { label: "Channels", href: "/channels" },
+  { label: "How it works", href: "/#how" },
+  { label: "Safety", href: "/#safety" },
+  { label: "Pricing", href: "/pricing" },
+  { label: "Docs", href: "/docs" },
 ];
 
 /** The "Konnect" mark: two nodes joined by a thread. */

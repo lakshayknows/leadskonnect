@@ -3,6 +3,7 @@
  * Uses the latest model (claude-opus-4-8). Tools wrap the SAME rate-limited send path,
  * so the agent can never exceed platform limits.
  */
+import type AnthropicNS from "@anthropic-ai/sdk";
 import { env, configured } from "./env";
 import { prisma } from "./db";
 import { safeSend } from "./channels";
@@ -88,15 +89,15 @@ export async function runAgent(opts: {
     return { ok: false, summary: "ANTHROPIC_API_KEY not set", steps: 0 };
   }
 
-  const Anthropic = (await import("@anthropic-ai/sdk")).default;
-  const client = new Anthropic({ apiKey: env.anthropic.apiKey! });
+  const AnthropicSDK = (await import("@anthropic-ai/sdk")).default;
+  const client = new AnthropicSDK({ apiKey: env.anthropic.apiKey! });
 
   const leads = await prisma.lead.findMany({ where: { id: { in: opts.leadIds } } });
   const leadTable = leads
     .map((l) => `- ${l.id}: ${l.firstName ?? ""} ${l.lastName ?? ""} <${l.email ?? "no-email"}> @ ${l.company ?? ""}`)
     .join("\n");
 
-  const messages: Anthropic.MessageParam[] = [
+  const messages: AnthropicNS.MessageParam[] = [
     {
       role: "user",
       content: `Campaign brief:\n${opts.brief}\n\nLeads:\n${leadTable}\n\nSend appropriate personalized messages now.`,
@@ -111,7 +112,7 @@ export async function runAgent(opts: {
       model: env.anthropic.model,
       max_tokens: 1024,
       system: SYSTEM_PROMPT,
-      tools: TOOLS as unknown as Anthropic.Tool[],
+      tools: TOOLS as unknown as AnthropicNS.Tool[],
       messages,
     });
 
@@ -123,7 +124,7 @@ export async function runAgent(opts: {
       return { ok: true, summary: text?.type === "text" ? text.text : "done", steps };
     }
 
-    const toolResults: Anthropic.ToolResultBlockParam[] = [];
+    const toolResults: AnthropicNS.ToolResultBlockParam[] = [];
     for (const tu of toolUses) {
       if (tu.type !== "tool_use") continue;
       const out = await runSendTool(tu.input as Parameters<typeof runSendTool>[0]);

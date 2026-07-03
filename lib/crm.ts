@@ -3,7 +3,7 @@
  * Thin wrappers over Prisma; every send path must call `isSuppressed` first.
  */
 import { prisma } from "./db";
-import type { Channel } from "@prisma/client";
+import { Prisma, type Channel } from "@prisma/client";
 
 export async function isSuppressed(opts: {
   email?: string | null;
@@ -43,7 +43,7 @@ export async function logActivity(input: {
       campaignId: input.campaignId,
       type: input.type,
       channel: input.channel,
-      meta: input.meta ?? {},
+      meta: (input.meta ?? {}) as Prisma.InputJsonValue,
     },
   });
 }
@@ -61,7 +61,7 @@ export async function upsertLeadByEmail(data: {
   const { email, custom, ...rest } = data;
   return prisma.lead.upsert({
     where: { email },
-    create: { email, ...rest, custom: custom ?? {} },
-    update: { ...rest, ...(custom ? { custom } : {}) },
+    create: { email, ...rest, custom: (custom ?? {}) as Prisma.InputJsonValue },
+    update: { ...rest, ...(custom ? { custom: custom as Prisma.InputJsonValue } : {}) },
   });
 }

@@ -1,5 +1,6 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { ok, fail, requireDb } from "@/lib/http";
 
@@ -59,8 +60,8 @@ export async function POST(req: NextRequest) {
   const { email, custom, ...rest } = parsed.data;
   const lead = await prisma.lead.upsert({
     where: { email },
-    create: { email, ...rest, custom: custom ?? {} },
-    update: { ...rest, ...(custom ? { custom } : {}) },
+    create: { email, ...rest, custom: (custom ?? {}) as Prisma.InputJsonValue },
+    update: { ...rest, ...(custom ? { custom: custom as Prisma.InputJsonValue } : {}) },
   });
   return ok(lead, { status: 201 });
 }

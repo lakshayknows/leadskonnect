@@ -23,7 +23,9 @@ async function main() {
 
   const { Worker } = await import("bullmq");
   const IORedis = (await import("ioredis")).default;
-  const connection = new IORedis(env.redisUrl!, { maxRetriesPerRequest: null });
+  const connection = new IORedis(env.redisUrl!, {
+    maxRetriesPerRequest: null,
+  }) as unknown as import("bullmq").ConnectionOptions;
 
   const worker = new Worker<SendJob>(
     SEND_QUEUE,

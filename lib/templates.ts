@@ -46,7 +46,7 @@ export function renderMessage(
     company?: string | null;
     title?: string | null;
     email?: string | null;
-    custom?: Record<string, unknown> | null;
+    custom?: unknown;
   }
 ): RenderedMessage {
   const vars: Variables = {
@@ -55,7 +55,7 @@ export function renderMessage(
     company: lead.company ?? "",
     title: lead.title ?? "",
     email: lead.email ?? "",
-    ...(lead.custom ?? {}),
+    ...((lead.custom as Record<string, unknown>) ?? {}),
   };
   return {
     subject: tpl.subject ? render(tpl.subject, vars) : undefined,

@@ -6,24 +6,24 @@
    Bright, human, techy-clean. Cobalt brand + coral action on warm white.
    ================================================================== */
 @theme {
-  /* surfaces */
-  --color-canvas: #fbfaf7; /* warm white */
+  /* surfaces — MONOCHROME */
+  --color-canvas: #ffffff;
   --color-surface: #ffffff;
-  --color-ink: #141414; /* near-black text */
-  --color-ink-soft: #55524d; /* muted body */
-  --color-line: #e7e4dd; /* hairlines on canvas */
+  --color-ink: #0a0a0a; /* near-black — text + dark panels */
+  --color-ink-soft: #6b6b6b; /* muted grey body */
+  --color-line: #e5e5e5; /* hairlines */
 
-  /* brand */
-  --color-brand: #2b4dff; /* electric cobalt */
-  --color-brand-ink: #1a2fb8; /* darker cobalt for text on tint */
-  --color-action: #ff5c39; /* coral CTA / energy */
-  --color-tint: #eef1ff; /* soft blue surface */
+  /* brand = black; there is no accent hue in monochrome */
+  --color-brand: #0a0a0a;
+  --color-brand-ink: #0a0a0a;
+  --color-action: #0a0a0a;
+  --color-tint: #f4f4f5; /* light grey surface */
 
-  /* channel colors (encode meaning in the connection motif) */
-  --color-ch-email: #ff5c39; /* coral */
-  --color-ch-linkedin: #2b4dff; /* cobalt */
-  --color-ch-whatsapp: #12b76a; /* green */
-  --color-ch-social: #7a5af8; /* violet */
+  /* "channel" tones — greys only (distinguished by icon + label, not hue) */
+  --color-ch-email: #171717;
+  --color-ch-linkedin: #404040;
+  --color-ch-whatsapp: #737373;
+  --color-ch-social: #a3a3a3;
 
   /* type roles */
   --font-display: "Bricolage Grotesque", system-ui, sans-serif;
@@ -71,9 +71,20 @@ body {
   color: var(--color-ink-soft);
 }
 
-/* Gradient text — animated position (used with GSAP gradient-scroll). */
+/* Gradient text — animated position (used with GSAP gradient-scroll).
+   .gradient-text is for LIGHT backgrounds (indigo→violet, stays readable).
+   .gradient-text-dark is for DARK sections (lime→indigo-300, pops on ink). */
 .gradient-text {
-  background: linear-gradient(100deg, var(--color-brand) 0%, var(--color-action) 55%, var(--color-brand) 100%);
+  background: linear-gradient(100deg, #0a0a0a 0%, #8a8a8a 50%, #0a0a0a 100%);
+  background-size: 220% 100%;
+  background-position: 0% 50%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+.gradient-text-dark {
+  background: linear-gradient(100deg, #ffffff 0%, #8a8a8a 50%, #ffffff 100%);
   background-size: 220% 100%;
   background-position: 0% 50%;
   -webkit-background-clip: text;
@@ -103,7 +114,7 @@ body {
   background-size: 22px 22px;
 }
 .glow-brand {
-  background: radial-gradient(60% 60% at 50% 0%, rgba(43, 77, 255, 0.14), transparent 70%);
+  background: radial-gradient(60% 60% at 50% 0%, rgba(10, 10, 10, 0.06), transparent 70%);
 }
 
 /* ---- buttons ---- */
@@ -118,13 +129,13 @@ body {
   transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
 }
 .btn-primary {
-  background: var(--color-action);
+  background: var(--color-ink); /* black */
   color: #fff;
-  box-shadow: 0 10px 24px -10px rgba(255, 92, 57, 0.7);
+  box-shadow: 0 10px 24px -12px rgba(10, 10, 10, 0.5);
 }
 .btn-primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 16px 30px -12px rgba(255, 92, 57, 0.8);
+  box-shadow: 0 16px 30px -14px rgba(10, 10, 10, 0.6);
 }
 .btn-ghost {
   background: transparent;
