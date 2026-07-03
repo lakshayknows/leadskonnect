@@ -1,66 +1,74 @@
 import Link from "next/link";
-import { Mail, Linkedin, MessageCircle, MessagesSquare, Users, Send } from "lucide-react";
+import { Mail, Linkedin, MessageCircle, MessagesSquare, Users, Send, Reply, Rocket, ArrowRight } from "lucide-react";
 
 const CHANNELS = [
-  { name: "Email", icon: Mail, limit: "40/hr · 500–2,000/day", href: "/dashboard/channels/email" },
-  { name: "LinkedIn", icon: Linkedin, limit: "~20 invites/day", href: "/dashboard/channels/linkedin" },
-  { name: "WhatsApp", icon: MessageCircle, limit: "250 unique/24h", href: "/dashboard/channels/whatsapp" },
-  { name: "Social", icon: MessagesSquare, limit: "per-platform", href: "/dashboard/channels/social" },
+  { name: "Email", icon: Mail, limit: "40/hr · 500–2,000/day", color: "var(--color-ch-email)" },
+  { name: "LinkedIn", icon: Linkedin, limit: "~20 invites/day", color: "var(--color-ch-linkedin)" },
+  { name: "WhatsApp", icon: MessageCircle, limit: "250 unique/24h", color: "var(--color-ch-whatsapp)" },
+  { name: "Social", icon: MessagesSquare, limit: "on-brand", color: "var(--color-ch-social)" },
+];
+
+const STATS = [
+  { label: "Leads", value: "—", icon: Users },
+  { label: "Sent today", value: "—", icon: Send },
+  { label: "Reply rate", value: "—", icon: Reply },
+  { label: "Active campaigns", value: "—", icon: Rocket },
 ];
 
 export default function Dashboard() {
   return (
-    <main className="min-h-screen bg-[#0f0f0f] text-white" style={{ fontFamily: "'DM Sans', sans-serif" }}>
-      <div className="mx-auto max-w-7xl px-6 py-16 sm:px-10 lg:px-16">
+    <main className="min-h-screen bg-canvas text-ink">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-[300px] glow-brand" />
+
+      <div className="relative mx-auto max-w-6xl px-6 py-12 sm:py-16">
         {/* Header */}
-        <header className="mb-16 flex flex-col items-center text-center">
-          <span className="mb-3 text-xs uppercase tracking-[0.3em] text-white/40">LeadsKonnect</span>
-          <h1
-            className="text-white"
-            style={{ fontFamily: "var(--font-display)", fontSize: "clamp(2.5rem, 5vw, 3.5rem)" }}
-          >
-            Command Center
-          </h1>
-          <p className="mt-4 max-w-xl text-white/60">
-            One clear, consistent story across every channel — throttled, humanized, and safe by default.
-          </p>
+        <header className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
+          <div>
+            <span className="eyebrow">Command center</span>
+            <h1 className="font-display mt-2 text-4xl font-extrabold sm:text-5xl">Dashboard</h1>
+          </div>
+          <Link href="#" className="btn btn-primary">
+            New campaign <ArrowRight className="h-4 w-4" />
+          </Link>
         </header>
 
-        {/* Stat row */}
-        <div className="mb-14 grid grid-cols-2 gap-4 sm:grid-cols-4">
-          {[
-            { label: "Leads", value: "—", icon: Users },
-            { label: "Sent today", value: "—", icon: Send },
-            { label: "Reply rate", value: "—", icon: Mail },
-            { label: "Active campaigns", value: "—", icon: MessagesSquare },
-          ].map((s) => (
-            <div key={s.label} className="rounded-2xl border border-white/10 bg-white/[0.02] p-5">
-              <s.icon className="mb-3 h-5 w-5 text-white/40" />
-              <div className="text-2xl font-medium">{s.value}</div>
-              <div className="text-xs uppercase tracking-wide text-white/40">{s.label}</div>
+        {/* Stats */}
+        <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {STATS.map((s) => (
+            <div key={s.label} className="rounded-2xl border border-line bg-white p-5 shadow-sm">
+              <s.icon className="mb-3 h-5 w-5 text-brand" />
+              <div className="font-display text-3xl font-bold">{s.value}</div>
+              <div className="font-mono text-xs uppercase tracking-wide text-ink-soft">{s.label}</div>
             </div>
           ))}
         </div>
 
         {/* Channels */}
-        <h2 className="mb-6 text-center text-sm uppercase tracking-[0.2em] text-white/40">Channels</h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-12 flex items-baseline justify-between">
+          <h2 className="font-display text-xl font-bold">Channels</h2>
+          <span className="font-mono text-xs text-ink-soft">rate-limited by default</span>
+        </div>
+        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {CHANNELS.map((c) => (
-            <Link
+            <div
               key={c.name}
-              href={c.href}
-              className="group rounded-2xl border border-white/10 bg-white/[0.02] p-6 transition-colors hover:border-white/25 hover:bg-white/[0.04]"
+              className="group rounded-2xl border border-line bg-white p-6 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
             >
-              <c.icon className="mb-4 h-6 w-6 text-white/70 transition-colors group-hover:text-white" />
-              <div className="text-lg font-medium">{c.name}</div>
-              <div className="mt-1 text-xs text-white/40">{c.limit}</div>
-            </Link>
+              <div
+                className="flex h-11 w-11 items-center justify-center rounded-xl text-white"
+                style={{ background: c.color }}
+              >
+                <c.icon className="h-5 w-5" />
+              </div>
+              <div className="mt-4 text-lg font-semibold">{c.name}</div>
+              <div className="mt-1 font-mono text-xs text-ink-soft">{c.limit}</div>
+            </div>
           ))}
         </div>
 
-        <p className="mt-16 text-center text-xs text-white/30">
-          Rate limits enforced in <code className="text-white/50">lib/ratelimit</code>. Configure credentials in{" "}
-          <code className="text-white/50">.env.local</code>.
+        <p className="mt-14 text-sm text-ink-soft">
+          Suppression + rate limits enforced in <code className="rounded bg-tint px-1.5 py-0.5 font-mono text-xs text-brand-ink">lib/channels/safeSend</code>. Configure
+          credentials in <code className="rounded bg-tint px-1.5 py-0.5 font-mono text-xs text-brand-ink">.env.local</code>.
         </p>
       </div>
     </main>
