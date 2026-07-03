@@ -1,0 +1,52 @@
+# ---- dependencies ----
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+
+# ---- next.js ----
+/.next/
+/out/
+/build
+next-env.d.ts
+
+# ---- production ----
+/dist
+
+# ---- env & secrets (NEVER commit) ----
+.env
+.env.local
+.env.*.local
+*.pem
+
+# ---- prisma ----
+/prisma/*.db
+/prisma/migrations/dev.db*
+
+# ---- logs ----
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.log
+
+# ---- os / editor ----
+.DS_Store
+Thumbs.db
+.idea
+.vscode/*
+!.vscode/extensions.json
+
+# ---- typescript ----
+*.tsbuildinfo
+
+# ============================================================
+# DOCUMENTATION — kept LOCAL, intentionally NOT pushed to the repo
+# (per project decision: docs stay out of leadskonnect)
+# ============================================================
+/docs/
+/CLAUDE.md
+/design_constraints.md
+/README.md
+/ROADMAP.md
+/SETUP.md
+/memory/

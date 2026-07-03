@@ -1,0 +1,104 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500&family=Italiana&family=JetBrains+Mono:wght@400;500&family=Manrope:wght@400;600&family=Marck+Script&display=swap');
+@import "tailwindcss";
+
+/* ------------------------------------------------------------------
+   Overture design tokens — mirrors design_constraints.md
+   ------------------------------------------------------------------ */
+@theme {
+  /* surfaces */
+  --color-stage: #000000;
+  --color-surface: #0f0f0f;
+  --color-brand-red: #ff0000;
+  --color-brand-red-safe: #d10000; /* AA-safe red behind small text */
+  --color-fg: #ffffff;
+
+  /* per-card accent palette (Apple set) */
+  --color-card-red: #ff3b30;
+  --color-card-orange: #ff9500;
+  --color-card-yellow: #ffcc00;
+  --color-card-green: #34c759;
+  --color-card-blue: #007aff;
+  --color-card-purple: #5856d6;
+  --color-card-pink: #ff2d55;
+  --color-card-violet: #af52de;
+  --color-card-teal: #00c7be;
+
+  /* type roles */
+  --font-display: "Apoc Revelations", Georgia, serif;
+  --font-body: "Helvetica Now Var", Helvetica, Arial, sans-serif;
+  --font-dm: "DM Sans", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+  --font-italiana: "Italiana", serif;
+  --font-manrope: "Manrope", sans-serif;
+  --font-marck: "Marck Script", cursive;
+
+  /* extra breakpoint used by supplied specs */
+  --breakpoint-xs: 480px;
+}
+
+/* Helvetica Now Var (per NEXOVA 404 spec) */
+@font-face {
+  font-family: "Helvetica Now Var";
+  src: url("https://db.onlinewebfonts.com/c/e66905e07608167a84e6ad52f638c3c6?family=Helvetica+Now+Var")
+    format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
+
+/* Apoc Revelations Italic — licensed/custom face.
+   MANUAL STEP: drop the woff2 into /public/fonts/ then this picks it up. */
+@font-face {
+  font-family: "Apoc Revelations";
+  src: url("/fonts/ApocRevelations-Italic.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: var(--color-stage);
+  color: var(--color-fg);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* NEXOVA 404 helpers */
+.four-oh-four {
+  text-shadow: 0 0 80px rgba(255, 255, 255, 0.3), 0 0 160px rgba(255, 255, 255, 0.1);
+}
+
+.liquid-glass {
+  background: rgba(255, 255, 255, 0.01);
+  background-blend-mode: luminosity;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  border: none;
+  box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+.liquid-glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.4px;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.45) 0%,
+    rgba(255, 255, 255, 0.15) 20%,
+    rgba(255, 255, 255, 0) 40%,
+    rgba(255, 255, 255, 0) 60%,
+    rgba(255, 255, 255, 0.15) 80%,
+    rgba(255, 255, 255, 0.45) 100%
+  );
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}

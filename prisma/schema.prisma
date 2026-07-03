@@ -1,0 +1,144 @@
+// Overture data model — mirrors docs/crm-data-model.md
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum LeadStage {
+  new
+  contacted
+  replied
+  qualified
+  won
+  lost
+}
+
+enum Channel {
+  email
+  linkedin
+  whatsapp
+  social
+}
+
+enum MessageStatus {
+  queued
+  sent
+  delivered
+  bounced
+  replied
+  failed
+}
+
+enum CampaignStatus {
+  draft
+  active
+  paused
+  done
+}
+
+enum SuppressionReason {
+  unsubscribe
+  bounce
+  gdpr
+  manual
+}
+
+model Lead {
+  id          String    @id @default(uuid())
+  firstName   String?
+  lastName    String?
+  email       String    @unique
+  phone       String? // encrypt at rest (see docs/security.md)
+  linkedinUrl String?
+  company     String?
+  title       String?
+  stage       LeadStage @default(new)
+  tags        String[]
+  custom      Json      @default("{}") // extra CSV columns → template variables
+  optedOut    Boolean   @default(false)
+  consent     Json      @default("{}") // per-channel opt-in + timestamps (GDPR)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  messages   Message[]
+  activities ActivityLog[]
+
+  @@index([stage])
+  @@index([optedOut])
+}
+
+model Campaign {
+  id        String         @id @default(uuid())
+  name      String
+  status    CampaignStatus @default(draft)
+  sequence  Json           @default("[]") // ordered steps: channel, templateId, wait, conditions
+  createdBy String?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  messages   Message[]
+  activities ActivityLog[]
+}
+
+model Template {
+  id        String   @id @default(uuid())
+  channel   Channel
+  name      String
+  subject   String?
+  body      String
+  variables Json     @default("[]") // declared vars + required fallbacks
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Message {
+  id             String        @id @default(uuid())
+  leadId         String
+  campaignId     String?
+  channel        Channel
+  templateId     String?
+  renderedSubject String?
+  renderedBody   String?
+  status         MessageStatus @default(queued)
+  providerId     String? // external message id (Twilio SID, SMTP id, …)
+  idempotencyKey String        @unique
+  sentAt         DateTime?
+  createdAt      DateTime      @default(now())
+
+  lead     Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  campaign Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  @@index([leadId])
+  @@index([status])
+}
+
+model ActivityLog {
+  id         String   @id @default(uuid())
+  leadId     String
+  campaignId String?
+  type       String // sent/opened/clicked/delivered/bounced/replied/invite_accepted/unsubscribed
+  channel    Channel?
+  meta       Json     @default("{}")
+  at         DateTime @default(now())
+
+  lead     Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  campaign Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+
+  @@index([leadId])
+  @@index([type])
+}
+
+model Suppression {
+  id          String            @id @default(uuid())
+  email       String?
+  phone       String?
+  linkedinUrl String?
+  reason      SuppressionReason
+  at          DateTime          @default(now())
+
+  @@unique([email])
+}
