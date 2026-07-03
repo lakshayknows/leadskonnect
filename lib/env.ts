@@ -27,7 +27,7 @@ export const env = {
     secure: get("SMTP_SECURE") === "true",
     user: get("SMTP_USER"),
     pass: get("SMTP_PASS"),
-    from: get("MAIL_FROM") ?? "Overture <no-reply@example.com>",
+    from: get("MAIL_FROM") ?? "LeadsKonnect <no-reply@example.com>",
     dkim: {
       domainName: get("DKIM_DOMAIN"),
       keySelector: get("DKIM_KEY_SELECTOR") ?? "default",

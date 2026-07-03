@@ -1,8 +1,8 @@
 {
-  "name": "overture",
+  "name": "leadskonnect",
   "version": "0.1.0",
   "private": true,
-  "description": "Overture — AI-powered multi-channel outreach platform (email, LinkedIn, WhatsApp, social).",
+  "description": "LeadsKonnect — AI-powered multi-channel outreach platform (email, LinkedIn, WhatsApp, social).",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

@@ -14,7 +14,7 @@ export interface SendJob {
   account?: string;
 }
 
-export const SEND_QUEUE = "overture:sends";
+export const SEND_QUEUE = "leadskonnect:sends";
 
 let queue: import("bullmq").Queue<SendJob> | null = null;
 

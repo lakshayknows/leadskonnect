@@ -11,7 +11,7 @@ import { logActivity } from "./crm";
 import type { Channel } from "./channels/types";
 import { randomUUID } from "node:crypto";
 
-const SYSTEM_PROMPT = `You orchestrate a multi-channel outreach campaign for Overture.
+const SYSTEM_PROMPT = `You orchestrate a multi-channel outreach campaign for LeadsKonnect.
 
 Rules (never violate):
 - Only act on leads provided by the tools. Never invent recipients, emails, phones, or consent.

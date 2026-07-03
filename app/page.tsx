@@ -13,7 +13,7 @@ export default function Home() {
           href="/dashboard"
           className="absolute bottom-8 left-1/2 z-50 -translate-x-1/2 rounded-full border border-white/20 bg-white/5 px-6 py-2.5 text-xs uppercase tracking-[0.2em] text-white/80 backdrop-blur-sm transition-colors hover:bg-white/10 hover:text-white"
         >
-          Enter Overture
+          Enter LeadsKonnect
         </Link>
       </section>
 

@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Overture — Multi-Channel Outreach",
+  title: "LeadsKonnect — Multi-Channel Outreach",
   description:
     "AI-powered outreach across email, LinkedIn, WhatsApp, and social — one clear, consistent story.",
 };

@@ -99,7 +99,7 @@ async function main() {
     console.warn(`[worker] job ${job?.id} failed: ${err.message}`);
   });
 
-  console.log("[worker] Overture send worker started.");
+  console.log("[worker] LeadsKonnect send worker started.");
 }
 
 main().catch((e) => {

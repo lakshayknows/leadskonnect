@@ -14,7 +14,7 @@ export default function Dashboard() {
       <div className="mx-auto max-w-7xl px-6 py-16 sm:px-10 lg:px-16">
         {/* Header */}
         <header className="mb-16 flex flex-col items-center text-center">
-          <span className="mb-3 text-xs uppercase tracking-[0.3em] text-white/40">Overture</span>
+          <span className="mb-3 text-xs uppercase tracking-[0.3em] text-white/40">LeadsKonnect</span>
           <h1
             className="text-white"
             style={{ fontFamily: "var(--font-display)", fontSize: "clamp(2.5rem, 5vw, 3.5rem)" }}
