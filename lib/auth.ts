@@ -24,6 +24,14 @@ export const auth = betterAuth({
         },
       }
     : {}),
+  // Link Google logins to an existing email/password account with the same address.
+  // Safe because Google verifies email ownership, so it's a trusted provider.
+  account: {
+    accountLinking: {
+      enabled: true,
+      trustedProviders: ["google"],
+    },
+  },
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
 });
