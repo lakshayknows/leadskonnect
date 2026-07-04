@@ -61,6 +61,12 @@ export const env = {
     linkedinPerDay: num("RL_LINKEDIN_PER_DAY", 20),
     whatsappPerDay: num("RL_WHATSAPP_PER_DAY", 250),
   },
+  qstash: {
+    url: get("QSTASH_URL"),
+    token: get("QSTASH_TOKEN"),
+    currentSigningKey: get("QSTASH_CURRENT_SIGNING_KEY"),
+    nextSigningKey: get("QSTASH_NEXT_SIGNING_KEY"),
+  },
 };
 
 export const configured = {
@@ -70,4 +76,5 @@ export const configured = {
   whatsapp: !!(env.twilio.accountSid && env.twilio.authToken && env.twilio.whatsappFrom),
   linkedin: !!(env.linkedin.accessToken || env.linkedin.liAt),
   agent: !!env.nvidia.apiKey,
+  qstash: !!(env.qstash.url && env.qstash.token),
 };

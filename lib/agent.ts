@@ -49,7 +49,7 @@ async function runSendTool(input: {
   channel: Channel["name"];
   subject?: string;
   body: string;
-}) {
+}, accountId?: string) {
   const lead = await prisma.lead.findUnique({ where: { id: input.leadId } });
   if (!lead) return { ok: false, reason: "lead not found" };
   const rendered = renderMessage({ subject: input.subject, body: input.body }, lead);
@@ -62,7 +62,8 @@ async function runSendTool(input: {
       linkedinUrl: lead.linkedinUrl,
       firstName: lead.firstName,
     },
-    rendered
+    rendered,
+    accountId
   );
 
   await prisma.message.create({
@@ -97,6 +98,7 @@ export async function runAgent(opts: {
   leadIds: string[];
   brief: string;
   maxSteps?: number;
+  sendingAccountId?: string;
 }): Promise<AgentRunResult> {
   if (!configured.agent) {
     return { ok: false, summary: "NVIDIA_API_KEY not set", steps: 0 };
@@ -148,7 +150,7 @@ export async function runAgent(opts: {
         messages.push({ role: "tool", tool_call_id: call.id, content: `{"ok":false,"reason":"bad arguments"}` });
         continue;
       }
-      const out = await runSendTool(args);
+      const out = await runSendTool(args, opts.sendingAccountId);
       messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(out) });
     }
   }

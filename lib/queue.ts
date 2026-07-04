@@ -32,8 +32,51 @@ export async function getQueue(): Promise<import("bullmq").Queue<SendJob> | null
 
 /** Enqueue a send with an optional delay (ms) for sequencing + jitter. */
 export async function enqueueSend(job: SendJob, delayMs = 0): Promise<boolean> {
+  // Use QStash on production if configured
+  if (configured.qstash && !env.appUrl.includes("localhost")) {
+    const delaySeconds = Math.max(0, Math.ceil(delayMs / 1000));
+    const destinationUrl = `${env.appUrl}/api/qstash/process`;
+    try {
+      const response = await fetch(`${env.qstash.url}/v2/publish/${destinationUrl}`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${env.qstash.token}`,
+          "Content-Type": "application/json",
+          "Upstash-Delay": `${delaySeconds}s`,
+        },
+        body: JSON.stringify(job),
+      });
+
+      if (!response.ok) {
+        const err = await response.text();
+        console.error(`[QStash] Failed to publish job: ${err}`);
+        return false;
+      }
+      return true;
+    } catch (e) {
+      console.error("[QStash] Connection error publishing job:", e);
+      return false;
+    }
+  }
+
+  // Fallback to BullMQ if Redis is configured
   const q = await getQueue();
-  if (!q) return false;
+  if (!q) {
+    // If running locally without Redis or QStash, do inline asynchronous sending for convenience
+    if (process.env.NODE_ENV === "development") {
+      console.warn(`[queue] Redis/QStash not configured. Processing job inline (delayed by ${delayMs}ms)`);
+      import("./job-processor").then(({ processSendJob }) => {
+        setTimeout(() => {
+          processSendJob(job).catch((err) => {
+            console.error("[queue] Inline job process failed:", err);
+          });
+        }, delayMs);
+      });
+      return true;
+    }
+    return false;
+  }
+
   await q.add("send", job, {
     delay: delayMs,
     attempts: 5,

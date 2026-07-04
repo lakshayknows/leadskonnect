@@ -3,12 +3,14 @@
 import { useEffect, useState } from "react";
 import { Bot, Play } from "lucide-react";
 import { api } from "@/lib/client";
-import { DashHeader, Panel, Banner, Textarea, Label } from "@/components/dashboard/ui";
+import { DashHeader, Panel, Banner, Textarea, Label, Select } from "@/components/dashboard/ui";
 
 type Lead = { id: string; firstName: string | null; email: string; company: string | null };
 
 export default function AgentPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [accounts, setAccounts] = useState<Array<{ id: string; name: string; email: string }>>([]);
+  const [selectedAccount, setSelectedAccount] = useState("default");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [brief, setBrief] = useState("Introduce LeadsKonnect warmly in 3 sentences and ask for a quick call.");
   const [result, setResult] = useState<{ ok: boolean; summary: string; steps: number } | null>(null);
@@ -20,6 +22,10 @@ export default function AgentPage() {
       setLeads(l);
       setSelected(new Set(l.map((x) => x.id)));
     }).catch((e) => setMsg((e as Error).message));
+
+    api<Array<{ id: string; name: string; email: string }>>("/api/sending-accounts")
+      .then(setAccounts)
+      .catch((e) => console.error("Failed to load sending accounts:", e));
   }, []);
 
   function toggle(id: string) {
@@ -39,7 +45,7 @@ export default function AgentPage() {
     setResult(null);
     try {
       const res = await api<{ ok: boolean; summary: string; steps: number }>("/api/agent", {
-        body: { leadIds, brief },
+        body: { leadIds, brief, sendingAccountId: selectedAccount === "default" ? undefined : selectedAccount },
         method: "POST",
       });
       setResult(res);
@@ -60,9 +66,25 @@ export default function AgentPage() {
               <Bot className="h-5 w-5" />
               <h2 className="font-display text-lg font-bold">Campaign brief</h2>
             </div>
-            <div className="mt-4">
-              <Label>What should the agent say?</Label>
-              <Textarea rows={5} value={brief} onChange={(e) => setBrief(e.target.value)} />
+            <div className="mt-4 grid gap-4 md:grid-cols-[1fr_240px]">
+              <div>
+                <Label>What should the agent say?</Label>
+                <Textarea rows={5} value={brief} onChange={(e) => setBrief(e.target.value)} />
+              </div>
+              <div>
+                <Label>Send From (SMTP Account)</Label>
+                <Select value={selectedAccount} onChange={(e) => setSelectedAccount(e.target.value)}>
+                  <option value="default">Default SMTP (Server Config)</option>
+                  {accounts.map((acc) => (
+                    <option key={acc.id} value={acc.id}>
+                      {acc.name} ({acc.email})
+                    </option>
+                  ))}
+                </Select>
+                <p className="mt-2 text-xs text-ink-soft">
+                  Select a specific verified SMTP sender for emails sent by this Agent execution.
+                </p>
+              </div>
             </div>
             <div className="mt-4 flex items-center gap-3">
               <button onClick={run} disabled={busy} className="btn btn-primary disabled:opacity-50">

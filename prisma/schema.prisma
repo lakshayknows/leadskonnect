@@ -73,13 +73,15 @@ model Lead {
 }
 
 model Campaign {
-  id        String         @id @default(uuid())
-  name      String
-  status    CampaignStatus @default(draft)
-  sequence  Json           @default("[]") // ordered steps: channel, templateId, wait, conditions
-  createdBy String?
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
+  id               String          @id @default(uuid())
+  name             String
+  status           CampaignStatus  @default(draft)
+  sequence         Json            @default("[]") // ordered steps: channel, templateId, wait, conditions
+  createdBy        String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  sendingAccountId String?
+  sendingAccount   SendingAccount? @relation(fields: [sendingAccountId], references: [id], onDelete: SetNull)
 
   messages   Message[]
   activities ActivityLog[]
@@ -201,4 +203,21 @@ model Verification {
   updatedAt  DateTime @updatedAt
 
   @@map("verification")
+}
+
+model SendingAccount {
+  id        String   @id @default(uuid())
+  name      String   // e.g. "Support Desk" or "Personal Gmail"
+  email     String   @unique
+  host      String   // SMTP host
+  port      Int      @default(587)
+  secure    Boolean  @default(false)
+  user      String   // SMTP user
+  pass      String   // SMTP app password
+  from      String?  // Optional customized "From" header (e.g. "John <john@domain.com>")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  campaigns Campaign[]
 }

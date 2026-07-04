@@ -41,5 +41,5 @@ export async function safeSend(
     };
   }
 
-  return channel.send(lead, rendered);
+  return channel.send(lead, rendered, account);
 }
