@@ -32,6 +32,17 @@ export const auth = betterAuth({
       trustedProviders: ["google"],
     },
   },
+  // There is no email-verification flow yet, so email/password users would otherwise
+  // stay emailVerified:false forever — which blocks later "Sign in with Google" linking
+  // (account_not_linked). Mark new users verified on creation until a real verification
+  // flow exists. This lowers no security guarantee the app currently makes.
+  databaseHooks: {
+    user: {
+      create: {
+        before: async (user) => ({ data: { ...user, emailVerified: true } }),
+      },
+    },
+  },
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
 });
