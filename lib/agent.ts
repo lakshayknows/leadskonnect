@@ -137,14 +137,20 @@ export async function runAgent(opts: {
       messages,
       tools: TOOLS,
       tool_choice: "auto",
+      // Smaller NVIDIA models (e.g. llama-3.1-8b) only support ONE tool call per turn;
+      // asking for parallel calls makes their chat template reject the request.
+      parallel_tool_calls: false,
       max_tokens: 1024,
     });
 
     const msg = resp.choices[0]?.message;
     if (!msg) return { ok: true, summary: "no response", steps };
-    messages.push(msg);
 
-    const calls = msg.tool_calls ?? [];
+    // Defensively keep only the first tool call even if the model emits several,
+    // so the assistant turn we store back stays single-tool-call and valid.
+    const calls = (msg.tool_calls ?? []).filter((c) => c.type === "function").slice(0, 1);
+    messages.push(msg.tool_calls && msg.tool_calls.length > 1 ? { ...msg, tool_calls: calls } : msg);
+
     if (calls.length === 0) {
       return { ok: true, summary: msg.content ?? "done", steps };
     }
