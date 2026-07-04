@@ -13,7 +13,7 @@ export async function GET() {
       email: configured.email,
       whatsapp: configured.whatsapp,
       linkedin: configured.linkedin,
-      anthropic: configured.anthropic,
+      agent: configured.agent,
     },
   });
 }

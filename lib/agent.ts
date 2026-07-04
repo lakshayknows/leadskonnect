@@ -1,9 +1,10 @@
 /**
- * Claude orchestration agent — mirrors docs/ai-agent.md.
- * Uses the latest model (claude-opus-4-8). Tools wrap the SAME rate-limited send path,
- * so the agent can never exceed platform limits.
+ * Outreach orchestration agent — mirrors docs/ai-agent.md.
+ * Uses NVIDIA's OpenAI-compatible endpoint (integrate.api.nvidia.com/v1) with a
+ * tool-capable model. Tools wrap the SAME rate-limited send path, so the agent can
+ * never exceed platform limits.
  */
-import type AnthropicNS from "@anthropic-ai/sdk";
+import type OpenAI from "openai";
 import { env, configured } from "./env";
 import { prisma } from "./db";
 import { safeSend } from "./channels";
@@ -15,30 +16,33 @@ import { randomUUID } from "node:crypto";
 const SYSTEM_PROMPT = `You orchestrate a multi-channel outreach campaign for LeadsKonnect.
 
 Rules (never violate):
-- Only act on leads provided by the tools. Never invent recipients, emails, phones, or consent.
-- Respect suppression: if a send is reported "suppressed" or "rate-limited", skip and move on.
-- Hard limits: 40 emails/hour, 20 LinkedIn invites/day, 250 WhatsApp/day (enforced by tools).
+- Only act on leads provided to you. Never invent recipients, emails, phones, or consent.
+- Respect suppression: if a send comes back "suppressed" or "rate-limited", skip and move on.
+- Hard limits: 40 emails/hour, 20 LinkedIn invites/day, 250 WhatsApp/day (enforced by the tool).
 - Prefer email first; only use WhatsApp when a phone + opt-in exists.
-- Keep copy personalized and human. Report a concise summary at the end.`;
+- Keep copy personalized and human. Call send_message once per lead, then give a short summary.`;
 
-// Tool the model can call to send one message through the safe path.
-const TOOLS = [
+// OpenAI-format tool definition (NVIDIA models use the same schema).
+const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   {
-    name: "send_message",
-    description:
-      "Send one outreach message to a lead on a channel. Enforces suppression + rate limits internally.",
-    input_schema: {
-      type: "object",
-      properties: {
-        leadId: { type: "string" },
-        channel: { type: "string", enum: ["email", "linkedin", "whatsapp", "social"] },
-        subject: { type: "string" },
-        body: { type: "string" },
+    type: "function",
+    function: {
+      name: "send_message",
+      description:
+        "Send one outreach message to a lead on a channel. Enforces suppression + rate limits internally.",
+      parameters: {
+        type: "object",
+        properties: {
+          leadId: { type: "string" },
+          channel: { type: "string", enum: ["email", "linkedin", "whatsapp", "social"] },
+          subject: { type: "string" },
+          body: { type: "string" },
+        },
+        required: ["leadId", "channel", "body"],
       },
-      required: ["leadId", "channel", "body"],
     },
   },
-] as const;
+];
 
 async function runSendTool(input: {
   leadId: string;
@@ -49,13 +53,17 @@ async function runSendTool(input: {
   const lead = await prisma.lead.findUnique({ where: { id: input.leadId } });
   if (!lead) return { ok: false, reason: "lead not found" };
   const rendered = renderMessage({ subject: input.subject, body: input.body }, lead);
-  const result = await safeSend(input.channel, {
-    id: lead.id,
-    email: lead.email,
-    phone: lead.phone,
-    linkedinUrl: lead.linkedinUrl,
-    firstName: lead.firstName,
-  }, rendered);
+  const result = await safeSend(
+    input.channel,
+    {
+      id: lead.id,
+      email: lead.email,
+      phone: lead.phone,
+      linkedinUrl: lead.linkedinUrl,
+      firstName: lead.firstName,
+    },
+    rendered
+  );
 
   await prisma.message.create({
     data: {
@@ -69,7 +77,12 @@ async function runSendTool(input: {
       sentAt: result.ok ? new Date() : null,
     },
   });
-  await logActivity({ leadId: lead.id, type: result.ok ? "sent" : "failed", channel: input.channel, meta: { reason: result.reason } });
+  await logActivity({
+    leadId: lead.id,
+    type: result.ok ? "sent" : "failed",
+    channel: input.channel,
+    meta: { reason: result.reason },
+  });
   return result;
 }
 
@@ -85,19 +98,20 @@ export async function runAgent(opts: {
   brief: string;
   maxSteps?: number;
 }): Promise<AgentRunResult> {
-  if (!configured.anthropic) {
-    return { ok: false, summary: "ANTHROPIC_API_KEY not set", steps: 0 };
+  if (!configured.agent) {
+    return { ok: false, summary: "NVIDIA_API_KEY not set", steps: 0 };
   }
 
-  const AnthropicSDK = (await import("@anthropic-ai/sdk")).default;
-  const client = new AnthropicSDK({ apiKey: env.anthropic.apiKey! });
+  const OpenAISDK = (await import("openai")).default;
+  const client = new OpenAISDK({ apiKey: env.nvidia.apiKey!, baseURL: env.nvidia.baseUrl });
 
   const leads = await prisma.lead.findMany({ where: { id: { in: opts.leadIds } } });
   const leadTable = leads
     .map((l) => `- ${l.id}: ${l.firstName ?? ""} ${l.lastName ?? ""} <${l.email ?? "no-email"}> @ ${l.company ?? ""}`)
     .join("\n");
 
-  const messages: AnthropicNS.MessageParam[] = [
+  const messages: OpenAI.Chat.Completions.ChatCompletionMessageParam[] = [
+    { role: "system", content: SYSTEM_PROMPT },
     {
       role: "user",
       content: `Campaign brief:\n${opts.brief}\n\nLeads:\n${leadTable}\n\nSend appropriate personalized messages now.`,
@@ -108,33 +122,35 @@ export async function runAgent(opts: {
   let steps = 0;
 
   for (; steps < maxSteps; steps++) {
-    const resp = await client.messages.create({
-      model: env.anthropic.model,
-      max_tokens: 1024,
-      system: SYSTEM_PROMPT,
-      tools: TOOLS as unknown as AnthropicNS.Tool[],
+    const resp = await client.chat.completions.create({
+      model: env.nvidia.model,
       messages,
+      tools: TOOLS,
+      tool_choice: "auto",
+      max_tokens: 1024,
     });
 
-    messages.push({ role: "assistant", content: resp.content });
+    const msg = resp.choices[0]?.message;
+    if (!msg) return { ok: true, summary: "no response", steps };
+    messages.push(msg);
 
-    const toolUses = resp.content.filter((c) => c.type === "tool_use");
-    if (toolUses.length === 0) {
-      const text = resp.content.find((c) => c.type === "text");
-      return { ok: true, summary: text?.type === "text" ? text.text : "done", steps };
+    const calls = msg.tool_calls ?? [];
+    if (calls.length === 0) {
+      return { ok: true, summary: msg.content ?? "done", steps };
     }
 
-    const toolResults: AnthropicNS.ToolResultBlockParam[] = [];
-    for (const tu of toolUses) {
-      if (tu.type !== "tool_use") continue;
-      const out = await runSendTool(tu.input as Parameters<typeof runSendTool>[0]);
-      toolResults.push({
-        type: "tool_result",
-        tool_use_id: tu.id,
-        content: JSON.stringify(out),
-      });
+    for (const call of calls) {
+      if (call.type !== "function") continue;
+      let args: Parameters<typeof runSendTool>[0];
+      try {
+        args = JSON.parse(call.function.arguments || "{}");
+      } catch {
+        messages.push({ role: "tool", tool_call_id: call.id, content: `{"ok":false,"reason":"bad arguments"}` });
+        continue;
+      }
+      const out = await runSendTool(args);
+      messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(out) });
     }
-    messages.push({ role: "user", content: toolResults });
   }
 
   return { ok: true, summary: "max steps reached", steps };

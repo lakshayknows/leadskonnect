@@ -16,7 +16,7 @@ const RunAgent = z.object({
 export async function POST(req: NextRequest) {
   const guard = requireDb();
   if (guard) return guard;
-  if (!configured.anthropic) return fail("ANTHROPIC_API_KEY not configured", 503);
+  if (!configured.agent) return fail("NVIDIA_API_KEY not configured", 503);
 
   const parsed = RunAgent.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return fail("expected { leadIds[], brief, maxSteps? }");

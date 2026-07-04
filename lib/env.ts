@@ -48,9 +48,12 @@ export const env = {
     liAt: get("LINKEDIN_LI_AT"),
   },
 
-  anthropic: {
-    apiKey: get("ANTHROPIC_API_KEY"),
-    model: get("ANTHROPIC_MODEL") ?? "claude-opus-4-8",
+  // Agent provider: NVIDIA (OpenAI-compatible endpoint).
+  // Falls back to the bare BASE_URL / MODEL names if that's what's in .env.local.
+  nvidia: {
+    apiKey: get("NVIDIA_API_KEY"),
+    baseUrl: get("NVIDIA_BASE_URL") ?? get("BASE_URL") ?? "https://integrate.api.nvidia.com/v1",
+    model: get("NVIDIA_MODEL") ?? get("MODEL") ?? "meta/llama-3.3-70b-instruct",
   },
 
   limits: {
@@ -66,5 +69,5 @@ export const configured = {
   email: !!(env.smtp.host && env.smtp.user && env.smtp.pass),
   whatsapp: !!(env.twilio.accountSid && env.twilio.authToken && env.twilio.whatsappFrom),
   linkedin: !!(env.linkedin.accessToken || env.linkedin.liAt),
-  anthropic: !!env.anthropic.apiKey,
+  agent: !!env.nvidia.apiKey,
 };
