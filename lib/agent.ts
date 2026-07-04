@@ -49,7 +49,7 @@ async function runSendTool(input: {
   channel: Channel["name"];
   subject?: string;
   body: string;
-}) {
+}, accountId?: string) {
   const lead = await prisma.lead.findUnique({ where: { id: input.leadId } });
   if (!lead) return { ok: false, reason: "lead not found" };
   const rendered = renderMessage({ subject: input.subject, body: input.body }, lead);
@@ -62,7 +62,8 @@ async function runSendTool(input: {
       linkedinUrl: lead.linkedinUrl,
       firstName: lead.firstName,
     },
-    rendered
+    rendered,
+    accountId
   );
 
   await prisma.message.create({
@@ -97,13 +98,22 @@ export async function runAgent(opts: {
   leadIds: string[];
   brief: string;
   maxSteps?: number;
+  sendingAccountId?: string;
 }): Promise<AgentRunResult> {
   if (!configured.agent) {
     return { ok: false, summary: "NVIDIA_API_KEY not set", steps: 0 };
   }
 
   const OpenAISDK = (await import("openai")).default;
-  const client = new OpenAISDK({ apiKey: env.nvidia.apiKey!, baseURL: env.nvidia.baseUrl });
+  // Fail fast: NVIDIA completions occasionally hang. Without an explicit timeout the
+  // SDK waits 10 min × retries, blowing past Vercel's function limit and surfacing an
+  // opaque 500. 60s + one retry turns a hang into a clear, catchable error.
+  const client = new OpenAISDK({
+    apiKey: env.nvidia.apiKey!,
+    baseURL: env.nvidia.baseUrl,
+    timeout: 60_000,
+    maxRetries: 1,
+  });
 
   const leads = await prisma.lead.findMany({ where: { id: { in: opts.leadIds } } });
   const leadTable = leads
@@ -127,14 +137,20 @@ export async function runAgent(opts: {
       messages,
       tools: TOOLS,
       tool_choice: "auto",
+      // Smaller NVIDIA models (e.g. llama-3.1-8b) only support ONE tool call per turn;
+      // asking for parallel calls makes their chat template reject the request.
+      parallel_tool_calls: false,
       max_tokens: 1024,
     });
 
     const msg = resp.choices[0]?.message;
     if (!msg) return { ok: true, summary: "no response", steps };
-    messages.push(msg);
 
-    const calls = msg.tool_calls ?? [];
+    // Defensively keep only the first tool call even if the model emits several,
+    // so the assistant turn we store back stays single-tool-call and valid.
+    const calls = (msg.tool_calls ?? []).filter((c) => c.type === "function").slice(0, 1);
+    messages.push(msg.tool_calls && msg.tool_calls.length > 1 ? { ...msg, tool_calls: calls } : msg);
+
     if (calls.length === 0) {
       return { ok: true, summary: msg.content ?? "done", steps };
     }
@@ -148,7 +164,7 @@ export async function runAgent(opts: {
         messages.push({ role: "tool", tool_call_id: call.id, content: `{"ok":false,"reason":"bad arguments"}` });
         continue;
       }
-      const out = await runSendTool(args);
+      const out = await runSendTool(args, opts.sendingAccountId);
       messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(out) });
     }
   }

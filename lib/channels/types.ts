@@ -22,5 +22,5 @@ export interface Channel {
   /** whether the required credentials are present */
   isConfigured(): boolean;
   /** perform the send. MUST be called only after quota + suppression checks. */
-  send(lead: Lead, rendered: RenderedMessage): Promise<SendResult>;
+  send(lead: Lead, rendered: RenderedMessage, account?: string): Promise<SendResult>;
 }

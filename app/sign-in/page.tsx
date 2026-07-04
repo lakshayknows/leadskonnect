@@ -4,6 +4,7 @@ import { useState, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn } from "@/lib/auth-client";
+import { GoogleButton } from "@/components/auth/GoogleButton";
 
 function Mark() {
   return (
@@ -42,7 +43,16 @@ function SignInForm() {
       <h1 className="font-display text-3xl font-extrabold">Welcome back</h1>
       <p className="mt-2 text-sm text-ink-soft">Sign in to your outreach command center.</p>
 
-      <form onSubmit={submit} className="mt-8 space-y-4">
+      <div className="mt-8">
+        <GoogleButton callbackURL={redirect} label="Sign in with Google" />
+      </div>
+      <div className="my-5 flex items-center gap-3 text-[11px] font-medium uppercase tracking-wide text-ink-soft">
+        <span className="h-px flex-1 bg-line" />
+        or
+        <span className="h-px flex-1 bg-line" />
+      </div>
+
+      <form onSubmit={submit} className="space-y-4">
         {err && <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div>}
         <div>
           <label className="mb-1.5 block font-mono text-xs uppercase tracking-wide text-ink-soft">Email</label>

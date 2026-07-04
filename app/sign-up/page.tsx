@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signUp } from "@/lib/auth-client";
+import { GoogleButton } from "@/components/auth/GoogleButton";
 
 function Mark() {
   return (
@@ -43,7 +44,16 @@ export default function SignUpPage() {
         <h1 className="font-display text-3xl font-extrabold">Create your account</h1>
         <p className="mt-2 text-sm text-ink-soft">Start reaching leads where they reply.</p>
 
-        <form onSubmit={submit} className="mt-8 space-y-4">
+        <div className="mt-8">
+          <GoogleButton callbackURL="/dashboard" label="Sign up with Google" />
+        </div>
+        <div className="my-5 flex items-center gap-3 text-[11px] font-medium uppercase tracking-wide text-ink-soft">
+          <span className="h-px flex-1 bg-line" />
+          or
+          <span className="h-px flex-1 bg-line" />
+        </div>
+
+        <form onSubmit={submit} className="space-y-4">
           {err && <div className="rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-700">{err}</div>}
           <div>
             <label className="mb-1.5 block font-mono text-xs uppercase tracking-wide text-ink-soft">Name</label>

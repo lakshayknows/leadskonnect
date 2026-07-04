@@ -14,23 +14,43 @@ type Lead = {
   stage: string;
 };
 
+type LeadsResponse = { items: Lead[]; total: number; page: number; pageSize: number; totalPages: number };
+
+const PAGE_SIZE = 50;
+
 export default function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState<{ kind: "error" | "success" | "info"; text: string } | null>(null);
   const [form, setForm] = useState({ firstName: "", email: "", company: "" });
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const load = () =>
-    api<Lead[]>("/api/leads?take=200")
-      .then(setLeads)
+  const load = (p = page, q = search) => {
+    setLoading(true);
+    const params = new URLSearchParams({ page: String(p), pageSize: String(PAGE_SIZE) });
+    if (q.trim()) params.set("q", q.trim());
+    return api<LeadsResponse>(`/api/leads?${params}`)
+      .then((r) => {
+        setLeads(r.items);
+        setTotal(r.total);
+        setTotalPages(r.totalPages);
+        setPage(r.page);
+      })
       .catch((e) => setMsg({ kind: "error", text: e.message }))
       .finally(() => setLoading(false));
+  };
 
+  // Debounce search; reset to page 1 on a new query.
   useEffect(() => {
-    load();
-  }, []);
+    const t = setTimeout(() => load(1, search), 300);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
   async function addLead(e: React.FormEvent) {
     e.preventDefault();
@@ -72,7 +92,8 @@ export default function LeadsPage() {
     if (!confirm("Delete this lead? They'll be added to the suppression list.")) return;
     try {
       await api(`/api/leads/${id}`, { method: "DELETE" });
-      setLeads((l) => l.filter((x) => x.id !== id));
+      // Reload so the total and current page stay correct after removal.
+      load();
     } catch (e) {
       setMsg({ kind: "error", text: (e as Error).message });
     }
@@ -82,7 +103,7 @@ export default function LeadsPage() {
     <>
       <DashHeader
         title="Leads"
-        subtitle={`${leads.length} in your list`}
+        subtitle={`${total.toLocaleString()} in your list`}
         action={
           <label className="btn btn-ghost !py-2 !text-sm cursor-pointer">
             <Upload className="h-4 w-4" /> Import CSV
@@ -126,6 +147,11 @@ export default function LeadsPage() {
         {/* List */}
         <div className="space-y-4">
           {msg && <Banner kind={msg.kind}>{msg.text}</Banner>}
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search name, email, or company…"
+          />
           <div className="overflow-hidden rounded-2xl border border-line bg-white">
             <table className="w-full text-left text-sm">
               <thead className="bg-tint font-mono text-xs uppercase tracking-wide text-ink-soft">
@@ -160,6 +186,34 @@ export default function LeadsPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination */}
+          {total > 0 && (
+            <div className="flex items-center justify-between text-sm text-ink-soft">
+              <span className="font-mono text-xs">
+                {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total.toLocaleString()}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => load(page - 1)}
+                  disabled={loading || page <= 1}
+                  className="rounded-lg border border-line px-3 py-1.5 transition hover:bg-tint disabled:opacity-40"
+                >
+                  Prev
+                </button>
+                <span className="font-mono text-xs">
+                  Page {page} / {totalPages}
+                </span>
+                <button
+                  onClick={() => load(page + 1)}
+                  disabled={loading || page >= totalPages}
+                  className="rounded-lg border border-line px-3 py-1.5 transition hover:bg-tint disabled:opacity-40"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </>

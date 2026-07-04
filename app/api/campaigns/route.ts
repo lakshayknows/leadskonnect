@@ -18,12 +18,16 @@ const Step = z.object({
 const CreateCampaign = z.object({
   name: z.string().min(1),
   sequence: z.array(Step).default([]),
+  sendingAccountId: z.string().optional().nullable(),
 });
 
 export async function GET() {
   const guard = requireDb();
   if (guard) return guard;
-  const campaigns = await prisma.campaign.findMany({ orderBy: { createdAt: "desc" } });
+  const campaigns = await prisma.campaign.findMany({ 
+    include: { sendingAccount: true },
+    orderBy: { createdAt: "desc" } 
+  });
   return ok(campaigns);
 }
 
@@ -33,12 +37,16 @@ export async function POST(req: NextRequest) {
   const parsed = CreateCampaign.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "invalid body");
   const campaign = await prisma.campaign.create({
-    data: { name: parsed.data.name, sequence: parsed.data.sequence },
+    data: { 
+      name: parsed.data.name, 
+      sequence: parsed.data.sequence,
+      sendingAccountId: parsed.data.sendingAccountId || null
+    },
   });
   return ok(campaign, { status: 201 });
 }
 
-// POST /api/campaigns?launch=<id>&leadIds=a,b,c  — enqueue the first step per lead
+// PUT /api/campaigns — launch a campaign (enqueue sequence steps per lead)
 const Launch = z.object({ campaignId: z.string(), leadIds: z.array(z.string()).min(1) });
 
 export async function PUT(req: NextRequest) {
@@ -62,7 +70,13 @@ export async function PUT(req: NextRequest) {
     for (const step of steps) {
       cumulativeDelay += step.waitDays * 24 * 60 * 60 * 1000 + jitterMs();
       const didQueue = await enqueueSend(
-        { channel: step.channel, leadId, campaignId: campaign.id, templateId: step.templateId },
+        { 
+          channel: step.channel, 
+          leadId, 
+          campaignId: campaign.id, 
+          templateId: step.templateId,
+          account: campaign.sendingAccountId || "default"
+        },
         cumulativeDelay
       );
       if (!didQueue) queueAvailable = false;
@@ -74,6 +88,6 @@ export async function PUT(req: NextRequest) {
     launched: campaign.id,
     enqueued,
     queueAvailable,
-    note: queueAvailable ? undefined : "REDIS_URL not set — jobs not queued. Set it + run `npm run worker`.",
+    note: queueAvailable ? undefined : "REDIS_URL not set — jobs not queued. Set it or rely on local dev inline fallback.",
   });
 }

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Users, FileText, Rocket, Bot, ArrowUpRight, LogOut } from "lucide-react";
+import { LayoutDashboard, Users, FileText, Rocket, Bot, ArrowUpRight, LogOut, Mail } from "lucide-react";
 import { signOut, useSession } from "@/lib/auth-client";
 
 const NAV = [
@@ -11,6 +11,7 @@ const NAV = [
   { label: "Templates", href: "/dashboard/templates", icon: FileText },
   { label: "Campaigns", href: "/dashboard/campaigns", icon: Rocket },
   { label: "Agent", href: "/dashboard/agent", icon: Bot },
+  { label: "Sending Accounts", href: "/dashboard/accounts", icon: Mail },
 ];
 
 function Mark() {

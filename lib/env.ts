@@ -15,8 +15,27 @@ function num(name: string, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+/**
+ * Normalize a URL env var so a small misconfig can't crash callers with "Invalid URL":
+ * take the first entry if comma-listed, trim, prepend https:// if the scheme is missing.
+ * Returns undefined if it still isn't a valid URL (so a default can take over).
+ */
+function url(name: string): string | undefined {
+  const raw = get(name);
+  if (!raw) return undefined;
+  let s = raw.split(",")[0].trim();
+  if (!s) return undefined;
+  if (!/^https?:\/\//i.test(s)) s = "https://" + s;
+  try {
+    new URL(s);
+    return s;
+  } catch {
+    return undefined;
+  }
+}
+
 export const env = {
-  appUrl: get("NEXT_PUBLIC_APP_URL") ?? "http://localhost:3000",
+  appUrl: url("NEXT_PUBLIC_APP_URL") ?? "http://localhost:3000",
   appSecret: get("APP_SECRET"),
   databaseUrl: get("DATABASE_URL"),
   redisUrl: get("REDIS_URL"),
@@ -52,7 +71,7 @@ export const env = {
   // Falls back to the bare BASE_URL / MODEL names if that's what's in .env.local.
   nvidia: {
     apiKey: get("NVIDIA_API_KEY"),
-    baseUrl: get("NVIDIA_BASE_URL") ?? get("BASE_URL") ?? "https://integrate.api.nvidia.com/v1",
+    baseUrl: url("NVIDIA_BASE_URL") ?? url("BASE_URL") ?? "https://integrate.api.nvidia.com/v1",
     model: get("NVIDIA_MODEL") ?? get("MODEL") ?? "meta/llama-3.3-70b-instruct",
   },
 
@@ -60,6 +79,18 @@ export const env = {
     emailPerHour: num("RL_EMAIL_PER_HOUR", 40),
     linkedinPerDay: num("RL_LINKEDIN_PER_DAY", 20),
     whatsappPerDay: num("RL_WHATSAPP_PER_DAY", 250),
+  },
+  qstash: {
+    url: get("QSTASH_URL"),
+    token: get("QSTASH_TOKEN"),
+    currentSigningKey: get("QSTASH_CURRENT_SIGNING_KEY"),
+    nextSigningKey: get("QSTASH_NEXT_SIGNING_KEY"),
+  },
+
+  // Google OAuth — powers "Connect Gmail" sending accounts (gmail.send scope).
+  google: {
+    clientId: get("GOOGLE_CLIENT_ID"),
+    clientSecret: get("GOOGLE_CLIENT_SECRET"),
   },
 };
 
@@ -70,4 +101,6 @@ export const configured = {
   whatsapp: !!(env.twilio.accountSid && env.twilio.authToken && env.twilio.whatsappFrom),
   linkedin: !!(env.linkedin.accessToken || env.linkedin.liAt),
   agent: !!env.nvidia.apiKey,
+  qstash: !!(env.qstash.url && env.qstash.token),
+  google: !!(env.google.clientId && env.google.clientSecret),
 };
