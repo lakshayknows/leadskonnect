@@ -17,15 +17,16 @@ function num(name: string, fallback: number): number {
 
 /**
  * Normalize a URL env var so a small misconfig can't crash callers with "Invalid URL":
- * take the first entry if comma-listed, trim, prepend https:// if the scheme is missing.
- * Returns undefined if it still isn't a valid URL (so a default can take over).
+ * take the first entry if comma-listed, trim, prepend https:// only when NO scheme is
+ * present (so redis://, rediss://, postgres:// etc. are preserved). Returns undefined
+ * if it still isn't a valid URL, so a default / graceful-off can take over.
  */
 function url(name: string): string | undefined {
   const raw = get(name);
   if (!raw) return undefined;
   let s = raw.split(",")[0].trim();
   if (!s) return undefined;
-  if (!/^https?:\/\//i.test(s)) s = "https://" + s;
+  if (!/^[a-z][a-z0-9+.-]*:\/\//i.test(s)) s = "https://" + s;
   try {
     new URL(s);
     return s;
@@ -38,7 +39,7 @@ export const env = {
   appUrl: url("NEXT_PUBLIC_APP_URL") ?? "http://localhost:3000",
   appSecret: get("APP_SECRET"),
   databaseUrl: get("DATABASE_URL"),
-  redisUrl: get("REDIS_URL"),
+  redisUrl: url("REDIS_URL"),
 
   smtp: {
     host: get("SMTP_HOST"),
@@ -81,7 +82,7 @@ export const env = {
     whatsappPerDay: num("RL_WHATSAPP_PER_DAY", 250),
   },
   qstash: {
-    url: get("QSTASH_URL"),
+    url: url("QSTASH_URL"),
     token: get("QSTASH_TOKEN"),
     currentSigningKey: get("QSTASH_CURRENT_SIGNING_KEY"),
     nextSigningKey: get("QSTASH_NEXT_SIGNING_KEY"),
