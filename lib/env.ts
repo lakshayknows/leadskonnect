@@ -15,8 +15,27 @@ function num(name: string, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+/**
+ * Normalize a URL env var so a small misconfig can't crash callers with "Invalid URL":
+ * take the first entry if comma-listed, trim, prepend https:// if the scheme is missing.
+ * Returns undefined if it still isn't a valid URL (so a default can take over).
+ */
+function url(name: string): string | undefined {
+  const raw = get(name);
+  if (!raw) return undefined;
+  let s = raw.split(",")[0].trim();
+  if (!s) return undefined;
+  if (!/^https?:\/\//i.test(s)) s = "https://" + s;
+  try {
+    new URL(s);
+    return s;
+  } catch {
+    return undefined;
+  }
+}
+
 export const env = {
-  appUrl: get("NEXT_PUBLIC_APP_URL") ?? "http://localhost:3000",
+  appUrl: url("NEXT_PUBLIC_APP_URL") ?? "http://localhost:3000",
   appSecret: get("APP_SECRET"),
   databaseUrl: get("DATABASE_URL"),
   redisUrl: get("REDIS_URL"),
@@ -52,7 +71,7 @@ export const env = {
   // Falls back to the bare BASE_URL / MODEL names if that's what's in .env.local.
   nvidia: {
     apiKey: get("NVIDIA_API_KEY"),
-    baseUrl: get("NVIDIA_BASE_URL") ?? get("BASE_URL") ?? "https://integrate.api.nvidia.com/v1",
+    baseUrl: url("NVIDIA_BASE_URL") ?? url("BASE_URL") ?? "https://integrate.api.nvidia.com/v1",
     model: get("NVIDIA_MODEL") ?? get("MODEL") ?? "meta/llama-3.3-70b-instruct",
   },
 
