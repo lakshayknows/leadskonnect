@@ -21,8 +21,22 @@ const AccountSchema = z.object({
 export async function GET() {
   const guard = requireDb();
   if (guard) return guard;
+  // Never expose secrets (pass / refreshToken) to the client.
   const accounts = await prisma.sendingAccount.findMany({
     orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      provider: true,
+      host: true,
+      port: true,
+      secure: true,
+      user: true,
+      from: true,
+      active: true,
+      createdAt: true,
+    },
   });
   return ok(accounts);
 }

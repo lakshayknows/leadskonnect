@@ -9,10 +9,11 @@ type SendingAccount = {
   id: string;
   name: string;
   email: string;
-  host: string;
+  provider: string; // "smtp" | "gmail_oauth"
+  host: string | null;
   port: number;
   secure: boolean;
-  user: string;
+  user: string | null;
   from: string | null;
   active: boolean;
   createdAt: string;
@@ -43,6 +44,16 @@ export default function SendingAccountsPage() {
 
   useEffect(() => {
     load();
+    // Surface the result of the Google "Connect Gmail" redirect, then clean the URL.
+    const p = new URLSearchParams(window.location.search);
+    if (p.get("connected")) {
+      setMsg({ kind: "success", text: `Gmail connected: ${p.get("connected")}` });
+    } else if (p.get("error")) {
+      setMsg({ kind: "error", text: `Gmail connect failed: ${p.get("error")}` });
+    }
+    if (p.get("connected") || p.get("error")) {
+      window.history.replaceState({}, "", "/dashboard/accounts");
+    }
   }, []);
 
   const handlePortChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -118,7 +129,21 @@ export default function SendingAccountsPage() {
       <div className="grid gap-6 p-8 lg:grid-cols-[380px_1fr]">
         <Panel className="h-fit">
           <h2 className="font-display text-lg font-bold">Connect Email Account</h2>
-          <form onSubmit={create} className="mt-4 space-y-3">
+
+          <a
+            href="/api/auth/google/start"
+            className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-line bg-canvas px-4 py-2.5 text-sm font-semibold transition hover:bg-tint"
+          >
+            <Mail className="h-4 w-4 text-action" />
+            Connect Gmail (one click, no password)
+          </a>
+          <div className="my-4 flex items-center gap-3 text-[11px] font-medium uppercase tracking-wide text-ink-soft">
+            <span className="h-px flex-1 bg-line" />
+            or add SMTP manually
+            <span className="h-px flex-1 bg-line" />
+          </div>
+
+          <form onSubmit={create} className="mt-1 space-y-3">
             <div>
               <Label>Account Name *</Label>
               <Input
@@ -247,7 +272,9 @@ export default function SendingAccountsPage() {
                     <div className="mt-3 flex items-center gap-1.5 font-mono text-xs text-ink-soft">
                       <Server className="h-3.5 w-3.5" />
                       <span>
-                        {acc.host}:{acc.port} ({acc.secure ? "SSL" : "TLS"})
+                        {acc.provider === "gmail_oauth"
+                          ? "Gmail API (OAuth)"
+                          : `${acc.host}:${acc.port} (${acc.secure ? "SSL" : "TLS"})`}
                       </span>
                     </div>
                     {acc.from && (

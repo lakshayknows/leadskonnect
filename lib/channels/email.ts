@@ -48,12 +48,36 @@ export const emailChannel: Channel = {
           return { ok: false, skipped: true, reason: `Sending account ${account} is inactive` };
         }
         const nodemailer = await import("nodemailer");
-        t = nodemailer.createTransport({
-          host: sendingAccount.host,
-          port: sendingAccount.port,
-          secure: sendingAccount.secure,
-          auth: { user: sendingAccount.user, pass: sendingAccount.pass },
-        });
+
+        if (sendingAccount.provider === "gmail_oauth") {
+          if (!configured.google) {
+            return { ok: false, error: "Google OAuth not configured on server" };
+          }
+          if (!sendingAccount.refreshToken) {
+            return { ok: false, skipped: true, reason: `Gmail account ${account} needs re-connect (no refresh token)` };
+          }
+          // nodemailer auto-refreshes the access token from the stored refresh token.
+          t = nodemailer.createTransport({
+            service: "gmail",
+            auth: {
+              type: "OAuth2",
+              user: sendingAccount.email,
+              clientId: env.google.clientId,
+              clientSecret: env.google.clientSecret,
+              refreshToken: sendingAccount.refreshToken,
+            },
+          });
+        } else {
+          if (!sendingAccount.host || !sendingAccount.user || !sendingAccount.pass) {
+            return { ok: false, error: `SMTP account ${account} is missing host/user/pass` };
+          }
+          t = nodemailer.createTransport({
+            host: sendingAccount.host,
+            port: sendingAccount.port,
+            secure: sendingAccount.secure,
+            auth: { user: sendingAccount.user, pass: sendingAccount.pass },
+          });
+        }
         fromAddress = sendingAccount.from || `${sendingAccount.name} <${sendingAccount.email}>`;
       } else {
         if (!configured.email) return { ok: false, skipped: true, reason: "email not configured" };

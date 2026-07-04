@@ -67,6 +67,12 @@ export const env = {
     currentSigningKey: get("QSTASH_CURRENT_SIGNING_KEY"),
     nextSigningKey: get("QSTASH_NEXT_SIGNING_KEY"),
   },
+
+  // Google OAuth — powers "Connect Gmail" sending accounts (gmail.send scope).
+  google: {
+    clientId: get("GOOGLE_CLIENT_ID"),
+    clientSecret: get("GOOGLE_CLIENT_SECRET"),
+  },
 };
 
 export const configured = {
@@ -77,4 +83,5 @@ export const configured = {
   linkedin: !!(env.linkedin.accessToken || env.linkedin.liAt),
   agent: !!env.nvidia.apiKey,
   qstash: !!(env.qstash.url && env.qstash.token),
+  google: !!(env.google.clientId && env.google.clientSecret),
 };
