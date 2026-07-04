@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import useSWR from "swr";
 import { Bot, Play } from "lucide-react";
 import { api } from "@/lib/client";
 import { DashHeader, Panel, Banner, Textarea, Label, Select } from "@/components/dashboard/ui";
@@ -8,25 +9,25 @@ import { DashHeader, Panel, Banner, Textarea, Label, Select } from "@/components
 type Lead = { id: string; firstName: string | null; email: string; company: string | null };
 
 export default function AgentPage() {
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [accounts, setAccounts] = useState<Array<{ id: string; name: string; email: string }>>([]);
+  const { data: leadsData } = useSWR<{ items: Lead[] }>("/api/leads?pageSize=200");
+  const { data: accounts = [] } = useSWR<Array<{ id: string; name: string; email: string }>>("/api/sending-accounts");
+  const leads = leadsData?.items ?? [];
+
   const [selectedAccount, setSelectedAccount] = useState("default");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [selectionInit, setSelectionInit] = useState(false);
   const [brief, setBrief] = useState("Introduce LeadsKonnect warmly in 3 sentences and ask for a quick call.");
   const [result, setResult] = useState<{ ok: boolean; summary: string; steps: number } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // Select all leads once, when they first load.
   useEffect(() => {
-    api<{ items: Lead[] }>("/api/leads?pageSize=200").then((r) => {
-      setLeads(r.items);
-      setSelected(new Set(r.items.map((x) => x.id)));
-    }).catch((e) => setMsg((e as Error).message));
-
-    api<Array<{ id: string; name: string; email: string }>>("/api/sending-accounts")
-      .then(setAccounts)
-      .catch((e) => console.error("Failed to load sending accounts:", e));
-  }, []);
+    if (leadsData?.items && !selectionInit) {
+      setSelected(new Set(leadsData.items.map((x) => x.id)));
+      setSelectionInit(true);
+    }
+  }, [leadsData, selectionInit]);
 
   function toggle(id: string) {
     setSelected((s) => {

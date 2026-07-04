@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import useSWR from "swr";
 import { Trash2, Upload, Plus } from "lucide-react";
 import { api } from "@/lib/client";
 import { DashHeader, Panel, Banner, Input, Label } from "@/components/dashboard/ui";
@@ -19,38 +20,31 @@ type LeadsResponse = { items: Lead[]; total: number; page: number; pageSize: num
 const PAGE_SIZE = 50;
 
 export default function LeadsPage() {
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const [search, setSearch] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [msg, setMsg] = useState<{ kind: "error" | "success" | "info"; text: string } | null>(null);
   const [form, setForm] = useState({ firstName: "", email: "", company: "" });
   const [busy, setBusy] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const load = (p = page, q = search) => {
-    setLoading(true);
-    const params = new URLSearchParams({ page: String(p), pageSize: String(PAGE_SIZE) });
-    if (q.trim()) params.set("q", q.trim());
-    return api<LeadsResponse>(`/api/leads?${params}`)
-      .then((r) => {
-        setLeads(r.items);
-        setTotal(r.total);
-        setTotalPages(r.totalPages);
-        setPage(r.page);
-      })
-      .catch((e) => setMsg({ kind: "error", text: e.message }))
-      .finally(() => setLoading(false));
-  };
-
-  // Debounce search; reset to page 1 on a new query.
+  // Debounce the search box; reset to page 1 on a new query.
   useEffect(() => {
-    const t = setTimeout(() => load(1, search), 300);
+    const t = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+    }, 300);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
+
+  const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
+  if (debouncedSearch.trim()) params.set("q", debouncedSearch.trim());
+  const { data, isLoading, error, mutate } = useSWR<LeadsResponse>(`/api/leads?${params}`);
+
+  const leads = data?.items ?? [];
+  const total = data?.total ?? 0;
+  const totalPages = data?.totalPages ?? 1;
+  const loading = isLoading;
 
   async function addLead(e: React.FormEvent) {
     e.preventDefault();
@@ -61,7 +55,7 @@ export default function LeadsPage() {
       await api("/api/leads", { body: form });
       setForm({ firstName: "", email: "", company: "" });
       setMsg({ kind: "success", text: "Lead added." });
-      load();
+      mutate();
     } catch (e) {
       setMsg({ kind: "error", text: (e as Error).message });
     } finally {
@@ -79,7 +73,7 @@ export default function LeadsPage() {
         contentType: "text/csv",
       });
       setMsg({ kind: "success", text: `Imported ${res.imported}, skipped ${res.skipped}.` });
-      load();
+      mutate();
     } catch (e) {
       setMsg({ kind: "error", text: (e as Error).message });
     } finally {
@@ -93,7 +87,7 @@ export default function LeadsPage() {
     try {
       await api(`/api/leads/${id}`, { method: "DELETE" });
       // Reload so the total and current page stay correct after removal.
-      load();
+      mutate();
     } catch (e) {
       setMsg({ kind: "error", text: (e as Error).message });
     }
@@ -146,7 +140,11 @@ export default function LeadsPage() {
 
         {/* List */}
         <div className="space-y-4">
-          {msg && <Banner kind={msg.kind}>{msg.text}</Banner>}
+          {msg ? (
+            <Banner kind={msg.kind}>{msg.text}</Banner>
+          ) : error ? (
+            <Banner kind="error">{(error as Error).message}</Banner>
+          ) : null}
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -195,7 +193,7 @@ export default function LeadsPage() {
               </span>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => load(page - 1)}
+                  onClick={() => setPage((p) => Math.max(p - 1, 1))}
                   disabled={loading || page <= 1}
                   className="rounded-lg border border-line px-3 py-1.5 transition hover:bg-tint disabled:opacity-40"
                 >
@@ -205,7 +203,7 @@ export default function LeadsPage() {
                   Page {page} / {totalPages}
                 </span>
                 <button
-                  onClick={() => load(page + 1)}
+                  onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
                   disabled={loading || page >= totalPages}
                   className="rounded-lg border border-line px-3 py-1.5 transition hover:bg-tint disabled:opacity-40"
                 >

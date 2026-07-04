@@ -1,21 +1,17 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import useSWR from "swr";
 import { api } from "@/lib/client";
 import { DashHeader, Panel, Banner, Input, Textarea, Select, Label } from "@/components/dashboard/ui";
 
 type Template = { id: string; channel: string; name: string; subject: string | null; body: string };
 
 export default function TemplatesPage() {
-  const [templates, setTemplates] = useState<Template[]>([]);
+  const { data: templates = [], mutate } = useSWR<Template[]>("/api/templates");
   const [form, setForm] = useState({ channel: "email", name: "", subject: "", body: "" });
   const [msg, setMsg] = useState<{ kind: "error" | "success"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
-
-  const load = () => api<Template[]>("/api/templates").then(setTemplates).catch(() => {});
-  useEffect(() => {
-    load();
-  }, []);
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
@@ -25,7 +21,7 @@ export default function TemplatesPage() {
       await api("/api/templates", { body: { ...form, subject: form.subject || undefined } });
       setForm({ channel: "email", name: "", subject: "", body: "" });
       setMsg({ kind: "success", text: "Template saved." });
-      load();
+      mutate();
     } catch (e) {
       setMsg({ kind: "error", text: (e as Error).message });
     } finally {

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import useSWR from "swr";
 import { Plus, X, Rocket, Mail, Link as LinkIcon, MessageSquare, Clock, ArrowDown, Sparkles, Server, Check } from "lucide-react";
 import { api } from "@/lib/client";
 import { DashHeader, Panel, Banner, Input, Select, Label } from "@/components/dashboard/ui";
@@ -18,10 +19,10 @@ type Campaign = {
 type Step = { channel: string; templateId?: string; waitDays: number };
 
 export default function CampaignsPage() {
-  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
-  const [templates, setTemplates] = useState<Template[]>([]);
-  const [sendingAccounts, setSendingAccounts] = useState<SendingAccount[]>([]);
-  
+  const { data: campaigns = [], mutate: mutateCampaigns } = useSWR<Campaign[]>("/api/campaigns");
+  const { data: templates = [] } = useSWR<Template[]>("/api/templates");
+  const { data: sendingAccounts = [] } = useSWR<SendingAccount[]>("/api/sending-accounts");
+
   // Builder state
   const [isCreating, setIsCreating] = useState(false);
   const [name, setName] = useState("");
@@ -32,16 +33,6 @@ export default function CampaignsPage() {
 
   const [msg, setMsg] = useState<{ kind: "error" | "success" | "info"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
-
-  const load = () => {
-    api<Campaign[]>("/api/campaigns").then(setCampaigns).catch(() => {});
-    api<Template[]>("/api/templates").then(setTemplates).catch(() => {});
-    api<SendingAccount[]>("/api/sending-accounts").then(setSendingAccounts).catch(() => {});
-  };
-  
-  useEffect(() => {
-    load();
-  }, []);
 
   function setStep(i: number, patch: Partial<Step>) {
     setSteps((s) => s.map((st, idx) => (idx === i ? { ...st, ...patch } : st)));
@@ -73,7 +64,7 @@ export default function CampaignsPage() {
       setSteps([{ channel: "email", templateId: "", waitDays: 0 }]);
       setMsg({ kind: "success", text: "Campaign created." });
       setIsCreating(false);
-      load();
+      mutateCampaigns();
     } catch (e) {
       setMsg({ kind: "error", text: (e as Error).message });
     } finally {
@@ -98,7 +89,7 @@ export default function CampaignsPage() {
         kind: res.queueAvailable ? "success" : "info",
         text: `Queued ${res.enqueued} sends.${res.note ? " " + res.note : " The queue will be processed automatically."}`,
       });
-      load();
+      mutateCampaigns();
     } catch (e) {
       setMsg({ kind: "error", text: (e as Error).message });
     }

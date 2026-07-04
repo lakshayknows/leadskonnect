@@ -1,20 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import Link from "next/link";
+import useSWR from "swr";
 import { Users, Send, Reply, Rocket, Bot, FileText, ArrowRight } from "lucide-react";
-import { api } from "@/lib/client";
 import { DashHeader, Panel } from "@/components/dashboard/ui";
 
 type Stats = { leads: number; sentToday: number; replies: number; activeCampaigns: number; suppressed: number };
 
 export default function Overview() {
-  const [stats, setStats] = useState<Stats | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-
-  useEffect(() => {
-    api<Stats>("/api/stats").then(setStats).catch((e) => setErr(e.message));
-  }, []);
+  const { data: stats, error } = useSWR<Stats>("/api/stats");
+  const err = error ? (error as Error).message : null;
 
   const tiles = [
     { label: "Leads", value: stats?.leads, icon: Users },

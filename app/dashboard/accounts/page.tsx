@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import useSWR from "swr";
 import { api } from "@/lib/client";
 import { DashHeader, Panel, Banner, Input, Select, Label } from "@/components/dashboard/ui";
 import { Trash2, ShieldCheck, Mail, Server, RefreshCw } from "lucide-react";
@@ -20,7 +21,7 @@ type SendingAccount = {
 };
 
 export default function SendingAccountsPage() {
-  const [accounts, setAccounts] = useState<SendingAccount[]>([]);
+  const { data: accounts = [], mutate } = useSWR<SendingAccount[]>("/api/sending-accounts");
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -35,15 +36,7 @@ export default function SendingAccountsPage() {
   const [busy, setBusy] = useState(false);
   const [testBusy, setTestBusy] = useState(false);
 
-  const load = () =>
-    api<SendingAccount[]>("/api/sending-accounts")
-      .then(setAccounts)
-      .catch((err) => {
-        console.error("Failed to load accounts:", err);
-      });
-
   useEffect(() => {
-    load();
     // Surface the result of the Google "Connect Gmail" redirect, then clean the URL.
     const p = new URLSearchParams(window.location.search);
     if (p.get("connected")) {
@@ -101,7 +94,7 @@ export default function SendingAccountsPage() {
         from: "",
       });
       setMsg({ kind: "success", text: "Sending account saved." });
-      load();
+      mutate();
     } catch (err) {
       setMsg({ kind: "error", text: (err as Error).message });
     } finally {
@@ -114,7 +107,7 @@ export default function SendingAccountsPage() {
     try {
       await api(`/api/sending-accounts?id=${id}`, { method: "DELETE" });
       setMsg({ kind: "success", text: "Sending account deleted." });
-      load();
+      mutate();
     } catch (err) {
       setMsg({ kind: "error", text: (err as Error).message });
     }
