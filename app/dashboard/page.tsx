@@ -1,76 +1,69 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Mail, Linkedin, MessageCircle, MessagesSquare, Users, Send, Reply, Rocket, ArrowRight } from "lucide-react";
+import { Users, Send, Reply, Rocket, Bot, FileText, ArrowRight } from "lucide-react";
+import { api } from "@/lib/client";
+import { DashHeader, Panel } from "@/components/dashboard/ui";
 
-const CHANNELS = [
-  { name: "Email", icon: Mail, limit: "40/hr · 500–2,000/day", color: "var(--color-ch-email)" },
-  { name: "LinkedIn", icon: Linkedin, limit: "~20 invites/day", color: "var(--color-ch-linkedin)" },
-  { name: "WhatsApp", icon: MessageCircle, limit: "250 unique/24h", color: "var(--color-ch-whatsapp)" },
-  { name: "Social", icon: MessagesSquare, limit: "on-brand", color: "var(--color-ch-social)" },
-];
+type Stats = { leads: number; sentToday: number; replies: number; activeCampaigns: number; suppressed: number };
 
-const STATS = [
-  { label: "Leads", value: "—", icon: Users },
-  { label: "Sent today", value: "—", icon: Send },
-  { label: "Reply rate", value: "—", icon: Reply },
-  { label: "Active campaigns", value: "—", icon: Rocket },
-];
+export default function Overview() {
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [err, setErr] = useState<string | null>(null);
 
-export default function Dashboard() {
+  useEffect(() => {
+    api<Stats>("/api/stats").then(setStats).catch((e) => setErr(e.message));
+  }, []);
+
+  const tiles = [
+    { label: "Leads", value: stats?.leads, icon: Users },
+    { label: "Sent today", value: stats?.sentToday, icon: Send },
+    { label: "Replies", value: stats?.replies, icon: Reply },
+    { label: "Active campaigns", value: stats?.activeCampaigns, icon: Rocket },
+  ];
+
+  const shortcuts = [
+    { label: "Import leads", href: "/dashboard/leads", icon: Users, body: "Add or upload your contacts." },
+    { label: "Write a template", href: "/dashboard/templates", icon: FileText, body: "Reusable, personalized copy." },
+    { label: "Launch a campaign", href: "/dashboard/campaigns", icon: Rocket, body: "Sequence steps across channels." },
+    { label: "Run the agent", href: "/dashboard/agent", icon: Bot, body: "Let AI send for you, safely." },
+  ];
+
   return (
-    <main className="min-h-screen bg-canvas text-ink">
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-[300px] glow-brand" />
+    <>
+      <DashHeader title="Overview" subtitle="Your outreach at a glance." />
+      <div className="p-8">
+        {err && <p className="mb-4 text-sm text-red-600">Couldn&apos;t load stats: {err}</p>}
 
-      <div className="relative mx-auto max-w-6xl px-6 py-12 sm:py-16">
-        {/* Header */}
-        <header className="flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-center">
-          <div>
-            <span className="eyebrow">Command center</span>
-            <h1 className="font-display mt-2 text-4xl font-extrabold sm:text-5xl">Dashboard</h1>
-          </div>
-          <Link href="#" className="btn btn-primary">
-            New campaign <ArrowRight className="h-4 w-4" />
-          </Link>
-        </header>
-
-        {/* Stats */}
-        <div className="mt-10 grid grid-cols-2 gap-4 sm:grid-cols-4">
-          {STATS.map((s) => (
-            <div key={s.label} className="rounded-2xl border border-line bg-white p-5 shadow-sm">
-              <s.icon className="mb-3 h-5 w-5 text-brand" />
-              <div className="font-display text-3xl font-bold">{s.value}</div>
-              <div className="font-mono text-xs uppercase tracking-wide text-ink-soft">{s.label}</div>
-            </div>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          {tiles.map((t) => (
+            <Panel key={t.label}>
+              <t.icon className="mb-3 h-5 w-5 text-ink-soft" />
+              <div className="font-display text-3xl font-extrabold">{t.value ?? "—"}</div>
+              <div className="font-mono text-xs uppercase tracking-wide text-ink-soft">{t.label}</div>
+            </Panel>
           ))}
         </div>
 
-        {/* Channels */}
-        <div className="mt-12 flex items-baseline justify-between">
-          <h2 className="font-display text-xl font-bold">Channels</h2>
-          <span className="font-mono text-xs text-ink-soft">rate-limited by default</span>
-        </div>
-        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {CHANNELS.map((c) => (
-            <div
-              key={c.name}
+        <h2 className="font-display mt-10 mb-4 text-lg font-bold">Get started</h2>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {shortcuts.map((s) => (
+            <Link
+              key={s.label}
+              href={s.href}
               className="group rounded-2xl border border-line bg-white p-6 shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
             >
-              <div
-                className="flex h-11 w-11 items-center justify-center rounded-xl text-white"
-                style={{ background: c.color }}
-              >
-                <c.icon className="h-5 w-5" />
+              <s.icon className="h-6 w-6 text-ink" />
+              <div className="font-display mt-4 flex items-center gap-1 text-lg font-bold">
+                {s.label}
+                <ArrowRight className="h-4 w-4 -translate-x-1 opacity-0 transition-all group-hover:translate-x-0 group-hover:opacity-100" />
               </div>
-              <div className="mt-4 text-lg font-semibold">{c.name}</div>
-              <div className="mt-1 font-mono text-xs text-ink-soft">{c.limit}</div>
-            </div>
+              <p className="mt-1 text-sm text-ink-soft">{s.body}</p>
+            </Link>
           ))}
         </div>
-
-        <p className="mt-14 text-sm text-ink-soft">
-          Suppression + rate limits enforced in <code className="rounded bg-tint px-1.5 py-0.5 font-mono text-xs text-brand-ink">lib/channels/safeSend</code>. Configure
-          credentials in <code className="rounded bg-tint px-1.5 py-0.5 font-mono text-xs text-brand-ink">.env.local</code>.
-        </p>
       </div>
-    </main>
+    </>
   );
 }
