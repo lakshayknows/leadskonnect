@@ -105,7 +105,15 @@ export async function runAgent(opts: {
   }
 
   const OpenAISDK = (await import("openai")).default;
-  const client = new OpenAISDK({ apiKey: env.nvidia.apiKey!, baseURL: env.nvidia.baseUrl });
+  // Fail fast: NVIDIA completions occasionally hang. Without an explicit timeout the
+  // SDK waits 10 min × retries, blowing past Vercel's function limit and surfacing an
+  // opaque 500. 60s + one retry turns a hang into a clear, catchable error.
+  const client = new OpenAISDK({
+    apiKey: env.nvidia.apiKey!,
+    baseURL: env.nvidia.baseUrl,
+    timeout: 60_000,
+    maxRetries: 1,
+  });
 
   const leads = await prisma.lead.findMany({ where: { id: { in: opts.leadIds } } });
   const leadTable = leads
