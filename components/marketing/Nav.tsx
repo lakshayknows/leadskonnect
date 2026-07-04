@@ -59,10 +59,10 @@ export default function Nav() {
         </div>
 
         <div className="hidden items-center gap-2 md:flex">
-          <Link href="/dashboard" className="btn btn-ghost !py-2 !text-sm">
+          <Link href="/sign-in" className="btn btn-ghost !py-2 !text-sm">
             Sign in
           </Link>
-          <Link href="/dashboard" className="btn btn-primary !py-2 !text-sm">
+          <Link href="/sign-up" className="btn btn-primary !py-2 !text-sm">
             Start free
           </Link>
         </div>
@@ -89,7 +89,7 @@ export default function Nav() {
                 {l.label}
               </a>
             ))}
-            <Link href="/dashboard" className="btn btn-primary mt-2 justify-center">
+            <Link href="/sign-up" className="btn btn-primary mt-2 justify-center">
               Start free
             </Link>
           </div>

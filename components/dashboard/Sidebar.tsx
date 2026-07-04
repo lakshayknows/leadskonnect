@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, FileText, Rocket, Bot, ArrowUpRight } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { LayoutDashboard, Users, FileText, Rocket, Bot, ArrowUpRight, LogOut } from "lucide-react";
+import { signOut, useSession } from "@/lib/auth-client";
 
 const NAV = [
   { label: "Overview", href: "/dashboard", icon: LayoutDashboard },
@@ -24,6 +25,8 @@ function Mark() {
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { data: session } = useSession();
 
   return (
     <aside className="sticky top-0 flex h-screen w-full max-w-[240px] shrink-0 flex-col border-r border-line bg-white px-4 py-6">
@@ -49,12 +52,25 @@ export default function Sidebar() {
         })}
       </nav>
 
-      <Link
-        href="/"
-        className="mt-auto flex items-center gap-2 rounded-xl px-3 py-2.5 text-xs text-ink-soft hover:text-ink"
-      >
-        Back to site <ArrowUpRight className="h-3.5 w-3.5" />
-      </Link>
+      <div className="mt-auto space-y-1">
+        <Link href="/" className="flex items-center gap-2 rounded-xl px-3 py-2 text-xs text-ink-soft hover:text-ink">
+          Back to site <ArrowUpRight className="h-3.5 w-3.5" />
+        </Link>
+
+        <div className="mt-2 border-t border-line pt-3">
+          {session?.user?.email && (
+            <div className="truncate px-3 pb-2 text-xs text-ink-soft" title={session.user.email}>
+              {session.user.email}
+            </div>
+          )}
+          <button
+            onClick={() => signOut({ fetchOptions: { onSuccess: () => router.push("/sign-in") } })}
+            className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-ink-soft transition-colors hover:bg-tint hover:text-ink"
+          >
+            <LogOut className="h-4 w-4" /> Sign out
+          </button>
+        </div>
+      </div>
     </aside>
   );
 }
