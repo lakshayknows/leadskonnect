@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import Papa from "papaparse";
 import { prisma } from "@/lib/db";
 import { ok, fail, requireDb } from "@/lib/http";
+import { invalidate } from "@/lib/cache";
 
 export const runtime = "nodejs";
 
@@ -66,6 +67,10 @@ export async function POST(req: NextRequest) {
       results.skipped++;
       results.errors.push(e instanceof Error ? e.message : String(e));
     }
+  }
+  if (results.imported > 0) {
+    invalidate("leads:");
+    invalidate("stats");
   }
   return ok(results);
 }

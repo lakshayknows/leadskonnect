@@ -85,7 +85,7 @@ export default function CampaignsPage() {
     if (!confirm("Launch this campaign? This will queue real messages to all your leads.")) return;
     setMsg(null);
     try {
-      const leads = await api<{ id: string }[]>("/api/leads?take=500");
+      const { items: leads } = await api<{ items: { id: string }[] }>("/api/leads?pageSize=500");
       if (leads.length === 0) {
         setMsg({ kind: "error", text: "No leads to launch to. Add leads first." });
         return;

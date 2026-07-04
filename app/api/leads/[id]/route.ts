@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { ok, fail, requireDb } from "@/lib/http";
+import { invalidate } from "@/lib/cache";
 
 export const runtime = "nodejs";
 
@@ -43,5 +44,7 @@ export async function DELETE(_req: NextRequest, { params }: Ctx) {
     });
   }
   await prisma.lead.delete({ where: { id } });
+  invalidate("leads:");
+  invalidate("stats");
   return ok({ deleted: true });
 }

@@ -18,9 +18,9 @@ export default function AgentPage() {
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    api<Lead[]>("/api/leads?take=200").then((l) => {
-      setLeads(l);
-      setSelected(new Set(l.map((x) => x.id)));
+    api<{ items: Lead[] }>("/api/leads?pageSize=200").then((r) => {
+      setLeads(r.items);
+      setSelected(new Set(r.items.map((x) => x.id)));
     }).catch((e) => setMsg((e as Error).message));
 
     api<Array<{ id: string; name: string; email: string }>>("/api/sending-accounts")
