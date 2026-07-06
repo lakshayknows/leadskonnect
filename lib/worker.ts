@@ -3,9 +3,9 @@
  * Run separately from the Next.js server:  npm run worker
  */
 import { env, configured } from "./env";
-import { SEND_QUEUE, type SendJob } from "./queue";
+import { SEND_QUEUE, type QueueJob } from "./queue";
 import { jitterMs } from "./ratelimit";
-import { processSendJob } from "./job-processor";
+import { runJob } from "./job-router";
 
 async function main() {
   if (!configured.redis) {
@@ -23,10 +23,10 @@ async function main() {
     maxRetriesPerRequest: null,
   }) as unknown as import("bullmq").ConnectionOptions;
 
-  const worker = new Worker<SendJob>(
+  const worker = new Worker<QueueJob>(
     SEND_QUEUE,
     async (job) => {
-      return processSendJob(job.data);
+      return runJob(job.data);
     },
     {
       connection,
@@ -45,7 +45,7 @@ async function main() {
     console.warn(`[worker] job ${job?.id} failed: ${err.message}`);
   });
 
-  console.log("[worker] LeadsKonnect send worker started.");
+  console.log("[worker] Followthroo send worker started.");
 }
 
 main().catch((e) => {

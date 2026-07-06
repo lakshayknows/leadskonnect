@@ -38,7 +38,7 @@ function SignInForm() {
   return (
     <div className="w-full max-w-sm">
       <Link href="/" className="mb-8 flex items-center gap-2 font-display text-xl font-bold">
-        <Mark /> LeadsKonnect
+        <Mark /> Followthroo
       </Link>
       <h1 className="font-display text-3xl font-extrabold">Welcome back</h1>
       <p className="mt-2 text-sm text-ink-soft">Sign in to your outreach command center.</p>

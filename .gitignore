@@ -50,3 +50,6 @@ Thumbs.db
 /ROADMAP.md
 /SETUP.md
 /memory/
+
+# source logo (served copy lives in public/)
+/logo.png

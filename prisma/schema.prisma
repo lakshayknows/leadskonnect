@@ -49,101 +49,121 @@ enum SuppressionReason {
 }
 
 model Lead {
-  id          String    @id @default(uuid())
-  firstName   String?
-  lastName    String?
-  email       String    @unique
-  phone       String? // encrypt at rest (see docs/security.md)
-  linkedinUrl String?
-  company     String?
-  title       String?
-  stage       LeadStage @default(new)
-  tags        String[]
-  custom      Json      @default("{}") // extra CSV columns → template variables
-  optedOut    Boolean   @default(false)
-  consent     Json      @default("{}") // per-channel opt-in + timestamps (GDPR)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id             String    @id @default(uuid())
+  organizationId String? // tenant scope — always set in code (see lib/tenant.ts); nullable only for legacy backfill
+  firstName      String?
+  lastName       String?
+  email          String
+  phone          String? // encrypt at rest (see docs/security.md)
+  linkedinUrl    String?
+  company        String?
+  title          String?
+  stage          LeadStage @default(new)
+  tags           String[]
+  custom         Json      @default("{}") // extra CSV columns → template variables
+  optedOut       Boolean   @default(false)
+  consent        Json      @default("{}") // per-channel opt-in + timestamps (GDPR)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
-  messages   Message[]
-  activities ActivityLog[]
+  messages    Message[]
+  activities  ActivityLog[]
+  enrollments Enrollment[]
+  inboxThreads InboxThread[]
 
+  @@unique([organizationId, email])
+  @@index([organizationId])
   @@index([stage])
   @@index([optedOut])
 }
 
 model Campaign {
   id               String          @id @default(uuid())
+  organizationId   String? // tenant scope
   name             String
   status           CampaignStatus  @default(draft)
-  sequence         Json            @default("[]") // ordered steps: channel, templateId, wait, conditions
+  sequence         Json            @default("[]") // node graph: send/condition/wait/exit nodes with edges (see lib/campaign-engine.ts)
   createdBy        String?
   createdAt        DateTime        @default(now())
   updatedAt        DateTime        @updatedAt
   sendingAccountId String?
   sendingAccount   SendingAccount? @relation(fields: [sendingAccountId], references: [id], onDelete: SetNull)
 
-  messages   Message[]
-  activities ActivityLog[]
+  messages    Message[]
+  activities  ActivityLog[]
+  enrollments Enrollment[]
+
+  @@index([organizationId])
 }
 
 model Template {
-  id        String   @id @default(uuid())
-  channel   Channel
-  name      String
-  subject   String?
-  body      String
-  variables Json     @default("[]") // declared vars + required fallbacks
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id             String   @id @default(uuid())
+  organizationId String? // tenant scope
+  channel        Channel
+  name           String
+  subject        String?
+  body           String
+  variables      Json     @default("[]") // declared vars + required fallbacks
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId])
 }
 
 model Message {
-  id             String        @id @default(uuid())
-  leadId         String
-  campaignId     String?
-  channel        Channel
-  templateId     String?
+  id              String        @id @default(uuid())
+  organizationId  String? // tenant scope
+  leadId          String
+  campaignId      String?
+  channel         Channel
+  templateId      String?
   renderedSubject String?
-  renderedBody   String?
-  status         MessageStatus @default(queued)
-  providerId     String? // external message id (Twilio SID, SMTP id, …)
-  idempotencyKey String        @unique
-  sentAt         DateTime?
-  createdAt      DateTime      @default(now())
+  renderedBody    String?
+  status          MessageStatus @default(queued)
+  providerId      String? // external message id (Twilio SID, SMTP id, …)
+  idempotencyKey  String        @unique
+  sentAt          DateTime?
+  createdAt       DateTime      @default(now())
 
   lead     Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
   campaign Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
 
+  @@index([organizationId])
   @@index([leadId])
   @@index([status])
 }
 
 model ActivityLog {
-  id         String   @id @default(uuid())
-  leadId     String
-  campaignId String?
-  type       String // sent/opened/clicked/delivered/bounced/replied/invite_accepted/unsubscribed
-  channel    Channel?
-  meta       Json     @default("{}")
-  at         DateTime @default(now())
+  id             String   @id @default(uuid())
+  organizationId String? // tenant scope
+  leadId         String
+  campaignId     String?
+  messageId      String? // links opens/clicks back to the Message (unique-rate aggregation)
+  type           String // sent/opened/clicked/delivered/bounced/replied/invite_accepted/unsubscribed
+  channel        Channel?
+  meta           Json     @default("{}")
+  at             DateTime @default(now())
 
   lead     Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
   campaign Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
 
+  @@index([organizationId])
   @@index([leadId])
   @@index([type])
+  @@index([messageId])
 }
 
 model Suppression {
-  id          String            @id @default(uuid())
-  email       String?
-  phone       String?
-  linkedinUrl String?
-  reason      SuppressionReason
-  at          DateTime          @default(now())
+  id             String            @id @default(uuid())
+  organizationId String? // tenant scope
+  email          String?
+  phone          String?
+  linkedinUrl    String?
+  reason         SuppressionReason
+  at             DateTime          @default(now())
 
-  @@unique([email])
+  @@unique([organizationId, email])
+  @@index([organizationId])
 }
 
 // ---- better-auth (Stage 1: email/password; Stage 2 adds OAuth accounts) ----
@@ -158,19 +178,23 @@ model User {
   sessions      Session[]
   accounts      Account[]
 
+  members            Member[]
+  sentInvitations    Invitation[]
+
   @@map("user")
 }
 
 model Session {
-  id        String   @id @default(cuid())
-  expiresAt DateTime
-  token     String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  ipAddress String?
-  userAgent String?
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                   String   @id @default(cuid())
+  expiresAt            DateTime
+  token                String   @unique
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  ipAddress            String?
+  userAgent            String?
+  userId               String
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activeOrganizationId String? // better-auth organization plugin: currently-active org
 
   @@map("session")
 }
@@ -206,20 +230,197 @@ model Verification {
 }
 
 model SendingAccount {
-  id           String   @id @default(uuid())
-  name         String   // e.g. "Support Desk" or "Personal Gmail"
-  email        String   @unique
-  provider     String   @default("smtp") // "smtp" | "gmail_oauth"
-  host         String?  // SMTP host (null for gmail_oauth)
-  port         Int      @default(587)
-  secure       Boolean  @default(false)
-  user         String?  // SMTP user (null for gmail_oauth)
-  pass         String?  // SMTP app password (null for gmail_oauth)
-  refreshToken String?  // Google OAuth refresh token (gmail_oauth only)
-  from         String?  // Optional customized "From" header (e.g. "John <john@domain.com>")
-  active       Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  id             String   @id @default(uuid())
+  organizationId String? // tenant scope
+  name           String // e.g. "Support Desk" or "Personal Gmail"
+  email          String
+  provider       String   @default("smtp") // "smtp" | "gmail_oauth"
+  host           String? // SMTP host (null for gmail_oauth)
+  port           Int      @default(587)
+  secure         Boolean  @default(false)
+  user           String? // SMTP user (null for gmail_oauth)
+  pass           String? // SMTP app password (null for gmail_oauth)
+  refreshToken   String? // Google OAuth refresh token (gmail_oauth only)
+  from           String? // Optional customized "From" header (e.g. "John <john@domain.com>")
+  active         Boolean  @default(true)
+  // Reply-poller cursors (see lib/inbox/poller.ts)
+  imapHost       String? // IMAP host for SMTP accounts (defaults host→imap if unset)
+  imapPort       Int? // IMAP port (993)
+  lastPolledAt   DateTime? // last successful inbound poll
+  gmailHistoryId String? // Gmail API history cursor (gmail_oauth only)
+  // Per-account DKIM (SMTP accounts) — overrides the env default signing
+  dkimDomain     String?
+  dkimSelector   String?
+  dkimPrivateKey String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   campaigns Campaign[]
+  warmup    Warmup?
+
+  @@unique([organizationId, email])
+  @@index([organizationId])
+}
+
+// ---- Deliverability: mailbox warm-up (see lib/warmup.ts, docs/rate-limits.md) ----
+model Warmup {
+  id               String         @id @default(uuid())
+  organizationId   String? // tenant scope
+  sendingAccountId String         @unique
+  sendingAccount   SendingAccount @relation(fields: [sendingAccountId], references: [id], onDelete: Cascade)
+  enabled          Boolean        @default(false)
+  dailyTarget      Int            @default(6) // steady-state warm-up emails/day
+  rampDays         Int            @default(21) // days to ramp from 2/day up to dailyTarget
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@index([organizationId])
+}
+
+model WarmupEvent {
+  id                String   @id @default(uuid())
+  organizationId    String? // tenant scope
+  sendingAccountId  String
+  direction         String // "sent" | "received"
+  placement         String? // "inbox" | "spam" | null (unknown — send scope only)
+  rescued           Boolean  @default(false) // moved spam → inbox
+  providerMessageId String?
+  at                DateTime @default(now())
+
+  @@index([organizationId])
+  @@index([sendingAccountId])
+  @@index([at])
+}
+
+// ---- better-auth organization plugin (teams / members / roles / invites) ----
+model Organization {
+  id          String       @id @default(cuid())
+  name        String
+  slug        String       @unique
+  logo        String?
+  metadata    String?
+  createdAt   DateTime     @default(now())
+  members     Member[]
+  invitations Invitation[]
+
+  @@map("organization")
+}
+
+model Member {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           String       @default("member") // owner | admin | member
+  createdAt      DateTime     @default(now())
+
+  @@unique([organizationId, userId])
+  @@map("member")
+}
+
+model Invitation {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email          String
+  role           String? // owner | admin | member
+  status         String       @default("pending") // pending | accepted | rejected | canceled
+  expiresAt      DateTime
+  inviterId      String
+  inviter        User         @relation(fields: [inviterId], references: [id], onDelete: Cascade)
+
+  @@map("invitation")
+}
+
+// ---- Leads: groups / saved segments ----
+model Segment {
+  id             String   @id @default(uuid())
+  organizationId String? // tenant scope
+  name           String
+  kind           String   @default("static") // "static" (explicit leadIds) | "dynamic" (saved filter)
+  leadIds        String[] @default([]) // static membership
+  filter         Json     @default("{}") // dynamic filter: { tags?, stage?, companyContains? }
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([organizationId])
+}
+
+// ---- Campaigns: per-lead enrollment state machine (see lib/campaign-engine.ts) ----
+enum EnrollmentStatus {
+  active
+  paused
+  completed
+  replied
+  bounced
+  stopped
+}
+
+model Enrollment {
+  id             String           @id @default(uuid())
+  organizationId String? // tenant scope
+  campaignId     String
+  leadId         String
+  status         EnrollmentStatus @default(active)
+  currentNodeId  String? // node in the campaign graph the enrollment is at / about to run
+  nextRunAt      DateTime?
+  branch         String? // last branch taken (analytics)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  campaign Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  lead     Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, leadId])
+  @@index([status, nextRunAt])
+  @@index([organizationId])
+}
+
+// ---- Inbox: unified reply threads (see lib/inbox/poller.ts, app/dashboard/inbox) ----
+enum ThreadStatus {
+  unread
+  read
+  interested
+  not_interested
+  ooo
+}
+
+model InboxThread {
+  id             String       @id @default(uuid())
+  organizationId String? // tenant scope
+  leadId         String?
+  channel        Channel      @default(email)
+  subject        String?
+  status         ThreadStatus @default(unread)
+  assignedTo     String? // userId
+  lastMessageAt  DateTime     @default(now())
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  lead     Lead?          @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  messages InboxMessage[]
+
+  @@index([organizationId])
+  @@index([status])
+}
+
+model InboxMessage {
+  id                String   @id @default(uuid())
+  organizationId    String? // tenant scope
+  threadId          String
+  direction         String // "inbound" | "outbound"
+  fromAddr          String?
+  toAddr            String?
+  subject           String?
+  body              String?
+  providerMessageId String? // Gmail message id / IMAP UID / SMTP id
+  sentAt            DateTime @default(now())
+  createdAt         DateTime @default(now())
+
+  thread InboxThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([threadId])
+  @@index([providerMessageId])
 }

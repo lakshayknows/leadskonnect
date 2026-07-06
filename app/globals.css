@@ -13,10 +13,14 @@
   --color-ink-soft: #6b6b6b; /* muted grey body */
   --color-line: #e5e5e5; /* hairlines */
 
-  /* brand = black; there is no accent hue in monochrome */
-  --color-brand: #0a0a0a;
+  /* brand — followthroo electric indigo (the single accent hue over the mono base).
+     Buttons stay ink/black; indigo is spent on logo, active nav, focus, badges, avatar. */
+  --color-brand: #4b31e6;
   --color-brand-ink: #0a0a0a;
   --color-action: #0a0a0a;
+  --color-accent: #4b31e6; /* followthroo indigo */
+  --color-accent-strong: #3a20c4; /* text on soft indigo */
+  --color-accent-soft: #eeebfd; /* selected/hover indigo wash */
   --color-tint: #f4f4f5; /* light grey surface */
 
   /* "channel" tones — greys only (distinguished by icon + label, not hue) */

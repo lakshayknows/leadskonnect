@@ -3,7 +3,7 @@ import PageHero from "@/components/site/PageHero";
 import { FeatureGrid, CTABand } from "@/components/site/blocks";
 import { Users, History, FileDown } from "lucide-react";
 
-export const metadata = { title: "CRM — LeadsKonnect" };
+export const metadata = { title: "CRM — Followthroo" };
 
 export default function CrmPage() {
   return (

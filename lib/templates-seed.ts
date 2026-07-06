@@ -32,7 +32,7 @@ export const SEED_TEMPLATES = [
     channel: "whatsapp" as const,
     name: "WhatsApp: Brief Touchpoint",
     subject: "",
-    body: "Hello {{firstName}}! This is [Your Name] from LeadsKonnect. I wanted to follow up on the email I sent regarding your outreach workflows at {{company}}. Do you have 2 minutes for a brief chat?",
+    body: "Hello {{firstName}}! This is [Your Name] from Followthroo. I wanted to follow up on the email I sent regarding your outreach workflows at {{company}}. Do you have 2 minutes for a brief chat?",
     variables: [],
   },
 ];

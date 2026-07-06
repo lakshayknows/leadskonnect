@@ -18,7 +18,7 @@ export default function CTA() {
                 Start reaching leads <span className="gradient-text-dark">where they reply</span>
               </h2>
               <p className="mx-auto mt-4 max-w-md text-white/60">
-                Import a list, write one message, let LeadsKonnect run the rest — safely.
+                Import a list, write one message, let Followthroo run the rest — safely.
               </p>
               <div className="mt-8 flex flex-wrap justify-center gap-3">
                 <Link href="/dashboard" className="btn btn-primary">

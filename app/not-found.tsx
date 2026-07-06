@@ -50,7 +50,7 @@ export default function NotFound() {
         {/* Nav */}
         <nav className="flex items-center justify-between px-6 py-5 md:px-12 lg:px-16">
           <Link href="/" className="flex items-center gap-2 font-display text-lg font-bold">
-            <Mark /> LeadsKonnect
+            <Mark /> Followthroo
           </Link>
 
           <div className="hidden items-center gap-7 lg:flex">
@@ -142,7 +142,7 @@ export default function NotFound() {
           <div className="mx-auto grid max-w-6xl gap-8 sm:grid-cols-2 lg:grid-cols-5">
             <div className="lg:col-span-2">
               <div className="flex items-center gap-2 font-display font-bold">
-                <Mark /> LeadsKonnect
+                <Mark /> Followthroo
               </div>
               <p className="mt-3 max-w-xs text-sm text-ink-soft">
                 Multi-channel outreach that gets replies — without tripping the spam kraken.

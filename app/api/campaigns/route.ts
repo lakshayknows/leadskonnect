@@ -1,93 +1,59 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { ok, fail, requireDb } from "@/lib/http";
-import { enqueueSend } from "@/lib/queue";
-import { jitterMs } from "@/lib/ratelimit";
+import { ok, fail } from "@/lib/http";
+import { requireOrg } from "@/lib/tenant";
+import { CampaignSequence } from "@/lib/campaign-engine";
+import { enrollLeads } from "@/lib/enroll";
 
 export const runtime = "nodejs";
 
-const Step = z.object({
-  channel: z.enum(["email", "linkedin", "whatsapp", "social"]),
-  templateId: z.string().optional(),
-  waitDays: z.number().min(0).default(0),
-  unless: z.string().optional(), // e.g. "replied"
-  onlyIf: z.string().optional(), // e.g. "phone_opt_in"
-});
-
 const CreateCampaign = z.object({
   name: z.string().min(1),
-  sequence: z.array(Step).default([]),
+  // A node graph (see lib/campaign-engine.ts). Accepts a legacy flat step array too.
+  sequence: CampaignSequence.default([]),
   sendingAccountId: z.string().optional().nullable(),
 });
 
-export async function GET() {
-  const guard = requireDb();
-  if (guard) return guard;
-  const campaigns = await prisma.campaign.findMany({ 
-    include: { sendingAccount: true },
-    orderBy: { createdAt: "desc" } 
+export async function GET(req: NextRequest) {
+  const ctx = await requireOrg(req);
+  if (ctx instanceof Response) return ctx;
+  const campaigns = await prisma.campaign.findMany({
+    where: { organizationId: ctx.orgId },
+    include: { sendingAccount: true, _count: { select: { enrollments: true } } },
+    orderBy: { createdAt: "desc" },
   });
   return ok(campaigns);
 }
 
 export async function POST(req: NextRequest) {
-  const guard = requireDb();
-  if (guard) return guard;
+  const ctx = await requireOrg(req);
+  if (ctx instanceof Response) return ctx;
   const parsed = CreateCampaign.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "invalid body");
   const campaign = await prisma.campaign.create({
-    data: { 
-      name: parsed.data.name, 
-      sequence: parsed.data.sequence,
-      sendingAccountId: parsed.data.sendingAccountId || null
+    data: {
+      organizationId: ctx.orgId,
+      name: parsed.data.name,
+      sequence: parsed.data.sequence as unknown as Prisma.InputJsonValue,
+      sendingAccountId: parsed.data.sendingAccountId || null,
     },
   });
   return ok(campaign, { status: 201 });
 }
 
-// PUT /api/campaigns — launch a campaign (enqueue sequence steps per lead)
+// PUT /api/campaigns — launch a campaign to all of an org's leads (kept for the
+// existing "Launch" button; targeted enrollment lives at /api/campaigns/[id]/enroll).
 const Launch = z.object({ campaignId: z.string(), leadIds: z.array(z.string()).min(1) });
 
 export async function PUT(req: NextRequest) {
-  const guard = requireDb();
-  if (guard) return guard;
+  const ctx = await requireOrg(req);
+  if (ctx instanceof Response) return ctx;
   const parsed = Launch.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return fail("expected { campaignId, leadIds[] }");
 
-  const campaign = await prisma.campaign.findUnique({ where: { id: parsed.data.campaignId } });
-  if (!campaign) return fail("campaign not found", 404);
-
-  const steps = (campaign.sequence as Array<z.infer<typeof Step>>) ?? [];
-  if (steps.length === 0) return fail("campaign has no sequence");
-
-  await prisma.campaign.update({ where: { id: campaign.id }, data: { status: "active" } });
-
-  let enqueued = 0;
-  let queueAvailable = true;
-  for (const leadId of parsed.data.leadIds) {
-    let cumulativeDelay = 0;
-    for (const step of steps) {
-      cumulativeDelay += step.waitDays * 24 * 60 * 60 * 1000 + jitterMs();
-      const didQueue = await enqueueSend(
-        { 
-          channel: step.channel, 
-          leadId, 
-          campaignId: campaign.id, 
-          templateId: step.templateId,
-          account: campaign.sendingAccountId || "default"
-        },
-        cumulativeDelay
-      );
-      if (!didQueue) queueAvailable = false;
-      else enqueued++;
-    }
-  }
-
-  return ok({
-    launched: campaign.id,
-    enqueued,
-    queueAvailable,
-    note: queueAvailable ? undefined : "REDIS_URL not set — jobs not queued. Set it or rely on local dev inline fallback.",
-  });
+  const result = await enrollLeads(ctx.orgId, parsed.data.campaignId, parsed.data.leadIds);
+  if ("error" in result) return fail(result.error, result.status);
+  return ok(result);
 }

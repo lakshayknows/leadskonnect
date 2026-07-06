@@ -13,7 +13,7 @@ import { logActivity } from "./crm";
 import type { Channel } from "./channels/types";
 import { randomUUID } from "node:crypto";
 
-const SYSTEM_PROMPT = `You orchestrate a multi-channel outreach campaign for LeadsKonnect.
+const SYSTEM_PROMPT = `You orchestrate a multi-channel outreach campaign for Followthroo.
 
 Rules (never violate):
 - Only act on leads provided to you. Never invent recipients, emails, phones, or consent.
@@ -44,13 +44,13 @@ const TOOLS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   },
 ];
 
-async function runSendTool(input: {
+async function runSendTool(orgId: string, input: {
   leadId: string;
   channel: Channel["name"];
   subject?: string;
   body: string;
 }, accountId?: string) {
-  const lead = await prisma.lead.findUnique({ where: { id: input.leadId } });
+  const lead = await prisma.lead.findFirst({ where: { id: input.leadId, organizationId: orgId } });
   if (!lead) return { ok: false, reason: "lead not found" };
   const rendered = renderMessage({ subject: input.subject, body: input.body }, lead);
   const result = await safeSend(
@@ -63,11 +63,13 @@ async function runSendTool(input: {
       firstName: lead.firstName,
     },
     rendered,
-    accountId
+    accountId,
+    orgId
   );
 
   await prisma.message.create({
     data: {
+      organizationId: orgId,
       leadId: lead.id,
       channel: input.channel,
       renderedSubject: rendered.subject,
@@ -79,6 +81,7 @@ async function runSendTool(input: {
     },
   });
   await logActivity({
+    organizationId: orgId,
     leadId: lead.id,
     type: result.ok ? "sent" : "failed",
     channel: input.channel,
@@ -95,6 +98,7 @@ export interface AgentRunResult {
 
 /** Run the agent over a set of leads with a campaign brief. */
 export async function runAgent(opts: {
+  orgId: string;
   leadIds: string[];
   brief: string;
   maxSteps?: number;
@@ -115,7 +119,7 @@ export async function runAgent(opts: {
     maxRetries: 1,
   });
 
-  const leads = await prisma.lead.findMany({ where: { id: { in: opts.leadIds } } });
+  const leads = await prisma.lead.findMany({ where: { id: { in: opts.leadIds }, organizationId: opts.orgId } });
   const leadTable = leads
     .map((l) => `- ${l.id}: ${l.firstName ?? ""} ${l.lastName ?? ""} <${l.email ?? "no-email"}> @ ${l.company ?? ""}`)
     .join("\n");
@@ -157,14 +161,14 @@ export async function runAgent(opts: {
 
     for (const call of calls) {
       if (call.type !== "function") continue;
-      let args: Parameters<typeof runSendTool>[0];
+      let args: Parameters<typeof runSendTool>[1];
       try {
         args = JSON.parse(call.function.arguments || "{}");
       } catch {
         messages.push({ role: "tool", tool_call_id: call.id, content: `{"ok":false,"reason":"bad arguments"}` });
         continue;
       }
-      const out = await runSendTool(args, opts.sendingAccountId);
+      const out = await runSendTool(opts.orgId, args, opts.sendingAccountId);
       messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(out) });
     }
   }

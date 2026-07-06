@@ -22,13 +22,14 @@ export async function POST(req: NextRequest) {
 
   const lead = await prisma.lead.findFirst({ where: { phone: { contains: from.slice(-8) } } });
 
-  // Inbound "stop"/"unsubscribe" → suppress
-  if (["stop", "unsubscribe", "stop all"].includes(body)) {
-    await suppress({ phone: from }, "unsubscribe");
+  // Inbound "stop"/"unsubscribe" → suppress (scoped to the matched lead's org)
+  if (["stop", "unsubscribe", "stop all"].includes(body) && lead?.organizationId) {
+    await suppress(lead.organizationId, { phone: from }, "unsubscribe");
   }
 
   if (lead) {
     await logActivity({
+      organizationId: lead.organizationId,
       leadId: lead.id,
       type: status || (body ? "replied" : "whatsapp_event"),
       channel: "whatsapp",

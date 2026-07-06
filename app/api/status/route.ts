@@ -6,7 +6,7 @@ export const runtime = "nodejs";
 // GET /api/status — quick health + which integrations are wired.
 export async function GET() {
   return ok({
-    app: "leadskonnect",
+    app: "followthroo",
     configured: {
       database: configured.db,
       redis: configured.redis,

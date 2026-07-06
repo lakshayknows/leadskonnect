@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Receiver } from "@upstash/qstash";
-import { processSendJob } from "@/lib/job-processor";
+import { runJob } from "@/lib/job-router";
 import { env } from "@/lib/env";
 
 export const runtime = "nodejs";
@@ -38,9 +38,9 @@ export async function POST(req: NextRequest) {
     }
 
     const jobData = JSON.parse(rawBody);
-    console.log("[QStash] Received campaign send job:", jobData);
+    console.log("[QStash] Received job:", jobData?.kind ?? "send");
 
-    const result = await processSendJob(jobData);
+    const result = await runJob(jobData);
     return NextResponse.json({ ok: true, result });
   } catch (err) {
     console.error("[QStash] Process endpoint error:", err);

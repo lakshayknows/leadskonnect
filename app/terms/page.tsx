@@ -1,6 +1,6 @@
 import LegalPage from "@/components/site/LegalPage";
 
-export const metadata = { title: "Terms — LeadsKonnect" };
+export const metadata = { title: "Terms — Followthroo" };
 
 export default function TermsPage() {
   return (

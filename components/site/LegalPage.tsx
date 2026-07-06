@@ -22,7 +22,7 @@ export default function LegalPage({
           </div>
         ))}
         <p className="pt-6 text-xs">
-          This is a template document for LeadsKonnect and not legal advice. Replace with counsel-reviewed
+          This is a template document for Followthroo and not legal advice. Replace with counsel-reviewed
           text before launch.
         </p>
       </Prose>

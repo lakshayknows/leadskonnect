@@ -2,7 +2,7 @@ import SiteShell from "@/components/site/SiteShell";
 import PageHero from "@/components/site/PageHero";
 import { Mail, MessageCircle, Building2 } from "lucide-react";
 
-export const metadata = { title: "Contact — LeadsKonnect" };
+export const metadata = { title: "Contact — Followthroo" };
 
 export default function ContactPage() {
   return (
@@ -11,8 +11,8 @@ export default function ContactPage() {
       <section className="bg-canvas pb-16">
         <div className="mx-auto grid max-w-5xl gap-4 px-6 sm:grid-cols-3">
           {[
-            { icon: Mail, title: "Email", detail: "hello@leadskonnect.com" },
-            { icon: MessageCircle, title: "Support", detail: "support@leadskonnect.com" },
+            { icon: Mail, title: "Email", detail: "hello@followthroo.com" },
+            { icon: MessageCircle, title: "Support", detail: "support@followthroo.com" },
             { icon: Building2, title: "Sales", detail: "Book a 20-min demo" },
           ].map((c) => (
             <div key={c.title} className="rounded-2xl border border-line bg-white p-6">

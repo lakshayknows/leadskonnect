@@ -3,7 +3,7 @@ import PageHero from "@/components/site/PageHero";
 import { FeatureGrid, CTABand } from "@/components/site/blocks";
 import { Braces, Eye, ShieldAlert } from "lucide-react";
 
-export const metadata = { title: "Templates — LeadsKonnect" };
+export const metadata = { title: "Templates — Followthroo" };
 
 export default function TemplatesPage() {
   return (

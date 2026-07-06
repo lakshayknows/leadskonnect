@@ -36,9 +36,11 @@ export async function GET(req: NextRequest) {
   const code = params.get("code");
   const state = params.get("state");
   const cookieState = req.cookies.get("g_oauth_state")?.value;
+  const orgId = req.cookies.get("g_oauth_org")?.value;
 
   if (!code) return backTo("error", "missing_code");
   if (!state || !cookieState || state !== cookieState) return backTo("error", "state_mismatch");
+  if (!orgId) return backTo("error", "no_org");
 
   try {
     const redirectUri = `${env.appUrl}/api/auth/google/callback`;
@@ -64,14 +66,17 @@ export async function GET(req: NextRequest) {
     const email = tokens.id_token ? decodeJwtEmail(tokens.id_token) : null;
     if (!email) return backTo("error", "no_email");
 
-    const existing = await prisma.sendingAccount.findUnique({ where: { email } });
+    const existing = await prisma.sendingAccount.findUnique({
+      where: { organizationId_email: { organizationId: orgId, email } },
+    });
     // Google only returns a refresh_token on first consent; keep the stored one on re-connect.
     const effectiveRefresh = refreshToken ?? existing?.refreshToken;
     if (!effectiveRefresh) return backTo("error", "no_refresh_token");
 
     await prisma.sendingAccount.upsert({
-      where: { email },
+      where: { organizationId_email: { organizationId: orgId, email } },
       create: {
+        organizationId: orgId,
         name: email,
         email,
         provider: "gmail_oauth",
@@ -91,6 +96,7 @@ export async function GET(req: NextRequest) {
 
     const res = backTo("connected", email);
     res.cookies.delete("g_oauth_state");
+    res.cookies.delete("g_oauth_org");
     return res;
   } catch (e) {
     console.error("[google/callback] error:", e);

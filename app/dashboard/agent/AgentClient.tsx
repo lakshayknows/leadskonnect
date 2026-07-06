@@ -16,7 +16,7 @@ export default function AgentPage() {
   const [selectedAccount, setSelectedAccount] = useState("default");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [selectionInit, setSelectionInit] = useState(false);
-  const [brief, setBrief] = useState("Introduce LeadsKonnect warmly in 3 sentences and ask for a quick call.");
+  const [brief, setBrief] = useState("Introduce Followthroo warmly in 3 sentences and ask for a quick call.");
   const [result, setResult] = useState<{ ok: boolean; summary: string; steps: number } | null>(null);
   const [msg, setMsg] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);

@@ -3,7 +3,7 @@ import PageHero from "@/components/site/PageHero";
 import { FeatureGrid, CTABand } from "@/components/site/blocks";
 import { Waypoints, Clock, GitBranch } from "lucide-react";
 
-export const metadata = { title: "Sequences — LeadsKonnect" };
+export const metadata = { title: "Sequences — Followthroo" };
 
 export default function SequencesPage() {
   return (

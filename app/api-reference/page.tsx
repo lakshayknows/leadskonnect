@@ -1,7 +1,7 @@
 import SiteShell from "@/components/site/SiteShell";
 import PageHero from "@/components/site/PageHero";
 
-export const metadata = { title: "API Reference — LeadsKonnect" };
+export const metadata = { title: "API Reference — Followthroo" };
 
 const ROUTES = [
   { method: "GET/POST", path: "/api/leads", desc: "List or upsert leads (dedupe by email)." },

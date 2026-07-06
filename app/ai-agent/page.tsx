@@ -3,7 +3,7 @@ import PageHero from "@/components/site/PageHero";
 import { FeatureGrid, CTABand } from "@/components/site/blocks";
 import { Bot, Lock, Gauge } from "lucide-react";
 
-export const metadata = { title: "AI Agent — LeadsKonnect" };
+export const metadata = { title: "AI Agent — Followthroo" };
 
 export default function AiAgentPage() {
   return (
