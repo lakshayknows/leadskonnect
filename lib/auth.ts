@@ -12,6 +12,25 @@ import { prisma } from "./db";
  */
 const googleConfigured = !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
 
+const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+
+/**
+ * Origins better-auth will accept state-changing requests from (CSRF guard). Include both
+ * the apex and www of the prod domain so a sign-in POST from either isn't rejected (403)
+ * when NEXT_PUBLIC_APP_URL happens to be set to only one of them. Extra origins can be
+ * supplied via BETTER_AUTH_TRUSTED_ORIGINS (comma-separated).
+ */
+const trustedOrigins = Array.from(
+  new Set(
+    [
+      baseUrl,
+      "https://followthroo.com",
+      "https://www.followthroo.com",
+      ...(process.env.BETTER_AUTH_TRUSTED_ORIGINS?.split(",").map((s) => s.trim()) ?? []),
+    ].filter(Boolean)
+  )
+);
+
 /** Slugify a name/email into a unique-ish org slug. */
 function slugify(input: string): string {
   const base = input.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 32) || "org";
@@ -94,5 +113,6 @@ export const auth = betterAuth({
     }),
   ],
   secret: process.env.BETTER_AUTH_SECRET,
-  baseURL: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
+  baseURL: baseUrl,
+  trustedOrigins,
 });
