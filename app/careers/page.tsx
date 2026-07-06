@@ -3,7 +3,7 @@ import SiteShell from "@/components/site/SiteShell";
 import PageHero from "@/components/site/PageHero";
 import { CTABand } from "@/components/site/blocks";
 
-export const metadata = { title: "Careers — LeadsKonnect" };
+export const metadata = { title: "Careers — Followthroo" };
 
 const ROLES = [
   { title: "Senior Full-Stack Engineer", team: "Engineering", location: "Remote" },

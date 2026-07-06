@@ -4,7 +4,7 @@ import SiteShell from "@/components/site/SiteShell";
 import PageHero from "@/components/site/PageHero";
 import { CTABand } from "@/components/site/blocks";
 
-export const metadata = { title: "Pricing — LeadsKonnect" };
+export const metadata = { title: "Pricing — Followthroo" };
 
 const TIERS = [
   {

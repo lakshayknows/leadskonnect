@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
 import Papa from "papaparse";
 import { prisma } from "@/lib/db";
-import { ok, fail, requireDb } from "@/lib/http";
+import { ok, fail } from "@/lib/http";
+import { requireOrg } from "@/lib/tenant";
 import { invalidate } from "@/lib/cache";
 
 export const runtime = "nodejs";
@@ -32,8 +33,9 @@ function normalizeRow(row: Record<string, string>) {
 
 // POST /api/leads/import  — body: raw CSV text (Content-Type text/csv) OR { csv: "..." }
 export async function POST(req: NextRequest) {
-  const guard = requireDb();
-  if (guard) return guard;
+  const ctx = await requireOrg(req);
+  if (ctx instanceof Response) return ctx;
+  const { orgId } = ctx;
 
   const contentType = req.headers.get("content-type") ?? "";
   let csv: string;
@@ -58,8 +60,8 @@ export async function POST(req: NextRequest) {
     }
     try {
       await prisma.lead.upsert({
-        where: { email: lead.email as string },
-        create: { ...(lead as object), custom } as never,
+        where: { organizationId_email: { organizationId: orgId, email: lead.email as string } },
+        create: { ...(lead as object), organizationId: orgId, custom } as never,
         update: { ...(lead as object), custom } as never,
       });
       results.imported++;

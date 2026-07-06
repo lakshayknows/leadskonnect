@@ -42,7 +42,7 @@ export default function Safety() {
               Send at volume without <span className="gradient-text">waking the spam kraken</span>
             </h2>
             <p className="mt-4 text-lg leading-relaxed text-ink-soft">
-              Every platform has hard limits. LeadsKonnect knows them, throttles to them, and adds
+              Every platform has hard limits. Followthroo knows them, throttles to them, and adds
               human-like jitter — so accounts stay healthy while you scale.
             </p>
           </div>

@@ -1,7 +1,7 @@
 import SiteShell from "@/components/site/SiteShell";
 import PageHero from "@/components/site/PageHero";
 
-export const metadata = { title: "Blog — LeadsKonnect" };
+export const metadata = { title: "Blog — Followthroo" };
 
 const POSTS = [
   { title: "How to warm up a new sending domain", date: "Jun 2026", read: "6 min", tag: "Deliverability" },

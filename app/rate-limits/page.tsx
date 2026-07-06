@@ -2,7 +2,7 @@ import SiteShell from "@/components/site/SiteShell";
 import PageHero from "@/components/site/PageHero";
 import { CTABand } from "@/components/site/blocks";
 
-export const metadata = { title: "Rate limits — LeadsKonnect" };
+export const metadata = { title: "Rate limits — Followthroo" };
 
 const LIMITS = [
   { channel: "Email (Gmail free)", start: "500 / day", ceiling: "—", note: "Paced ~40/hour; freezes ~24h on breach" },

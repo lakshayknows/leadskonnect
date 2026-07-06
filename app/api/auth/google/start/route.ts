@@ -1,11 +1,15 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { env, configured } from "@/lib/env";
+import { requireOrg } from "@/lib/tenant";
 
 export const runtime = "nodejs";
 
 const SCOPES = [
   "https://www.googleapis.com/auth/gmail.send",
+  // gmail.modify grants read + label changes (reply polling + warm-up placement /
+  // spam-rescue). Existing accounts connected before this change must reconnect.
+  "https://www.googleapis.com/auth/gmail.modify",
   "https://www.googleapis.com/auth/userinfo.email",
   "openid",
 ].join(" ");
@@ -15,13 +19,17 @@ const SCOPES = [
  * Redirects the browser to Google's consent screen. On approval Google calls
  * /api/auth/google/callback with an authorization code.
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   if (!configured.google) {
     return NextResponse.json(
       { ok: false, error: "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET not configured" },
       { status: 503 }
     );
   }
+
+  // Remember which org is connecting so the callback stores the account in it.
+  const ctx = await requireOrg(req);
+  if (ctx instanceof Response) return ctx;
 
   const state = randomUUID();
   const redirectUri = `${env.appUrl}/api/auth/google/callback`;
@@ -38,12 +46,14 @@ export async function GET() {
 
   const res = NextResponse.redirect(url.toString());
   // Short-lived CSRF cookie, validated in the callback.
-  res.cookies.set("g_oauth_state", state, {
+  const cookieOpts = {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
-    sameSite: "lax",
+    sameSite: "lax" as const,
     path: "/",
     maxAge: 600,
-  });
+  };
+  res.cookies.set("g_oauth_state", state, cookieOpts);
+  res.cookies.set("g_oauth_org", ctx.orgId, cookieOpts);
   return res;
 }

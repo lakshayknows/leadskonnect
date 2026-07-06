@@ -39,7 +39,7 @@ export default function SignUpPage() {
       <div className="pointer-events-none absolute inset-x-0 top-0 h-72 glow-brand" />
       <div className="w-full max-w-sm">
         <Link href="/" className="mb-8 flex items-center gap-2 font-display text-xl font-bold">
-          <Mark /> LeadsKonnect
+          <Mark /> Followthroo
         </Link>
         <h1 className="font-display text-3xl font-extrabold">Create your account</h1>
         <p className="mt-2 text-sm text-ink-soft">Start reaching leads where they reply.</p>

@@ -1,6 +1,6 @@
 import LegalPage from "@/components/site/LegalPage";
 
-export const metadata = { title: "GDPR — LeadsKonnect" };
+export const metadata = { title: "GDPR — Followthroo" };
 
 export default function GdprPage() {
   return (

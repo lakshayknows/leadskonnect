@@ -2,7 +2,7 @@ import SiteShell from "@/components/site/SiteShell";
 import PageHero from "@/components/site/PageHero";
 import { Prose, CTABand } from "@/components/site/blocks";
 
-export const metadata = { title: "About — LeadsKonnect" };
+export const metadata = { title: "About — Followthroo" };
 
 export default function AboutPage() {
   return (
@@ -10,7 +10,7 @@ export default function AboutPage() {
       <PageHero
         kicker="About"
         title="We build outreach that stays human"
-        subtitle="LeadsKonnect exists to align messy, scattered outreach into one clear, consistent story — across every channel."
+        subtitle="Followthroo exists to align messy, scattered outreach into one clear, consistent story — across every channel."
       />
       <Prose>
         <p>
@@ -20,7 +20,7 @@ export default function AboutPage() {
         <h2>Our belief</h2>
         <p>
           Personalized outreach gets replies; generic blasts get ignored. But personalization at scale is
-          hard, and every platform has hard limits. LeadsKonnect handles both — so you can reach more
+          hard, and every platform has hard limits. Followthroo handles both — so you can reach more
           people, more genuinely, without waking the spam kraken.
         </p>
         <h2>How we work</h2>

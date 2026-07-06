@@ -47,7 +47,7 @@ export default function Nav() {
       >
         <Link href="/" className="flex items-center gap-2 font-display text-lg font-bold tracking-tight">
           <Mark />
-          LeadsKonnect
+          Followthroo
         </Link>
 
         <div className="hidden items-center gap-7 md:flex">

@@ -45,12 +45,13 @@ export function limitForChannel(channel: string): number {
  */
 export async function acquire(
   channel: string,
-  account = "default"
+  account = "default",
+  orgId = "global"
 ): Promise<{ ok: boolean; remaining: number; retryAfterMs: number }> {
   const limit = limitForChannel(channel);
   const windowMs = windowMsForChannel(channel);
   const now = Date.now();
-  const key = `rl:${channel}:${account}`;
+  const key = `rl:${orgId}:${channel}:${account}`;
 
   const r = await getRedis();
   if (r) {

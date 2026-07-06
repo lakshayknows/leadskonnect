@@ -1,7 +1,7 @@
 import SiteShell from "@/components/site/SiteShell";
 import PageHero from "@/components/site/PageHero";
 
-export const metadata = { title: "Status — LeadsKonnect" };
+export const metadata = { title: "Status — Followthroo" };
 
 const SYSTEMS = [
   "API",
@@ -17,7 +17,7 @@ const SYSTEMS = [
 export default function StatusPage() {
   return (
     <SiteShell>
-      <PageHero kicker="Status" title="All systems operational" subtitle="Live health of LeadsKonnect services. Configured integrations show under /api/status in your own instance." />
+      <PageHero kicker="Status" title="All systems operational" subtitle="Live health of Followthroo services. Configured integrations show under /api/status in your own instance." />
       <section className="bg-canvas pb-24">
         <div className="mx-auto max-w-3xl px-6">
           <div className="overflow-hidden rounded-2xl border border-line bg-white">

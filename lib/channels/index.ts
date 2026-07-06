@@ -24,15 +24,16 @@ export async function safeSend(
   channelName: Channel["name"],
   lead: Lead,
   rendered: RenderedMessage,
-  account = "default"
+  account = "default",
+  orgId = "global"
 ): Promise<SendResult> {
   const channel = channels[channelName];
 
-  if (await isSuppressed({ email: lead.email, phone: lead.phone, linkedinUrl: lead.linkedinUrl })) {
+  if (await isSuppressed(orgId, { email: lead.email, phone: lead.phone, linkedinUrl: lead.linkedinUrl })) {
     return { ok: false, skipped: true, reason: "suppressed" };
   }
 
-  const quota = await acquire(channelName, account);
+  const quota = await acquire(channelName, account, orgId);
   if (!quota.ok) {
     return {
       ok: false,

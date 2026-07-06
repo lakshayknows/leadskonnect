@@ -1,4 +1,4 @@
-/** Tiny browser-side fetch wrapper for the LeadsKonnect API ({ ok, data } shape). */
+/** Tiny browser-side fetch wrapper for the Followthroo API ({ ok, data } shape). */
 export async function api<T = unknown>(
   path: string,
   opts: { method?: string; body?: unknown; raw?: BodyInit; contentType?: string } = {}

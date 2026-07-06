@@ -1,11 +1,11 @@
 import SiteShell from "@/components/site/SiteShell";
 import PageHero from "@/components/site/PageHero";
 
-export const metadata = { title: "Changelog — LeadsKonnect" };
+export const metadata = { title: "Changelog — Followthroo" };
 
 const ENTRIES = [
   { version: "0.3.0", date: "Jul 2026", items: ["Monochrome brand refresh", "New landing, dashboard, and 404", "Marketing pages for every section"] },
-  { version: "0.2.0", date: "Jul 2026", items: ["Renamed to LeadsKonnect", "AI agent on claude-opus-4-8"] },
+  { version: "0.2.0", date: "Jul 2026", items: ["Renamed to Followthroo", "AI agent on claude-opus-4-8"] },
   { version: "0.1.0", date: "Jul 2026", items: ["Email, WhatsApp, CRM foundations", "Rate limiting + sequences + templates"] },
 ];
 

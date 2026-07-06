@@ -1,5 +1,6 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
+import { organization } from "better-auth/plugins";
 import { prisma } from "./db";
 
 /**
@@ -10,6 +11,27 @@ import { prisma } from "./db";
  * — distinct from the gmail.send sending-account flow at /api/auth/google/callback.
  */
 const googleConfigured = !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+
+/** Slugify a name/email into a unique-ish org slug. */
+function slugify(input: string): string {
+  const base = input.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "").slice(0, 32) || "org";
+  return `${base}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
+ * Create a personal organization for a freshly-created user and make them its owner.
+ * Runs in the user.create.after hook so every account has a tenant to scope data into.
+ */
+async function createPersonalOrg(user: { id: string; name?: string | null; email: string }) {
+  const name = user.name?.trim() || user.email.split("@")[0] || "My Workspace";
+  const org = await prisma.organization.create({
+    data: { name: `${name}'s Workspace`, slug: slugify(name || user.email) },
+  });
+  await prisma.member.create({
+    data: { organizationId: org.id, userId: user.id, role: "owner" },
+  });
+  return org;
+}
 
 export const auth = betterAuth({
   database: prismaAdapter(prisma, { provider: "postgresql" }),
@@ -40,9 +62,37 @@ export const auth = betterAuth({
     user: {
       create: {
         before: async (user) => ({ data: { ...user, emailVerified: true } }),
+        // Give every new user a personal organization to own and scope data into.
+        after: async (user) => {
+          await createPersonalOrg(user).catch((e) =>
+            console.error("[auth] failed to create personal org:", e)
+          );
+        },
+      },
+    },
+    session: {
+      create: {
+        // Attach the user's (first / owned) org as the active tenant on each new session.
+        before: async (session) => {
+          const member = await prisma.member.findFirst({
+            where: { userId: session.userId },
+            orderBy: { createdAt: "asc" },
+          });
+          return { data: { ...session, activeOrganizationId: member?.organizationId ?? null } };
+        },
       },
     },
   },
+  plugins: [
+    organization({
+      // Invitations are created and surfaced in the Team settings UI with a shareable
+      // accept link. Wire a real transactional email sender here later.
+      async sendInvitationEmail(data) {
+        const url = `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/accept-invitation/${data.id}`;
+        console.log(`[auth] invitation for ${data.email} to org ${data.organization.name}: ${url}`);
+      },
+    }),
+  ],
   secret: process.env.BETTER_AUTH_SECRET,
   baseURL: process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000",
 });

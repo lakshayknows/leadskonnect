@@ -1,35 +1,64 @@
 /**
  * Template engine — mirrors docs/templates-and-variables.md.
- * Handlebars for {{variable}} substitution, plus {{firstName|there}} fallback syntax.
+ * Supports {{variable}} substitution and {{variable|fallback}} fallback syntax.
+ *
+ * NOTE: We intentionally avoid importing `handlebars` here because its Node.js
+ * build uses `require.extensions` which is not supported by webpack / Next.js
+ * and produces build warnings. This lightweight replacement covers the same
+ * feature surface used by this project.
  */
-import Handlebars from "handlebars";
 
 export type Variables = Record<string, unknown>;
 
-// Pre-process {{ var | fallback }} → {{ fallback var "fallback" }} helper.
+// Match {{var|fallback}} — captured as (var, fallback)
 const FALLBACK_RE = /\{\{\s*([\w.]+)\s*\|\s*([^}]*?)\s*\}\}/g;
+// Match {{var}} — plain variable reference
+const VAR_RE = /\{\{\s*([\w.]+)\s*\}\}/g;
 
-Handlebars.registerHelper("fallback", (value: unknown, fallback: unknown) => {
-  if (value === undefined || value === null || value === "") return fallback;
-  return value;
-});
-
-function preprocess(template: string): string {
-  return template.replace(FALLBACK_RE, (_m, name, fb) => {
-    const clean = String(fb).replace(/"/g, '\\"');
-    return `{{fallback ${name} "${clean}"}}`;
-  });
+/** Resolve a dot-path like "lead.firstName" against a variables map. */
+function resolve(path: string, vars: Variables): unknown {
+  return path.split(".").reduce<unknown>((acc, key) => {
+    if (acc != null && typeof acc === "object") {
+      return (acc as Record<string, unknown>)[key];
+    }
+    return undefined;
+  }, vars);
 }
 
-const cache = new Map<string, Handlebars.TemplateDelegate>();
+const cache = new Map<string, (vars: Variables) => string>();
+
+/**
+ * Compile a template string into a render function and cache it.
+ * Supports:
+ *   {{firstName}}          → variable substitution
+ *   {{firstName|there}}    → fallback when the variable is empty / null / undefined
+ */
+function compile(template: string): (vars: Variables) => string {
+  return (vars: Variables): string => {
+    // First pass: resolve {{var|fallback}}
+    let result = template.replace(FALLBACK_RE, (_m, name, fallback) => {
+      const val = resolve(name, vars);
+      if (val === undefined || val === null || val === "") return String(fallback);
+      return String(val);
+    });
+
+    // Second pass: resolve {{var}}
+    result = result.replace(VAR_RE, (_m, name) => {
+      const val = resolve(name, vars);
+      return val === undefined || val === null ? "" : String(val);
+    });
+
+    return result;
+  };
+}
 
 export function render(template: string, variables: Variables): string {
-  let compiled = cache.get(template);
-  if (!compiled) {
-    compiled = Handlebars.compile(preprocess(template), { noEscape: true });
-    cache.set(template, compiled);
+  let fn = cache.get(template);
+  if (!fn) {
+    fn = compile(template);
+    cache.set(template, fn);
   }
-  return compiled(variables);
+  return fn(variables);
 }
 
 export interface RenderedMessage {

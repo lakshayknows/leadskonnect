@@ -3,7 +3,7 @@ import SiteShell from "@/components/site/SiteShell";
 import PageHero from "@/components/site/PageHero";
 import { Boxes, Waypoints, Braces, Bot, Database, Gauge, TerminalSquare, Activity } from "lucide-react";
 
-export const metadata = { title: "Docs — LeadsKonnect" };
+export const metadata = { title: "Docs — Followthroo" };
 
 const LINKS = [
   { icon: Boxes, title: "Channels", href: "/channels", body: "Email, LinkedIn, WhatsApp, and social." },
@@ -19,7 +19,7 @@ const LINKS = [
 export default function DocsPage() {
   return (
     <SiteShell>
-      <PageHero kicker="Docs" title="Everything you need to ship outreach" subtitle="Guides for each part of LeadsKonnect. Start with a channel, then wire a sequence." />
+      <PageHero kicker="Docs" title="Everything you need to ship outreach" subtitle="Guides for each part of Followthroo. Start with a channel, then wire a sequence." />
       <section className="bg-canvas pb-24">
         <div className="mx-auto grid max-w-6xl gap-4 px-6 sm:grid-cols-2 lg:grid-cols-4">
           {LINKS.map((l) => (

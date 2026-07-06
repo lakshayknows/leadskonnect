@@ -59,7 +59,7 @@ export default function Footer() {
         <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-6">
           <div className="lg:col-span-2">
             <Link href="/" className="flex items-center gap-2 font-display text-lg font-bold">
-              <Mark /> LeadsKonnect
+              <Mark /> Followthroo
             </Link>
             <p className="mt-4 max-w-xs text-sm text-ink-soft">
               Personalized outreach across every channel — sequenced, throttled, and human.
@@ -83,7 +83,7 @@ export default function Footer() {
         </div>
 
         <div className="mt-14 flex flex-col items-center justify-between gap-3 border-t border-line pt-6 text-xs text-ink-soft sm:flex-row">
-          <span>© {new Date().getFullYear()} LeadsKonnect. All rights reserved.</span>
+          <span>© {new Date().getFullYear()} Followthroo. All rights reserved.</span>
           <span className="font-mono">Made for teams who actually get replies.</span>
         </div>
       </div>

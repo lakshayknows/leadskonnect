@@ -22,13 +22,17 @@ export async function POST(req: NextRequest) {
     const event = (e.event ?? e.type ?? "").toLowerCase();
     if (!email) continue;
 
-    if (event.includes("bounce") || event.includes("complaint") || event.includes("spam")) {
-      await suppress({ email }, event.includes("bounce") ? "bounce" : "unsubscribe");
-    }
+    // The provider payload carries no tenant — resolve org(s) from the matching lead(s).
+    const leads = await prisma.lead.findMany({ where: { email } });
+    const isSuppression = event.includes("bounce") || event.includes("complaint") || event.includes("spam");
 
-    const lead = await prisma.lead.findUnique({ where: { email } });
-    if (lead) {
+    for (const lead of leads) {
+      if (!lead.organizationId) continue;
+      if (isSuppression) {
+        await suppress(lead.organizationId, { email }, event.includes("bounce") ? "bounce" : "unsubscribe");
+      }
       await logActivity({
+        organizationId: lead.organizationId,
         leadId: lead.id,
         type: event || "email_event",
         channel: "email",

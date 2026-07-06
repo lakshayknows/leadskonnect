@@ -8,7 +8,7 @@ import type { RenderedMessage } from "../templates";
 // scope and rejects gmail.send with "535 BadCredentials".
 
 /** Exchange a stored refresh token for a short-lived access token. */
-async function gmailAccessToken(refreshToken: string): Promise<string> {
+export async function gmailAccessToken(refreshToken: string): Promise<string> {
   const res = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -137,6 +137,16 @@ export const emailChannel: Channel = {
           port: sendingAccount.port,
           secure: sendingAccount.secure,
           auth: { user: sendingAccount.user, pass: sendingAccount.pass },
+          // Per-account DKIM signing (improves deliverability) when configured.
+          ...(sendingAccount.dkimDomain && sendingAccount.dkimPrivateKey
+            ? {
+                dkim: {
+                  domainName: sendingAccount.dkimDomain,
+                  keySelector: sendingAccount.dkimSelector || "default",
+                  privateKey: sendingAccount.dkimPrivateKey,
+                },
+              }
+            : {}),
         });
       } else {
         if (!configured.email) return { ok: false, skipped: true, reason: "email not configured" };

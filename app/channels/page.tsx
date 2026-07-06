@@ -3,7 +3,7 @@ import PageHero from "@/components/site/PageHero";
 import { FeatureGrid, CTABand } from "@/components/site/blocks";
 import { Mail, Linkedin, MessageCircle, MessagesSquare } from "lucide-react";
 
-export const metadata = { title: "Channels — LeadsKonnect" };
+export const metadata = { title: "Channels — Followthroo" };
 
 export default function ChannelsPage() {
   return (

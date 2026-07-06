@@ -1,12 +1,20 @@
 /**
- * BullMQ job queue for throttled, scheduled sends (see docs/ARCHITECTURE.md).
- * Guarded: if REDIS_URL is absent, the queue is null and callers should fall back
- * to inline sending (dev only).
+ * Job queue for throttled, scheduled work (see docs/ARCHITECTURE.md).
+ *
+ * Two job kinds flow through the same queue:
+ *  - "send"    — deliver one message (used by ad-hoc sends).
+ *  - "advance" — advance a campaign enrollment by one node (the conditional-node engine,
+ *                see lib/campaign-engine.ts). The advance job performs the node's send
+ *                inline and schedules the next advance.
+ *
+ * Transport priority: Upstash QStash (prod) → BullMQ/Redis → inline setTimeout (dev only).
  */
 import { env, configured } from "./env";
 import type { Channel } from "./channels/types";
 
 export interface SendJob {
+  kind?: "send";
+  organizationId: string;
   channel: Channel["name"];
   leadId: string;
   campaignId?: string;
@@ -14,25 +22,32 @@ export interface SendJob {
   account?: string;
 }
 
-export const SEND_QUEUE = "leadskonnect:sends";
+export interface AdvanceJob {
+  kind: "advance";
+  enrollmentId: string;
+}
 
-let queue: import("bullmq").Queue<SendJob> | null = null;
+export type QueueJob = SendJob | AdvanceJob;
 
-export async function getQueue(): Promise<import("bullmq").Queue<SendJob> | null> {
+export const SEND_QUEUE = "followthroo-sends";
+
+let queue: import("bullmq").Queue<QueueJob> | null = null;
+
+export async function getQueue(): Promise<import("bullmq").Queue<QueueJob> | null> {
   if (!configured.redis) return null;
   if (queue) return queue;
   const { Queue } = await import("bullmq");
   const IORedis = (await import("ioredis")).default;
   const connection = new IORedis(env.redisUrl!, { maxRetriesPerRequest: null });
-  queue = new Queue<SendJob>(SEND_QUEUE, {
+  queue = new Queue<QueueJob>(SEND_QUEUE, {
     connection: connection as unknown as import("bullmq").ConnectionOptions,
   });
   return queue;
 }
 
-/** Enqueue a send with an optional delay (ms) for sequencing + jitter. */
-export async function enqueueSend(job: SendJob, delayMs = 0): Promise<boolean> {
-  // Use QStash on production if configured
+/** Enqueue any job with an optional delay (ms) for sequencing + jitter. */
+export async function enqueueJob(job: QueueJob, delayMs = 0): Promise<boolean> {
+  // Use QStash in production if configured
   if (configured.qstash && !env.appUrl.includes("localhost")) {
     const delaySeconds = Math.max(0, Math.ceil(delayMs / 1000));
     const destinationUrl = `${env.appUrl}/api/qstash/process`;
@@ -46,10 +61,8 @@ export async function enqueueSend(job: SendJob, delayMs = 0): Promise<boolean> {
         },
         body: JSON.stringify(job),
       });
-
       if (!response.ok) {
-        const err = await response.text();
-        console.error(`[QStash] Failed to publish job: ${err}`);
+        console.error(`[QStash] Failed to publish job: ${await response.text()}`);
         return false;
       }
       return true;
@@ -62,14 +75,12 @@ export async function enqueueSend(job: SendJob, delayMs = 0): Promise<boolean> {
   // Fallback to BullMQ if Redis is configured
   const q = await getQueue();
   if (!q) {
-    // If running locally without Redis or QStash, do inline asynchronous sending for convenience
+    // Local dev without Redis or QStash: run inline after the delay for convenience.
     if (process.env.NODE_ENV === "development") {
-      console.warn(`[queue] Redis/QStash not configured. Processing job inline (delayed by ${delayMs}ms)`);
-      import("./job-processor").then(({ processSendJob }) => {
+      console.warn(`[queue] Redis/QStash not configured. Running job inline (delay ${delayMs}ms)`);
+      import("./job-router").then(({ runJob }) => {
         setTimeout(() => {
-          processSendJob(job).catch((err) => {
-            console.error("[queue] Inline job process failed:", err);
-          });
+          runJob(job).catch((err) => console.error("[queue] Inline job failed:", err));
         }, delayMs);
       });
       return true;
@@ -77,7 +88,7 @@ export async function enqueueSend(job: SendJob, delayMs = 0): Promise<boolean> {
     return false;
   }
 
-  await q.add("send", job, {
+  await q.add(job.kind ?? "send", job, {
     delay: delayMs,
     attempts: 5,
     backoff: { type: "exponential", delay: 60_000 },
@@ -85,4 +96,9 @@ export async function enqueueSend(job: SendJob, delayMs = 0): Promise<boolean> {
     removeOnFail: 5000,
   });
   return true;
+}
+
+/** Back-compat helper for one-off sends. */
+export async function enqueueSend(job: Omit<SendJob, "kind">, delayMs = 0): Promise<boolean> {
+  return enqueueJob({ kind: "send", ...job }, delayMs);
 }

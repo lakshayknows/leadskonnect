@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
-import { ok, fail, requireDb } from "@/lib/http";
+import { ok, fail } from "@/lib/http";
+import { requireOrg } from "@/lib/tenant";
 import nodemailer from "nodemailer";
 
 export const runtime = "nodejs";
@@ -16,13 +17,18 @@ const AccountSchema = z.object({
   pass: z.string().min(1),
   from: z.string().optional().nullable(),
   active: z.boolean().default(true),
+  // Optional per-account DKIM signing
+  dkimDomain: z.string().optional().nullable(),
+  dkimSelector: z.string().optional().nullable(),
+  dkimPrivateKey: z.string().optional().nullable(),
 });
 
-export async function GET() {
-  const guard = requireDb();
-  if (guard) return guard;
+export async function GET(req: NextRequest) {
+  const ctx = await requireOrg(req);
+  if (ctx instanceof Response) return ctx;
   // Never expose secrets (pass / refreshToken) to the client.
   const accounts = await prisma.sendingAccount.findMany({
+    where: { organizationId: ctx.orgId },
     orderBy: { createdAt: "desc" },
     select: {
       id: true,
@@ -42,8 +48,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const guard = requireDb();
-  if (guard) return guard;
+  const ctx = await requireOrg(req);
+  if (ctx instanceof Response) return ctx;
 
   try {
     const body = await req.json().catch(() => null);
@@ -80,9 +86,9 @@ export async function POST(req: NextRequest) {
       return ok({ message: "SMTP connection verified successfully!" });
     }
 
-    // Check if account already exists with this email
+    // Check if account already exists with this email in this org
     const existing = await prisma.sendingAccount.findUnique({
-      where: { email: data.email },
+      where: { organizationId_email: { organizationId: ctx.orgId, email: data.email } },
     });
 
     if (existing) {
@@ -91,6 +97,7 @@ export async function POST(req: NextRequest) {
 
     const account = await prisma.sendingAccount.create({
       data: {
+        organizationId: ctx.orgId,
         name: data.name,
         email: data.email,
         host: data.host,
@@ -100,6 +107,9 @@ export async function POST(req: NextRequest) {
         pass: data.pass,
         from: data.from || null,
         active: data.active,
+        dkimDomain: data.dkimDomain || null,
+        dkimSelector: data.dkimSelector || null,
+        dkimPrivateKey: data.dkimPrivateKey || null,
       },
     });
 
@@ -111,19 +121,13 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
-  const guard = requireDb();
-  if (guard) return guard;
+  const ctx = await requireOrg(req);
+  if (ctx instanceof Response) return ctx;
 
   const id = req.nextUrl.searchParams.get("id");
   if (!id) return fail("Missing account 'id' parameter");
 
-  try {
-    await prisma.sendingAccount.delete({
-      where: { id },
-    });
-    return ok({ deleted: id });
-  } catch (err) {
-    console.error("[sending-accounts] failed to delete account:", err);
-    return fail("Account not found or could not be deleted", 400);
-  }
+  const res = await prisma.sendingAccount.deleteMany({ where: { id, organizationId: ctx.orgId } });
+  if (res.count === 0) return fail("Account not found or could not be deleted", 404);
+  return ok({ deleted: id });
 }
