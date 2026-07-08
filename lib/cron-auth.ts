@@ -1,9 +1,11 @@
 /**
  * Authorize scheduled/cron trigger requests to the poller + warm-up endpoints.
  *
- * These jobs run on QStash Schedules (works on any Vercel plan). QStash signs every
- * request, so we verify the Upstash signature — no shared secret required. A CRON_SECRET
- * bearer and the Vercel-cron header are also accepted (for manual curls / future use).
+ * These jobs run on QStash Schedules. QStash signs every request, so we verify the Upstash
+ * signature — no shared secret required. A CRON_SECRET bearer is also accepted (manual runs).
+ *
+ * NOTE: we deliberately do NOT trust `x-vercel-cron` — external clients can spoof it, and
+ * these endpoints fan out across every org, so a header check would be a tenant-data leak.
  */
 import { env } from "./env";
 
@@ -11,7 +13,6 @@ export async function isAuthorizedCron(req: Request, rawBody = ""): Promise<bool
   const cronSecret = process.env.CRON_SECRET;
   const authz = req.headers.get("authorization");
   if (cronSecret && authz === `Bearer ${cronSecret}`) return true;
-  if (req.headers.get("x-vercel-cron")) return true;
 
   const signature = req.headers.get("upstash-signature");
   if (signature && env.qstash.currentSigningKey && env.qstash.nextSigningKey) {
