@@ -6,21 +6,27 @@ function render(cfg) {
   const on = !!cfg.enabled;
   $("toggle").textContent = on ? "Stop" : "Start";
   $("toggle").classList.toggle("on", on);
-  $("dot").classList.toggle("on", on && !!cfg.token);
+  $("dot").classList.toggle("on", on && !!cfg.token && !cfg.lastStatusError);
 
   const s = cfg.stats;
-  if (on && cfg.token) {
-    const done = s && s.day === new Date().toDateString() ? s : { sent: 0, failed: 0, skipped: 0 };
-    $("status").innerHTML = `Running. Today: <b>${done.sent || 0}</b> sent · ${done.skipped || 0} skipped · ${done.failed || 0} failed.`;
-  } else if (cfg.token) {
-    $("status").textContent = "Paused. Press Start to drain your queue.";
+  const today = s && s.day === new Date().toDateString() ? s : { sent: 0, failed: 0, skipped: 0 };
+  const counts = `Today: <b>${today.sent || 0}</b> sent · ${today.skipped || 0} skipped · ${today.failed || 0} failed`;
+
+  const box = $("status");
+  box.style.color = cfg.lastStatusError ? "#b91c1c" : "";
+  if (!cfg.token) {
+    box.textContent = "Not connected — paste your token and Save.";
+  } else if (cfg.lastStatus) {
+    box.innerHTML = `${cfg.lastStatus}<br><span style="color:#6b6b6b;font-size:11px">${counts}</span>`;
+  } else if (on) {
+    box.innerHTML = `Starting…<br><span style="color:#6b6b6b;font-size:11px">${counts}</span>`;
   } else {
-    $("status").textContent = "Not connected — paste your token and Save.";
+    box.textContent = "Paused. Press Start to drain your queue.";
   }
 }
 
 function load() {
-  chrome.storage.local.get(["apiBase", "token", "enabled", "stats"], render);
+  chrome.storage.local.get(["apiBase", "token", "enabled", "stats", "lastStatus", "lastStatusError"], render);
 }
 
 $("save").addEventListener("click", () => {
