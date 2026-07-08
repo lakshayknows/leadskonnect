@@ -424,3 +424,43 @@ model InboxMessage {
   @@index([threadId])
   @@index([providerMessageId])
 }
+
+// ---- LinkedIn: companion Chrome-extension automation (see docs/channels.md, extension/) ----
+// The official API can't send invites/DMs, so campaigns enqueue LinkedInActions and a
+// browser extension drains them from the user's own logged-in LinkedIn session.
+model LinkedInAccount {
+  id              String    @id @default(uuid())
+  organizationId  String
+  userId          String // the member whose LinkedIn session the extension drives
+  extToken        String    @unique // bearer the Chrome extension authenticates with
+  status          String    @default("pending") // pending | connected
+  liMemberName    String? // display name the extension reports on check-in
+  dailyInviteCap  Int       @default(20)
+  dailyMessageCap Int       @default(40)
+  minDelaySec     Int       @default(45) // humanized pacing floor
+  maxDelaySec     Int       @default(120)
+  lastSeenAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([organizationId, userId])
+  @@index([organizationId])
+}
+
+model LinkedInAction {
+  id             String    @id @default(uuid())
+  organizationId String
+  leadId         String
+  campaignId     String?
+  type           String    @default("auto") // auto | invite | message
+  linkedinUrl    String
+  note           String? // rendered invite note / message body
+  status         String    @default("pending") // pending | in_progress | sent | failed | skipped
+  result         String? // extension-reported detail
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  sentAt         DateTime?
+
+  @@index([organizationId, status])
+  @@index([leadId])
+}

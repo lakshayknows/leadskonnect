@@ -1,33 +1,35 @@
-import { configured } from "../env";
+import { prisma } from "../db";
 import type { Channel, Lead, SendResult } from "./types";
 import type { RenderedMessage } from "../templates";
+import { enqueueLinkedInAction } from "../linkedin/queue";
 
 /**
- * LinkedIn is a gray area for personal-account automation (see docs/channels.md).
- * This module intentionally does NOT ship browser automation by default. Two paths:
- *
- *   1. Official API (org pages) — wire LINKEDIN_ACCESS_TOKEN and call the REST API.
- *   2. Browser automation (personal) — implement `sendViaBrowser` with Puppeteer/
- *      Playwright using LINKEDIN_LI_AT, with humanized delays. Opt-in, at your own risk.
- *
- * Until one is implemented, sends are reported as skipped so campaigns don't fail.
+ * LinkedIn sending is handled by the companion Chrome extension, not a server API —
+ * LinkedIn does not grant invite/DM access through the developer program (see
+ * docs/channels.md). A "send" here enqueues a LinkedInAction; the extension, running in
+ * the user's own logged-in LinkedIn tab, claims it via /api/linkedin/queue and performs
+ * the invite/message with humanized pacing + daily caps.
  */
 export const linkedinChannel: Channel = {
   name: "linkedin",
-  isConfigured: () => configured.linkedin,
+  // Automation is client-side (the extension), so there are no server creds to gate on.
+  isConfigured: () => true,
 
-  async send(lead: Lead, _rendered: RenderedMessage): Promise<SendResult> {
-    if (!configured.linkedin) {
-      return { ok: false, skipped: true, reason: "linkedin not configured" };
-    }
-    if (!lead.linkedinUrl) {
-      return { ok: false, skipped: true, reason: "lead has no linkedinUrl" };
-    }
-    // TODO: implement official API invite/message or browser automation.
-    return {
-      ok: false,
-      skipped: true,
-      reason: "linkedin send not implemented — see lib/channels/linkedin.ts",
-    };
+  async send(lead: Lead, rendered: RenderedMessage): Promise<SendResult> {
+    if (!lead.linkedinUrl) return { ok: false, skipped: true, reason: "lead has no linkedinUrl" };
+
+    const dbLead = await prisma.lead.findUnique({
+      where: { id: lead.id },
+      select: { organizationId: true, linkedinUrl: true },
+    });
+    if (!dbLead?.organizationId) return { ok: false, skipped: true, reason: "lead has no organization" };
+
+    const action = await enqueueLinkedInAction({
+      organizationId: dbLead.organizationId,
+      leadId: lead.id,
+      linkedinUrl: dbLead.linkedinUrl ?? lead.linkedinUrl,
+      note: rendered.body || rendered.subject || null,
+    });
+    return { ok: true, providerId: action.id, reason: "queued for the LinkedIn extension" };
   },
 };

@@ -184,7 +184,7 @@ function ProfileMenu() {
           <div className="my-1 h-px bg-line" />
           {link("/changelog", Megaphone, "Product updates")}
           {link("/contact", MessagesSquare, "Share feedback")}
-          {link("#", Chrome, "Install Chrome extension", true)}
+          {link("/dashboard/settings/linkedin", Chrome, "Install Chrome extension")}
 
           <div className="my-1 h-px bg-line" />
           <div className="px-2.5 pb-1 pt-1 font-mono text-[10px] uppercase tracking-wide text-ink-soft/50">Workspace</div>

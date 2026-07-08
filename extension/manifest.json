@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Followthroo — LinkedIn Assistant",
+  "version": "1.0.0",
+  "description": "Runs your Followthroo LinkedIn outreach from your own logged-in LinkedIn session, with humanized pacing and daily caps.",
+  "permissions": ["storage", "alarms", "scripting", "tabs"],
+  "host_permissions": [
+    "https://www.linkedin.com/*",
+    "https://www.followthroo.com/*",
+    "https://followthroo.com/*",
+    "http://localhost:3000/*"
+  ],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_popup": "popup.html", "default_title": "Followthroo LinkedIn" }
+}
