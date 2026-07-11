@@ -30,7 +30,19 @@ function load() {
 $("toggle").addEventListener("click", () => {
   chrome.storage.local.get(["enabled"], ({ enabled }) => chrome.storage.local.set({ enabled: !enabled }, load));
 });
-$("settings").addEventListener("click", () => chrome.runtime.openOptionsPage());
+$("settings").addEventListener("click", () => {
+  // Open the Options page reliably. openOptionsPage() can no-op if the manifest's
+  // options_page wasn't reloaded, so fall back to opening the page URL directly.
+  const url = chrome.runtime.getURL("options.html");
+  if (chrome.runtime.openOptionsPage) {
+    chrome.runtime.openOptionsPage(() => {
+      if (chrome.runtime.lastError) chrome.tabs.create({ url });
+    });
+  } else {
+    chrome.tabs.create({ url });
+  }
+  window.close();
+});
 
 chrome.storage.onChanged.addListener(load);
 load();
