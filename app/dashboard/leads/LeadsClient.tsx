@@ -25,7 +25,7 @@ const PAGE_SIZE = 50;
 
 export default function LeadsPage() {
   const [page, setPage] = useState(1);
-  const [book, setBook] = useState<"email" | "linkedin">("email");
+  const [book, setBook] = useState<"" | "linkedin">(""); // "" = all contacts, "linkedin" = has a profile URL
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [tagFilter, setTagFilter] = useState<string[]>([]);
@@ -47,7 +47,8 @@ export default function LeadsPage() {
     return () => clearTimeout(t);
   }, [search]);
 
-  const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE), book });
+  const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
+  if (book) params.set("book", book);
   if (debouncedSearch.trim()) params.set("q", debouncedSearch.trim());
   if (tagFilter.length) params.set("tags", tagFilter.join(","));
   if (groupFilter) params.set("group", groupFilter);
@@ -135,6 +136,18 @@ export default function LeadsPage() {
     if (!confirm("Delete this lead? They'll be added to the suppression list.")) return;
     try {
       await api(`/api/leads/${id}`, { method: "DELETE" });
+      mutate();
+    } catch (e) {
+      setMsg({ kind: "error", text: (e as Error).message });
+    }
+  }
+
+  // Inline add/edit a contact's LinkedIn URL (what the extension acts on).
+  async function setLinkedin(id: string, current: string | null) {
+    const url = prompt("LinkedIn profile URL for this contact:", current ?? "");
+    if (url === null) return;
+    try {
+      await api(`/api/leads/${id}`, { method: "PATCH", body: { linkedinUrl: url.trim() || null } });
       mutate();
     } catch (e) {
       setMsg({ kind: "error", text: (e as Error).message });
@@ -334,27 +347,27 @@ export default function LeadsPage() {
         <div className="space-y-4">
           {msg ? <Banner kind={msg.kind}>{msg.text}</Banner> : error ? <Banner kind="error">{(error as Error).message}</Banner> : null}
 
-          {/* Book toggle + group filter */}
+          {/* LinkedIn filter + group filter (one contacts table — these just narrow the rows) */}
           <div className="flex flex-wrap items-center gap-3">
             <div className="flex rounded-xl border border-line p-1">
               <button
-                onClick={() => { setBook("email"); setPage(1); setGroupFilter(""); setSelected(new Set()); }}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${book === "email" ? "bg-ink text-white" : "text-ink-soft hover:bg-tint"}`}
+                onClick={() => { setBook(""); setPage(1); setSelected(new Set()); }}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${book === "" ? "bg-ink text-white" : "text-ink-soft hover:bg-tint"}`}
               >
-                Contacts
+                All contacts
               </button>
               <button
-                onClick={() => { setBook("linkedin"); setPage(1); setGroupFilter(""); setSelected(new Set()); }}
+                onClick={() => { setBook("linkedin"); setPage(1); setSelected(new Set()); }}
                 className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${book === "linkedin" ? "bg-ink text-white" : "text-ink-soft hover:bg-tint"}`}
               >
-                <Linkedin className="h-3.5 w-3.5" /> LinkedIn
+                <Linkedin className="h-3.5 w-3.5" /> LinkedIn only
               </button>
             </div>
             <Select value={groupFilter} onChange={(e) => { setGroupFilter(e.target.value); setPage(1); }} className="!w-52 !py-2 text-sm">
               <option value="">All groups</option>
               {(segments ?? []).map((s) => <option key={s.id} value={s.id}>{s.name} ({s.count})</option>)}
             </Select>
-            {book === "linkedin" && <span className="text-xs text-ink-soft">LinkedIn contacts — used by the Chrome extension.</span>}
+            {book === "linkedin" && <span className="text-xs text-ink-soft">Contacts with a profile URL — the extension only acts on these.</span>}
           </div>
 
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, email, or company…" />
@@ -416,7 +429,8 @@ export default function LeadsPage() {
                     <input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="Select all" />
                   </th>
                   <th className="px-4 py-3">Name</th>
-                  <th className="px-4 py-3">{book === "linkedin" ? "LinkedIn" : "Email"}</th>
+                  <th className="px-4 py-3">Email</th>
+                  <th className="px-4 py-3">LinkedIn</th>
                   <th className="px-4 py-3">Tags</th>
                   <th className="px-4 py-3">Stage</th>
                   <th className="px-4 py-3"></th>
@@ -424,9 +438,9 @@ export default function LeadsPage() {
               </thead>
               <tbody className="divide-y divide-line">
                 {isLoading ? (
-                  <tr><td colSpan={6} className="px-4 py-8 text-center text-ink-soft">Loading…</td></tr>
+                  <tr><td colSpan={7} className="px-4 py-8 text-center text-ink-soft">Loading…</td></tr>
                 ) : leads.length === 0 ? (
-                  <tr><td colSpan={6} className="px-4 py-8 text-center text-ink-soft">No leads found.</td></tr>
+                  <tr><td colSpan={7} className="px-4 py-8 text-center text-ink-soft">No contacts found.</td></tr>
                 ) : (
                   leads.map((l) => (
                     <tr key={l.id} className={selected.has(l.id) ? "bg-tint/50" : ""}>
@@ -434,12 +448,11 @@ export default function LeadsPage() {
                         <input type="checkbox" checked={selected.has(l.id)} onChange={() => toggle(l.id)} aria-label={`Select ${l.email ?? l.linkedinUrl ?? l.id}`} />
                       </td>
                       <td className="px-4 py-3 font-medium">{[l.firstName, l.lastName].filter(Boolean).join(" ") || "—"}</td>
+                      <td className="px-4 py-3">{l.email ?? "—"}</td>
                       <td className="px-4 py-3">
-                        {book === "linkedin"
-                          ? (l.linkedinUrl
-                              ? <a href={l.linkedinUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-accent hover:underline"><Linkedin className="h-3.5 w-3.5" /> Profile</a>
-                              : "—")
-                          : (l.email ?? "—")}
+                        {l.linkedinUrl
+                          ? <a href={l.linkedinUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-accent hover:underline"><Linkedin className="h-3.5 w-3.5" /> Profile</a>
+                          : <button onClick={() => setLinkedin(l.id, l.linkedinUrl)} className="text-xs text-ink-soft hover:text-accent">+ Add</button>}
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1">
