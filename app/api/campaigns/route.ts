@@ -35,6 +35,7 @@ export async function POST(req: NextRequest) {
   const campaign = await prisma.campaign.create({
     data: {
       organizationId: ctx.orgId,
+      createdBy: ctx.userId,
       name: parsed.data.name,
       sequence: parsed.data.sequence as unknown as Prisma.InputJsonValue,
       sendingAccountId: parsed.data.sendingAccountId || null,

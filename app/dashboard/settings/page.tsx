@@ -1,10 +1,11 @@
 import Link from "next/link";
-import { Users2, Mail, CreditCard, Bell, ArrowRight, Linkedin } from "lucide-react";
+import { Users2, Mail, CreditCard, Bell, ArrowRight, Linkedin, User } from "lucide-react";
 import { DashHeader } from "@/components/dashboard/ui";
 
 export const dynamic = "force-dynamic";
 
 const CARDS = [
+  { href: "/dashboard/settings/profile", icon: User, title: "Profile", desc: "Your name — signs your outreach emails." },
   { href: "/dashboard/settings/team", icon: Users2, title: "Team", desc: "Invite teammates and manage roles." },
   { href: "/dashboard/accounts", icon: Mail, title: "Sending accounts", desc: "Connect the mailboxes you send from." },
   { href: "/dashboard/settings/linkedin", icon: Linkedin, title: "LinkedIn", desc: "Automate invites & messages via the extension." },

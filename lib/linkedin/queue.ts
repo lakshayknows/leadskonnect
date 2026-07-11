@@ -46,34 +46,80 @@ export async function queueStats(organizationId: string) {
   return { pending, sentToday, failedToday };
 }
 
+type PerCampaign = { cap?: number; mode?: string; enabled?: boolean };
+
+export interface ClaimAccount {
+  organizationId: string;
+  dailyInviteCap: number;
+  mode: string;
+  selectedCampaignIds: string[];
+  campaignSettings: unknown;
+}
+
 /**
- * Hand the extension its next batch of actions, capped by the daily invite limit.
- * Reclaims stale in-progress actions first so a closed browser doesn't strand the queue.
+ * Hand the extension its next batch of actions, honoring the account's config:
+ * selected campaigns, the global daily cap, per-campaign caps, and enabled flags.
+ * Each returned action carries its effective `type` (auto/invite/message). Stale
+ * in-progress actions are reclaimed first so a closed browser doesn't strand the queue.
  */
-export async function claimActions(organizationId: string, opts: { inviteCap: number; limit: number }) {
+export async function claimActions(account: ClaimAccount, limit: number) {
+  const organizationId = account.organizationId;
+  const startOfToday = startOfDay();
+  const settings = (account.campaignSettings ?? {}) as Record<string, PerCampaign>;
+  const selected = account.selectedCampaignIds ?? [];
+
   await prisma.linkedInAction.updateMany({
     where: { organizationId, status: "in_progress", updatedAt: { lt: new Date(Date.now() - STALE_MS) } },
     data: { status: "pending" },
   });
 
-  const usedToday = await prisma.linkedInAction.count({
-    where: { organizationId, status: { in: ["sent", "in_progress"] }, updatedAt: { gte: startOfDay() } },
+  const usedGlobal = await prisma.linkedInAction.count({
+    where: { organizationId, status: { in: ["sent", "in_progress"] }, updatedAt: { gte: startOfToday } },
   });
-  const take = Math.min(Math.max(0, opts.inviteCap - usedToday), opts.limit);
+  const take = Math.min(Math.max(0, account.dailyInviteCap - usedGlobal), limit);
   if (take <= 0) return [];
 
-  const pending = await prisma.linkedInAction.findMany({
+  // Pull a small candidate window and filter in JS (handles campaign selection, per-campaign
+  // caps, disabled campaigns, and run-a-book actions that have no campaignId).
+  const candidates = await prisma.linkedInAction.findMany({
     where: { organizationId, status: "pending" },
     orderBy: { createdAt: "asc" },
-    take,
+    take: take * 5 + 20,
   });
-  if (pending.length === 0) return [];
+
+  const usedCache = new Map<string, number>();
+  const usedFor = async (cid: string) => {
+    if (!usedCache.has(cid)) {
+      usedCache.set(cid, await prisma.linkedInAction.count({
+        where: { organizationId, campaignId: cid, status: { in: ["sent", "in_progress"] }, updatedAt: { gte: startOfToday } },
+      }));
+    }
+    return usedCache.get(cid)!;
+  };
+
+  const picked: typeof candidates = [];
+  for (const a of candidates) {
+    if (picked.length >= take) break;
+    const cid = a.campaignId;
+    if (cid) {
+      if (selected.length && !selected.includes(cid)) continue;
+      const s = settings[cid];
+      if (s?.enabled === false) continue;
+      if (typeof s?.cap === "number" && (await usedFor(cid)) + picked.filter((p) => p.campaignId === cid).length >= s.cap) continue;
+    }
+    picked.push(a);
+  }
+  if (picked.length === 0) return [];
 
   await prisma.linkedInAction.updateMany({
-    where: { id: { in: pending.map((p) => p.id) } },
+    where: { id: { in: picked.map((p) => p.id) } },
     data: { status: "in_progress" },
   });
-  return pending;
+
+  return picked.map((a) => ({
+    ...a,
+    type: settings[a.campaignId ?? ""]?.mode || account.mode || a.type || "auto",
+  }));
 }
 
 /** Extension reports the outcome; reflected as a Message + activity so it shows in the CRM. */

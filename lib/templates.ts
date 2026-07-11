@@ -76,20 +76,43 @@ export function renderMessage(
     title?: string | null;
     email?: string | null;
     custom?: unknown;
-  }
+  },
+  opts: { senderName?: string } = {}
 ): RenderedMessage {
+  const senderName = opts.senderName?.trim() || "";
   const vars: Variables = {
     firstName: lead.firstName ?? "",
     lastName: lead.lastName ?? "",
     company: lead.company ?? "",
     title: lead.title ?? "",
     email: lead.email ?? "",
+    senderName,
     ...((lead.custom as Record<string, unknown>) ?? {}),
   };
+  // Fill the legacy literal placeholder too, so pre-existing templates pick up the name.
+  const fillSender = (s: string) => (senderName ? s.replace(/\[Your Name\]/gi, senderName) : s);
   return {
-    subject: tpl.subject ? render(tpl.subject, vars) : undefined,
-    body: render(tpl.body, vars),
+    subject: tpl.subject ? fillSender(render(tpl.subject, vars)) : undefined,
+    body: fillSender(render(tpl.body, vars)),
   };
+}
+
+/**
+ * Turn a plain-text template body (paragraphs separated by blank lines, single newlines as
+ * line breaks) into readable HTML. Idempotent: bodies that already contain block-level HTML
+ * (warm-up mail, hand-written HTML templates) are returned unchanged.
+ */
+export function formatEmailBody(body: string): string {
+  if (!body) return body;
+  if (/<(p|div|table|ul|ol|blockquote|h[1-6])[\s>]/i.test(body)) return body;
+  const paras = body
+    .replace(/\r\n/g, "\n")
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter(Boolean)
+    .map((p) => `<p style="margin:0 0 16px">${p.replace(/\n/g, "<br>")}</p>`)
+    .join("");
+  return `<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:15px;line-height:1.55;color:#1a1a1a">${paras}</div>`;
 }
 
 /** Naive spam-score heuristic — flag risky copy before a batch goes out. */

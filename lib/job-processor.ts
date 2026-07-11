@@ -4,6 +4,7 @@ import { renderMessage } from "./templates";
 import { logActivity } from "./crm";
 import { recordOutbound } from "./inbox/store";
 import { injectTracking } from "./tracking";
+import { senderNameForCampaign } from "./sender";
 import { randomUUID } from "node:crypto";
 import type { SendJob } from "./queue";
 
@@ -24,8 +25,9 @@ export async function processSendJob(jobData: SendJob) {
     ? await prisma.template.findFirst({ where: { id: templateId, organizationId } })
     : null;
 
+  const senderName = await senderNameForCampaign(campaignId, organizationId);
   const rendered = tpl
-    ? renderMessage(tpl, lead)
+    ? renderMessage(tpl, lead, { senderName })
     : { body: "", subject: undefined };
 
   // Pre-generate the Message id so open/click tracking can key on it before sending.

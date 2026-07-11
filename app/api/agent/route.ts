@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     const parsed = RunAgent.safeParse(await req.json().catch(() => null));
     if (!parsed.success) return fail("expected { leadIds[], brief, maxSteps?, sendingAccountId? }");
 
-    const result = await runAgent({ orgId: ctx.orgId, ...parsed.data });
+    const result = await runAgent({ orgId: ctx.orgId, userId: ctx.userId, ...parsed.data });
     return ok(result);
   } catch (err) {
     console.error("[api/agent] Agent execution failed:", err);

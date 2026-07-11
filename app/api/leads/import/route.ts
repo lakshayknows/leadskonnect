@@ -8,7 +8,11 @@ import { invalidate } from "@/lib/cache";
 export const runtime = "nodejs";
 
 // Known columns map onto lead fields; everything else becomes a custom variable.
-const KNOWN = new Set(["email", "firstname", "lastname", "phone", "linkedinurl", "company", "title"]);
+const KNOWN = new Set([
+  "email", "firstname", "name", "lastname", "phone",
+  "linkedinurl", "linkedin", "linkedinprofile", "linkedinprofilelink", "profile", "profilelink", "profileurl",
+  "company", "title",
+]);
 
 function normalizeRow(row: Record<string, string>) {
   const lead: Record<string, unknown> = {};
@@ -18,10 +22,25 @@ function normalizeRow(row: Record<string, string>) {
     if (!value) continue;
     switch (key) {
       case "email": lead.email = value.trim().toLowerCase(); break;
+      // "name" as a single column → first/last split (LinkedIn exports use one Name column).
+      case "name": {
+        const parts = value.trim().split(/\s+/);
+        lead.firstName = parts[0];
+        if (parts.length > 1) lead.lastName = parts.slice(1).join(" ");
+        break;
+      }
       case "firstname": lead.firstName = value; break;
       case "lastname": lead.lastName = value; break;
       case "phone": lead.phone = value; break;
-      case "linkedinurl": lead.linkedinUrl = value; break;
+      case "linkedinurl":
+      case "linkedin":
+      case "linkedinprofile":
+      case "linkedinprofilelink":
+      case "profile":
+      case "profilelink":
+      case "profileurl":
+        lead.linkedinUrl = value.trim();
+        break;
       case "company": lead.company = value; break;
       case "title": lead.title = value; break;
       default:
@@ -53,17 +72,29 @@ export async function POST(req: NextRequest) {
   const results = { imported: 0, skipped: 0, errors: [] as string[] };
   for (const row of parsed.data) {
     const { lead, custom } = normalizeRow(row);
-    if (!lead.email) {
+    const email = lead.email as string | undefined;
+    const linkedinUrl = lead.linkedinUrl as string | undefined;
+    if (!email && !linkedinUrl) {
       results.skipped++;
-      results.errors.push(`row missing email: ${JSON.stringify(row).slice(0, 80)}`);
+      results.errors.push(`row needs an email or LinkedIn URL: ${JSON.stringify(row).slice(0, 80)}`);
       continue;
     }
     try {
-      await prisma.lead.upsert({
-        where: { organizationId_email: { organizationId: orgId, email: lead.email as string } },
-        create: { ...(lead as object), organizationId: orgId, custom } as never,
-        update: { ...(lead as object), custom } as never,
-      });
+      if (email) {
+        await prisma.lead.upsert({
+          where: { organizationId_email: { organizationId: orgId, email } },
+          create: { ...(lead as object), organizationId: orgId, custom } as never,
+          update: { ...(lead as object), custom } as never,
+        });
+      } else {
+        // LinkedIn-only contact — dedupe on the profile URL.
+        const existing = await prisma.lead.findFirst({ where: { organizationId: orgId, linkedinUrl } });
+        if (existing) {
+          await prisma.lead.update({ where: { id: existing.id }, data: { ...(lead as object), custom } as never });
+        } else {
+          await prisma.lead.create({ data: { ...(lead as object), organizationId: orgId, custom } as never });
+        }
+      }
       results.imported++;
     } catch (e) {
       results.skipped++;

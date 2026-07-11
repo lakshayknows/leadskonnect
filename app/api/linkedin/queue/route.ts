@@ -1,26 +1,15 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { ok, fail } from "@/lib/http";
 import { requireExtAuth } from "@/lib/linkedin/auth";
 import { claimActions, completeAction } from "@/lib/linkedin/queue";
+import { corsPreflight, withCors } from "@/lib/linkedin/cors";
 
 export const runtime = "nodejs";
 
-// The extension authenticates by bearer token, not cookies, so open CORS is safe here.
-const CORS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-  "Access-Control-Allow-Headers": "authorization, content-type, x-ext-token",
-};
-
 export function OPTIONS() {
-  return new NextResponse(null, { status: 204, headers: CORS });
-}
-
-function withCors(res: Response) {
-  for (const [k, v] of Object.entries(CORS)) res.headers.set(k, v);
-  return res;
+  return corsPreflight();
 }
 
 // GET — extension polls for its next batch of actions (marks them in_progress).
@@ -34,11 +23,12 @@ export async function GET(req: NextRequest) {
   });
 
   const limit = Math.min(Math.max(Number(req.nextUrl.searchParams.get("limit") ?? 3), 1), 10);
-  const actions = await claimActions(account.organizationId, { inviteCap: account.dailyInviteCap, limit });
+  const actions = await claimActions(account, limit);
 
   return withCors(
     ok({
       pacing: { minDelaySec: account.minDelaySec, maxDelaySec: account.maxDelaySec },
+      mode: account.mode,
       actions: actions.map((a) => ({ id: a.id, type: a.type, linkedinUrl: a.linkedinUrl, note: a.note })),
     })
   );
