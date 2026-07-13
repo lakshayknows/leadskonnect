@@ -53,7 +53,7 @@ model Lead {
   organizationId String? // tenant scope — always set in code (see lib/tenant.ts); nullable only for legacy backfill
   firstName      String?
   lastName       String?
-  email          String
+  email          String? // optional — LinkedIn-only contacts (Book 2) have a profile link but no email
   phone          String? // encrypt at rest (see docs/security.md)
   linkedinUrl    String?
   company        String?
@@ -73,6 +73,7 @@ model Lead {
 
   @@unique([organizationId, email])
   @@index([organizationId])
+  @@index([organizationId, linkedinUrl])
   @@index([stage])
   @@index([optedOut])
 }
@@ -439,6 +440,9 @@ model LinkedInAccount {
   dailyMessageCap Int       @default(40)
   minDelaySec     Int       @default(45) // humanized pacing floor
   maxDelaySec     Int       @default(120)
+  mode            String    @default("auto") // auto | invite | message — default action type
+  selectedCampaignIds String[] @default([]) // empty = drain all campaigns' LinkedIn actions
+  campaignSettings Json     @default("{}") // per-campaign override: { [campaignId]: { cap, minDelaySec, maxDelaySec, mode, enabled } }
   lastSeenAt      DateTime?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import { Trash2, Upload, Plus, Tag, FolderPlus, Rocket, X, Pencil, Check, Users } from "lucide-react";
+import { Trash2, Upload, Plus, Tag, FolderPlus, Rocket, X, Pencil, Check, Users, Linkedin } from "lucide-react";
 import { api } from "@/lib/client";
 import { DashHeader, Panel, Banner, Input, Label, Select } from "@/components/dashboard/ui";
 
@@ -10,7 +10,8 @@ type Lead = {
   id: string;
   firstName: string | null;
   lastName: string | null;
-  email: string;
+  email: string | null;
+  linkedinUrl: string | null;
   company: string | null;
   stage: string;
   tags: string[];
@@ -24,12 +25,14 @@ const PAGE_SIZE = 50;
 
 export default function LeadsPage() {
   const [page, setPage] = useState(1);
+  const [book, setBook] = useState<"" | "linkedin">(""); // "" = all contacts, "linkedin" = has a profile URL
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [tagFilter, setTagFilter] = useState<string[]>([]);
+  const [groupFilter, setGroupFilter] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [msg, setMsg] = useState<{ kind: "error" | "success" | "info"; text: string } | null>(null);
-  const [form, setForm] = useState({ firstName: "", email: "", company: "", tags: "" });
+  const [form, setForm] = useState({ firstName: "", email: "", company: "", tags: "", linkedinUrl: "" });
   const [busy, setBusy] = useState(false);
   const [newGroup, setNewGroup] = useState("");
   const [editingGroup, setEditingGroup] = useState<{ id: string; name: string } | null>(null);
@@ -45,8 +48,10 @@ export default function LeadsPage() {
   }, [search]);
 
   const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
+  if (book) params.set("book", book);
   if (debouncedSearch.trim()) params.set("q", debouncedSearch.trim());
   if (tagFilter.length) params.set("tags", tagFilter.join(","));
+  if (groupFilter) params.set("group", groupFilter);
   const { data, isLoading, error, mutate } = useSWR<LeadsResponse>(`/api/leads?${params}`);
   const { data: segments, mutate: mutateSegments } = useSWR<Segment[]>("/api/segments");
   const { data: campaigns } = useSWR<Campaign[]>("/api/campaigns");
@@ -85,14 +90,24 @@ export default function LeadsPage() {
 
   async function addLead(e: React.FormEvent) {
     e.preventDefault();
-    if (!form.email) return;
+    if (!form.email.trim() && !form.linkedinUrl.trim()) {
+      return setMsg({ kind: "error", text: "Add an email or a LinkedIn URL." });
+    }
     setBusy(true);
     setMsg(null);
     try {
       const tags = form.tags.split(",").map((t) => t.trim()).filter(Boolean);
-      await api("/api/leads", { body: { firstName: form.firstName, email: form.email, company: form.company, tags } });
-      setForm({ firstName: "", email: "", company: "", tags: "" });
-      setMsg({ kind: "success", text: "Lead added." });
+      await api("/api/leads", {
+        body: {
+          firstName: form.firstName || undefined,
+          email: form.email.trim() || undefined,
+          linkedinUrl: form.linkedinUrl.trim() || undefined,
+          company: form.company || undefined,
+          tags,
+        },
+      });
+      setForm({ firstName: "", email: "", company: "", tags: "", linkedinUrl: "" });
+      setMsg({ kind: "success", text: "Contact added." });
       mutate();
     } catch (e) {
       setMsg({ kind: "error", text: (e as Error).message });
@@ -121,6 +136,18 @@ export default function LeadsPage() {
     if (!confirm("Delete this lead? They'll be added to the suppression list.")) return;
     try {
       await api(`/api/leads/${id}`, { method: "DELETE" });
+      mutate();
+    } catch (e) {
+      setMsg({ kind: "error", text: (e as Error).message });
+    }
+  }
+
+  // Inline add/edit a contact's LinkedIn URL (what the extension acts on).
+  async function setLinkedin(id: string, current: string | null) {
+    const url = prompt("LinkedIn profile URL for this contact:", current ?? "");
+    if (url === null) return;
+    try {
+      await api(`/api/leads/${id}`, { method: "PATCH", body: { linkedinUrl: url.trim() || null } });
       mutate();
     } catch (e) {
       setMsg({ kind: "error", text: (e as Error).message });
@@ -212,15 +239,20 @@ export default function LeadsPage() {
         {/* Left column */}
         <div className="space-y-6">
           <Panel className="h-fit">
-            <h2 className="font-display text-lg font-bold">Add a lead</h2>
+            <h2 className="font-display text-lg font-bold">Add a contact</h2>
+            <p className="mt-1 text-xs text-ink-soft">An email or a LinkedIn URL is required.</p>
             <form onSubmit={addLead} className="mt-4 space-y-3">
               <div>
                 <Label>First name</Label>
                 <Input value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} placeholder="Jane" />
               </div>
               <div>
-                <Label>Email *</Label>
-                <Input type="email" required value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="jane@acme.com" />
+                <Label>Email</Label>
+                <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="jane@acme.com" />
+              </div>
+              <div>
+                <Label>LinkedIn URL</Label>
+                <Input type="url" value={form.linkedinUrl} onChange={(e) => setForm({ ...form, linkedinUrl: e.target.value })} placeholder="https://linkedin.com/in/jane" />
               </div>
               <div>
                 <Label>Company</Label>
@@ -231,7 +263,7 @@ export default function LeadsPage() {
                 <Input value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} placeholder="vip, warm" />
               </div>
               <button disabled={busy} className="btn btn-primary w-full justify-center disabled:opacity-50">
-                <Plus className="h-4 w-4" /> Add lead
+                <Plus className="h-4 w-4" /> Add contact
               </button>
             </form>
           </Panel>
@@ -315,6 +347,29 @@ export default function LeadsPage() {
         <div className="space-y-4">
           {msg ? <Banner kind={msg.kind}>{msg.text}</Banner> : error ? <Banner kind="error">{(error as Error).message}</Banner> : null}
 
+          {/* LinkedIn filter + group filter (one contacts table — these just narrow the rows) */}
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex rounded-xl border border-line p-1">
+              <button
+                onClick={() => { setBook(""); setPage(1); setSelected(new Set()); }}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${book === "" ? "bg-ink text-white" : "text-ink-soft hover:bg-tint"}`}
+              >
+                All contacts
+              </button>
+              <button
+                onClick={() => { setBook("linkedin"); setPage(1); setSelected(new Set()); }}
+                className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${book === "linkedin" ? "bg-ink text-white" : "text-ink-soft hover:bg-tint"}`}
+              >
+                <Linkedin className="h-3.5 w-3.5" /> LinkedIn only
+              </button>
+            </div>
+            <Select value={groupFilter} onChange={(e) => { setGroupFilter(e.target.value); setPage(1); }} className="!w-52 !py-2 text-sm">
+              <option value="">All groups</option>
+              {(segments ?? []).map((s) => <option key={s.id} value={s.id}>{s.name} ({s.count})</option>)}
+            </Select>
+            {book === "linkedin" && <span className="text-xs text-ink-soft">Contacts with a profile URL — the extension only acts on these.</span>}
+          </div>
+
           <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, email, or company…" />
 
           {/* Tag filter chips — click to filter, long-press hint to create group */}
@@ -375,6 +430,7 @@ export default function LeadsPage() {
                   </th>
                   <th className="px-4 py-3">Name</th>
                   <th className="px-4 py-3">Email</th>
+                  <th className="px-4 py-3">LinkedIn</th>
                   <th className="px-4 py-3">Tags</th>
                   <th className="px-4 py-3">Stage</th>
                   <th className="px-4 py-3"></th>
@@ -382,17 +438,22 @@ export default function LeadsPage() {
               </thead>
               <tbody className="divide-y divide-line">
                 {isLoading ? (
-                  <tr><td colSpan={6} className="px-4 py-8 text-center text-ink-soft">Loading…</td></tr>
+                  <tr><td colSpan={7} className="px-4 py-8 text-center text-ink-soft">Loading…</td></tr>
                 ) : leads.length === 0 ? (
-                  <tr><td colSpan={6} className="px-4 py-8 text-center text-ink-soft">No leads found.</td></tr>
+                  <tr><td colSpan={7} className="px-4 py-8 text-center text-ink-soft">No contacts found.</td></tr>
                 ) : (
                   leads.map((l) => (
                     <tr key={l.id} className={selected.has(l.id) ? "bg-tint/50" : ""}>
                       <td className="px-4 py-3">
-                        <input type="checkbox" checked={selected.has(l.id)} onChange={() => toggle(l.id)} aria-label={`Select ${l.email}`} />
+                        <input type="checkbox" checked={selected.has(l.id)} onChange={() => toggle(l.id)} aria-label={`Select ${l.email ?? l.linkedinUrl ?? l.id}`} />
                       </td>
                       <td className="px-4 py-3 font-medium">{[l.firstName, l.lastName].filter(Boolean).join(" ") || "—"}</td>
-                      <td className="px-4 py-3">{l.email}</td>
+                      <td className="px-4 py-3">{l.email ?? "—"}</td>
+                      <td className="px-4 py-3">
+                        {l.linkedinUrl
+                          ? <a href={l.linkedinUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-accent hover:underline"><Linkedin className="h-3.5 w-3.5" /> Profile</a>
+                          : <button onClick={() => setLinkedin(l.id, l.linkedinUrl)} className="text-xs text-ink-soft hover:text-accent">+ Add</button>}
+                      </td>
                       <td className="px-4 py-3">
                         <div className="flex flex-wrap gap-1">
                           {(l.tags ?? []).map((t) => <span key={t} className="rounded-full bg-tint px-2 py-0.5 text-xs">{t}</span>)}

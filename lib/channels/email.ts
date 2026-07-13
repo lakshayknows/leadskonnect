@@ -1,6 +1,7 @@
 import { env, configured } from "../env";
 import type { Channel, Lead, SendResult } from "./types";
 import type { RenderedMessage } from "../templates";
+import { formatEmailBody } from "../templates";
 
 // --- Gmail OAuth sending via the Gmail API (messages.send) ---
 // We use the Gmail API (not SMTP) because the connected accounts hold the
@@ -92,6 +93,8 @@ export const emailChannel: Channel = {
 
   async send(lead: Lead, rendered: RenderedMessage, account = "default"): Promise<SendResult> {
     if (!lead.email) return { ok: false, skipped: true, reason: "lead has no email" };
+    // Plain-text template bodies → readable HTML paragraphs (idempotent for HTML bodies).
+    const htmlBody = formatEmailBody(rendered.body);
     try {
       let t: import("nodemailer").Transporter;
       let fromAddress = env.smtp.from;
@@ -122,7 +125,7 @@ export const emailChannel: Channel = {
             fromAddress,
             lead.email,
             rendered.subject ?? "",
-            rendered.body
+            htmlBody
           );
           return { ok: true, providerId: id };
         }
@@ -157,7 +160,7 @@ export const emailChannel: Channel = {
         from: fromAddress,
         to: lead.email,
         subject: rendered.subject ?? "",
-        html: rendered.body,
+        html: htmlBody,
         text: rendered.body.replace(/<[^>]+>/g, " "),
       });
       return { ok: true, providerId: info.messageId };

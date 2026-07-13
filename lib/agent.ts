@@ -10,6 +10,7 @@ import { prisma } from "./db";
 import { safeSend } from "./channels";
 import { renderMessage } from "./templates";
 import { logActivity } from "./crm";
+import { senderNameForUser, senderNameForCampaign } from "./sender";
 import type { Channel } from "./channels/types";
 import { randomUUID } from "node:crypto";
 
@@ -49,10 +50,10 @@ async function runSendTool(orgId: string, input: {
   channel: Channel["name"];
   subject?: string;
   body: string;
-}, accountId?: string) {
+}, accountId?: string, senderName?: string) {
   const lead = await prisma.lead.findFirst({ where: { id: input.leadId, organizationId: orgId } });
   if (!lead) return { ok: false, reason: "lead not found" };
-  const rendered = renderMessage({ subject: input.subject, body: input.body }, lead);
+  const rendered = renderMessage({ subject: input.subject, body: input.body }, lead, { senderName });
   const result = await safeSend(
     input.channel,
     {
@@ -99,6 +100,7 @@ export interface AgentRunResult {
 /** Run the agent over a set of leads with a campaign brief. */
 export async function runAgent(opts: {
   orgId: string;
+  userId?: string;
   leadIds: string[];
   brief: string;
   maxSteps?: number;
@@ -107,6 +109,8 @@ export async function runAgent(opts: {
   if (!configured.agent) {
     return { ok: false, summary: "NVIDIA_API_KEY not set", steps: 0 };
   }
+
+  const senderName = (await senderNameForUser(opts.userId)) || (await senderNameForCampaign(undefined, opts.orgId));
 
   const OpenAISDK = (await import("openai")).default;
   // Fail fast: NVIDIA completions occasionally hang. Without an explicit timeout the
@@ -168,7 +172,7 @@ export async function runAgent(opts: {
         messages.push({ role: "tool", tool_call_id: call.id, content: `{"ok":false,"reason":"bad arguments"}` });
         continue;
       }
-      const out = await runSendTool(opts.orgId, args, opts.sendingAccountId);
+      const out = await runSendTool(opts.orgId, args, opts.sendingAccountId, senderName);
       messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(out) });
     }
   }

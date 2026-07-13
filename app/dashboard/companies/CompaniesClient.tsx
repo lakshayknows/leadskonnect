@@ -42,7 +42,7 @@ export default function CompaniesClient() {
             {filtered.map((c) => (
               <Link
                 key={c.company}
-                href={`/dashboard/leads?q=${encodeURIComponent(c.company)}`}
+                href={`/dashboard/companies/${encodeURIComponent(c.company)}`}
                 className="group flex items-center gap-3 rounded-2xl border border-line bg-white p-4 shadow-sm transition hover:border-accent hover:shadow-md"
               >
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft font-display text-sm font-bold text-accent-strong">

@@ -132,9 +132,11 @@ export default function LinkedInClient() {
           <ol className="mt-3 space-y-2 text-sm text-ink-soft">
             <li><b className="text-ink">1.</b> Get the <code>extension/</code> folder from the Followthroo repo (or the download your admin shared).</li>
             <li><b className="text-ink">2.</b> Open <code>chrome://extensions</code>, enable <b>Developer mode</b>, click <b>Load unpacked</b>, and select that folder.</li>
-            <li><b className="text-ink">3.</b> Click the extension → set App URL to <code>{appOrigin}</code>, paste the token above → <b>Save</b> → <b>Start</b>.</li>
-            <li><b className="text-ink">4.</b> Keep a LinkedIn tab logged in. Queued invites drain automatically at your set pace.</li>
+            <li><b className="text-ink">3.</b> Right-click the extension → <b>Options</b> → set App URL to <code>{appOrigin}</code>, paste the token above → <b>Connect</b>.</li>
+            <li><b className="text-ink">4.</b> On the Options page, pick which campaigns run, set per-campaign caps/pacing, or "Run a group now".</li>
+            <li><b className="text-ink">5.</b> Click the extension icon → <b>Start</b>, and keep a LinkedIn tab logged in. Actions drain at your set pace.</li>
           </ol>
+          <p className="mt-3 text-xs text-ink-soft">Campaign selection, per-campaign caps &amp; pacing, and run-a-group live on the extension&apos;s Options page.</p>
         </Panel>
       </div>
     </>

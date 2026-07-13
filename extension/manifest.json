@@ -11,5 +11,6 @@
     "http://localhost:3000/*"
   ],
   "background": { "service_worker": "background.js" },
-  "action": { "default_popup": "popup.html", "default_title": "Followthroo LinkedIn" }
+  "action": { "default_popup": "popup.html", "default_title": "Followthroo LinkedIn" },
+  "options_page": "options.html"
 }

@@ -3,45 +3,30 @@
   <head>
     <meta charset="utf-8" />
     <style>
-      :root { --ink: #0a0a0a; --soft: #6b6b6b; --line: #e5e5e5; --accent: #4b31e6; --soft-bg: #eeebfd; }
-      * { box-sizing: border-box; font-family: -apple-system, Segoe UI, Roboto, sans-serif; }
-      body { width: 320px; margin: 0; padding: 16px; color: var(--ink); }
-      h1 { font-size: 15px; margin: 0 0 2px; display: flex; align-items: center; gap: 8px; }
-      .sub { font-size: 11px; color: var(--soft); margin: 0 0 14px; }
-      label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--soft); margin: 10px 0 4px; }
-      input { width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; font-size: 12px; outline: none; }
-      input:focus { border-color: var(--ink); }
-      .row { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; }
-      button { border: 0; border-radius: 8px; padding: 8px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
-      .primary { background: var(--ink); color: #fff; }
-      .toggle { background: var(--line); color: var(--ink); }
-      .toggle.on { background: var(--accent); color: #fff; }
-      .status { margin-top: 12px; padding: 10px; border-radius: 8px; background: var(--soft-bg); font-size: 12px; color: var(--ink); }
-      .status b { color: var(--accent); }
-      .dot { width: 8px; height: 8px; border-radius: 999px; background: #c4c4c4; display: inline-block; }
-      .dot.on { background: #10b981; }
-      .muted { color: var(--soft); font-size: 11px; margin-top: 10px; }
-      a { color: var(--accent); }
+      :root { --ink:#0a0a0a; --soft:#6b6b6b; --line:#e5e5e5; --accent:#4b31e6; --soft-bg:#eeebfd; }
+      * { box-sizing:border-box; font-family:-apple-system,Segoe UI,Roboto,sans-serif; }
+      body { width:300px; margin:0; padding:16px; color:var(--ink); }
+      h1 { font-size:15px; margin:0 0 2px; display:flex; align-items:center; gap:8px; }
+      .sub { font-size:11px; color:var(--soft); margin:0 0 14px; }
+      .dot { width:8px; height:8px; border-radius:999px; background:#c4c4c4; display:inline-block; }
+      .dot.on { background:#10b981; }
+      .status { margin:0 0 14px; padding:10px; border-radius:8px; background:var(--soft-bg); font-size:12px; }
+      .muted { color:var(--soft); font-size:11px; }
+      .row { display:flex; gap:8px; }
+      button { flex:1; border:0; border-radius:8px; padding:9px 12px; font-size:12px; font-weight:600; cursor:pointer; }
+      .toggle { background:var(--line); color:var(--ink); }
+      .toggle.on { background:var(--accent); color:#fff; }
+      .ghost { background:#fff; border:1px solid var(--line); color:var(--ink); }
     </style>
   </head>
   <body>
     <h1><span class="dot" id="dot"></span> Followthroo · LinkedIn</h1>
-    <p class="sub">Runs your queued invites & messages from this browser.</p>
-
-    <label>App URL</label>
-    <input id="apiBase" placeholder="https://www.followthroo.com" />
-
-    <label>Connection token</label>
-    <input id="token" placeholder="Paste from Settings → LinkedIn" />
-
+    <p class="sub">Drains your queued invites & messages from this browser.</p>
+    <div class="status" id="status">Not connected.</div>
     <div class="row">
       <button class="toggle" id="toggle">Start</button>
-      <button class="primary" id="save">Save</button>
+      <button class="ghost" id="settings">Settings</button>
     </div>
-
-    <div class="status" id="status">Not connected.</div>
-    <p class="muted">Keep a LinkedIn tab logged in. Get your token in the app under <b>Settings → LinkedIn</b>.</p>
-
     <script src="popup.js"></script>
   </body>
 </html>

@@ -106,9 +106,10 @@ export async function getInboxThreads(orgId: string, status?: string) {
   }));
 }
 
-export async function getLeadsPage(orgId: string, page = 1, pageSize = 50, q?: string) {
+export async function getLeadsPage(orgId: string, page = 1, pageSize = 50, q?: string, book?: "email" | "linkedin") {
   const where: Prisma.LeadWhereInput = {
     organizationId: orgId,
+    ...(book === "email" ? { email: { not: null } } : book === "linkedin" ? { linkedinUrl: { not: null } } : {}),
     ...(q?.trim()
       ? {
           OR: [
@@ -122,7 +123,7 @@ export async function getLeadsPage(orgId: string, page = 1, pageSize = 50, q?: s
   };
   const [items, total] = await Promise.all([
     prisma.lead.findMany({ where, orderBy: { createdAt: "desc" }, take: pageSize, skip: (page - 1) * pageSize }),
-    cached(`leads:count:${orgId}:${q ?? ""}`, 15_000, () => prisma.lead.count({ where })),
+    cached(`leads:count:${orgId}:${book ?? ""}:${q ?? ""}`, 15_000, () => prisma.lead.count({ where })),
   ]);
   return { items, total, page, pageSize, totalPages: Math.max(Math.ceil(total / pageSize), 1) };
 }
