@@ -15,6 +15,8 @@
 import { prisma } from "../db";
 import { gmailAccessToken } from "../channels/email";
 import { recordInbound } from "./store";
+import { parseLeadEmail } from "../email-lead-parser";
+import { ingestMany } from "../ingest";
 
 interface PollCounts {
   fetched: number;
@@ -32,6 +34,28 @@ function parseAddress(header?: string): string {
   if (!header) return "";
   const m = header.match(/<([^>]+)>/);
   return (m ? m[1] : header).trim().toLowerCase();
+}
+
+/**
+ * Routes one inbound message to the right place: a reply on an existing lead's thread
+ * (the normal case), or — when this mailbox is a lead-aggregator's notification inbox
+ * (SendingAccount.leadSourceKey set, dev PRD §3.7-3.8) — parsed as a brand-new lead and
+ * ingested through the same identity/pipeline path every other source uses.
+ */
+async function handleInboundMessage(
+  orgId: string,
+  leadSourceKey: string | null,
+  input: { fromAddr: string; toAddr?: string; subject?: string; body?: string; providerMessageId?: string; sentAt?: Date },
+): Promise<{ recorded: boolean; matched: boolean }> {
+  if (!leadSourceKey) return recordInbound(orgId, input);
+
+  const event = parseLeadEmail(leadSourceKey, { subject: input.subject, body: input.body });
+  if (!event) return { recorded: false, matched: false };
+  if (input.providerMessageId) event.externalId = `${leadSourceKey}:${input.providerMessageId}`;
+  if (input.sentAt) event.occurredAt = input.sentAt;
+
+  const result = await ingestMany(orgId, [event]);
+  return { recorded: result.received > 0, matched: result.created > 0 };
 }
 
 /** Record a received warm-up email (deduped by provider id). */
@@ -65,7 +89,7 @@ async function gmailModify(token: string, id: string, removeLabelIds: string[]) 
   }).catch(() => {});
 }
 
-async function pollGmail(orgId: string, accountId: string, refreshToken: string, sinceMs: number, orgEmails: Set<string>): Promise<PollCounts> {
+async function pollGmail(orgId: string, accountId: string, refreshToken: string, sinceMs: number, orgEmails: Set<string>, leadSourceKey: string | null): Promise<PollCounts> {
   const token = await gmailAccessToken(refreshToken);
   const afterSec = Math.floor(sinceMs / 1000);
   const counts: PollCounts = { fetched: 0, recorded: 0, matched: 0, warmup: 0 };
@@ -88,13 +112,12 @@ async function pollGmail(orgId: string, accountId: string, refreshToken: string,
       if (inSpam) await gmailModify(token, id, ["SPAM"]); // rescue warm-up
       return;
     }
-    const r = await recordInbound(orgId, {
+    const r = await handleInboundMessage(orgId, leadSourceKey, {
       fromAddr: from,
       toAddr: parseAddress(get("To")),
       subject: get("Subject"),
       body: msg.snippet,
       providerMessageId: id,
-      channel: "email",
       sentAt: msg.internalDate ? new Date(Number(msg.internalDate)) : undefined,
     });
     if (r.recorded) counts.recorded++;
@@ -112,7 +135,8 @@ async function pollImap(
   orgId: string,
   account: { id: string; host: string | null; imapHost: string | null; imapPort: number | null; user: string | null; pass: string | null },
   sinceMs: number,
-  orgEmails: Set<string>
+  orgEmails: Set<string>,
+  leadSourceKey: string | null
 ): Promise<PollCounts> {
   let ImapFlow: unknown;
   try {
@@ -142,12 +166,11 @@ async function pollImap(
           if (await recordWarmupReceived(orgId, account.id, "inbox", providerMessageId)) counts.warmup++;
           continue;
         }
-        const r = await recordInbound(orgId, {
+        const r = await handleInboundMessage(orgId, leadSourceKey, {
           fromAddr: from,
           toAddr: msg.envelope?.to?.[0]?.address,
           subject: msg.envelope?.subject,
           providerMessageId,
-          channel: "email",
           sentAt: msg.envelope?.date ? new Date(msg.envelope.date) : undefined,
         });
         if (r.recorded) counts.recorded++;
@@ -175,9 +198,9 @@ export async function pollOrgInbox(orgId: string): Promise<PollSummary[]> {
     try {
       const r =
         acc.provider === "gmail_oauth" && acc.refreshToken
-          ? await pollGmail(orgId, acc.id, acc.refreshToken, sinceMs, orgEmails)
+          ? await pollGmail(orgId, acc.id, acc.refreshToken, sinceMs, orgEmails, acc.leadSourceKey)
           : acc.provider === "smtp"
-            ? await pollImap(orgId, acc, sinceMs, orgEmails)
+            ? await pollImap(orgId, acc, sinceMs, orgEmails, acc.leadSourceKey)
             : { fetched: 0, recorded: 0, matched: 0, warmup: 0 };
       await prisma.sendingAccount.update({ where: { id: acc.id }, data: { lastPolledAt: new Date() } });
       results.push({ ...base, ...r });

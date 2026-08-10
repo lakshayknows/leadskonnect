@@ -76,6 +76,16 @@ export const env = {
     model: get("NVIDIA_MODEL") ?? get("MODEL") ?? "meta/llama-3.3-70b-instruct",
   },
 
+  // Agent provider: Anthropic Claude — CLAUDE.md's standing rule for the agent layer.
+  // Two models: the main tool-calling loop uses the (configurable, defaults to the most
+  // capable) model; reply-intent classification always uses the small/cheap one, since
+  // it runs on every inbound reply and doesn't need frontier-model reasoning.
+  anthropic: {
+    apiKey: get("ANTHROPIC_API_KEY"),
+    model: get("ANTHROPIC_MODEL") ?? "claude-opus-5",
+    classifierModel: get("ANTHROPIC_CLASSIFIER_MODEL") ?? "claude-haiku-4-5-20251001",
+  },
+
   limits: {
     emailPerHour: num("RL_EMAIL_PER_HOUR", 40),
     linkedinPerDay: num("RL_LINKEDIN_PER_DAY", 20),
@@ -93,6 +103,24 @@ export const env = {
     clientId: get("GOOGLE_CLIENT_ID"),
     clientSecret: get("GOOGLE_CLIENT_SECRET"),
   },
+
+  // Meta Lead Ads inbound webhook (/api/inbound/meta_lead_ads).
+  meta: {
+    verifyToken: get("META_VERIFY_TOKEN"),
+    appSecret: get("META_APP_SECRET"),
+    pageAccessToken: get("META_PAGE_ACCESS_TOKEN"),
+  },
+
+  // Google Ads Lead Form Extensions inbound webhook (/api/inbound/google_ads).
+  googleAds: {
+    webhookKey: get("GOOGLE_ADS_WEBHOOK_KEY"),
+  },
+
+  // IndiaMART's separate historical-backfill key (scripts/indiamart-backfill.ts) —
+  // distinct from the Push webhook's ingest key, generated on the same Lead Manager page.
+  indiamartPull: {
+    apiKey: get("INDIAMART_PULL_API_KEY"),
+  },
 };
 
 export const configured = {
@@ -101,7 +129,10 @@ export const configured = {
   email: !!(env.smtp.host && env.smtp.user && env.smtp.pass),
   whatsapp: !!(env.twilio.accountSid && env.twilio.authToken && env.twilio.whatsappFrom),
   linkedin: !!(env.linkedin.accessToken || env.linkedin.liAt),
-  agent: !!env.nvidia.apiKey,
+  agent: !!env.anthropic.apiKey,
+  anthropic: !!env.anthropic.apiKey,
   qstash: !!(env.qstash.url && env.qstash.token),
   google: !!(env.google.clientId && env.google.clientSecret),
+  meta: !!(env.meta.verifyToken && env.meta.appSecret && env.meta.pageAccessToken),
+  googleAds: !!env.googleAds.webhookKey,
 };

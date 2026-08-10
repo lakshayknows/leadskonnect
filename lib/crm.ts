@@ -4,6 +4,7 @@
  */
 import { prisma } from "./db";
 import { Prisma, type Channel } from "@prisma/client";
+import { appendLedgerEntry } from "./compliance-ledger";
 
 export async function isSuppressed(
   orgId: string,
@@ -27,11 +28,16 @@ export async function suppress(
   target: { email?: string; phone?: string; linkedinUrl?: string },
   reason: "unsubscribe" | "bounce" | "gdpr" | "manual"
 ) {
-  return prisma.suppression.upsert({
+  const row = await prisma.suppression.upsert({
     where: { organizationId_email: { organizationId: orgId, email: target.email ?? `no-email-${Date.now()}` } },
     create: { ...target, organizationId: orgId, reason },
     update: { reason },
   });
+  // Best-effort — the suppression itself must never fail because the ledger did.
+  await appendLedgerEntry(orgId, "suppression", { ...target, reason }).catch((e) =>
+    console.error("[compliance-ledger] append failed:", e),
+  );
+  return row;
 }
 
 export async function logActivity(input: {

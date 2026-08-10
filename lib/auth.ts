@@ -15,17 +15,18 @@ const googleConfigured = !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_C
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
 /**
- * Origins better-auth will accept state-changing requests from (CSRF guard). Include both
- * the apex and www of the prod domain so a sign-in POST from either isn't rejected (403)
- * when NEXT_PUBLIC_APP_URL happens to be set to only one of them. Extra origins can be
- * supplied via BETTER_AUTH_TRUSTED_ORIGINS (comma-separated).
+ * Origins better-auth will accept state-changing requests from (CSRF guard).
+ * Auth only ever runs on the app subdomain (followthroo.com is the separate,
+ * unauthenticated showcase site — see middleware.ts) so app.followthroo.com is
+ * included explicitly alongside whatever NEXT_PUBLIC_APP_URL resolves to, in
+ * case that env var lags behind during a domain migration. Extra origins can
+ * be supplied via BETTER_AUTH_TRUSTED_ORIGINS (comma-separated).
  */
 const trustedOrigins = Array.from(
   new Set(
     [
       baseUrl,
-      "https://followthroo.com",
-      "https://www.followthroo.com",
+      "https://app.followthroo.com",
       ...(process.env.BETTER_AUTH_TRUSTED_ORIGINS?.split(",").map((s) => s.trim()) ?? []),
     ].filter(Boolean)
   )

@@ -16,7 +16,9 @@ import { configured } from "./env";
 export interface TenantContext {
   userId: string;
   orgId: string;
-  role: string; // owner | admin | member
+  role: string; // owner | admin | group_leader | member
+  /** Null for owner/admin (unrestricted) or a member never assigned to a department. */
+  department: string | null;
 }
 
 /** Resolve tenant from a set of request headers (shared by route + RSC paths). */
@@ -34,7 +36,25 @@ async function resolveTenant(headers: Headers): Promise<TenantContext | null> {
     membership = await prisma.member.findFirst({ where: { userId }, orderBy: { createdAt: "asc" } });
   }
   if (!membership) return null;
-  return { userId, orgId: membership.organizationId, role: membership.role };
+  return { userId, orgId: membership.organizationId, role: membership.role, department: membership.department };
+}
+
+/**
+ * Department gate for group_leader/member (PRD §4: a Group Leader "cannot see other
+ * departments' data unless granted"). owner/admin are always unrestricted. A caller with
+ * no department assigned yet sees nothing department-scoped until an admin sets one —
+ * safer default than accidentally seeing everything.
+ */
+export function requireDepartmentAccess(ctx: TenantContext, department: string | null): Response | null {
+  if (ctx.role === "owner" || ctx.role === "admin") return null;
+  if (ctx.role !== "group_leader" && ctx.role !== "member") return null;
+  if (department && department === ctx.department) return null;
+  return fail("insufficient role", 403);
+}
+
+/** True when `ctx` should have its data reads/writes scoped to `ctx.department`. */
+export function isDepartmentScoped(ctx: TenantContext): boolean {
+  return ctx.role === "group_leader" || ctx.role === "member";
 }
 
 /**

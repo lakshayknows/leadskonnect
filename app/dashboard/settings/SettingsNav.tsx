@@ -2,14 +2,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { User, Users2, Mail, Linkedin, CreditCard, Bell, ArrowLeft } from "lucide-react";
+import { User, Users2, Mail, Linkedin, CreditCard, Bell, ArrowLeft, Webhook, Workflow, MessageCircle, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 const LINKS = [
   { href: "/dashboard/settings/profile", icon: User, label: "Profile" },
   { href: "/dashboard/settings/team", icon: Users2, label: "Team" },
+  { href: "/dashboard/settings/pipelines", icon: Workflow, label: "Pipelines" },
+  { href: "/dashboard/settings/sources", icon: Webhook, label: "Lead sources" },
   { href: "/dashboard/accounts", icon: Mail, label: "Sending accounts" },
   { href: "/dashboard/settings/linkedin", icon: Linkedin, label: "LinkedIn" },
+  { href: "/dashboard/settings/channels", icon: MessageCircle, label: "Business channels" },
+  { href: "/dashboard/settings/compliance", icon: ShieldCheck, label: "Compliance ledger" },
   { href: "/dashboard/settings/billing", icon: CreditCard, label: "Plans & billing" },
   { href: "/dashboard/settings/notifications", icon: Bell, label: "Notifications" },
 ];

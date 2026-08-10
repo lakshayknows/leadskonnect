@@ -32,6 +32,9 @@ enum MessageStatus {
   bounced
   replied
   failed
+  /// Confidence-gated autonomy (product PRD §7): the agent wrote this but wasn't
+  /// confident enough to send unattended — awaiting human approval on the Agent page.
+  draft
 }
 
 enum CampaignStatus {
@@ -66,6 +69,15 @@ model Lead {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
+  // ---- scoring v1 (product PRD §6) ----
+  // 0-100, recomputed by lib/scoring.ts on capture and on inbound reply. The three
+  // qualifying signals are manually set for now (AI-driven extraction is a later phase);
+  // nullable/unset reads as "not yet known", not "no".
+  score                  Int?
+  budgetMentioned        Boolean?
+  timelineMentioned      Boolean?
+  decisionMakerConfirmed Boolean?
+
   messages           Message[]
   activities         ActivityLog[]
   enrollments        Enrollment[]
@@ -75,6 +87,7 @@ model Lead {
   leadSourceId       String?
   pipelineItems      PipelineItem[]
   conversationEvents ConversationEvent[]
+  linkedInActions    LinkedInAction[]
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -170,6 +183,26 @@ model Suppression {
 
   @@unique([organizationId, email])
   @@index([organizationId])
+}
+
+/// Tamper-evident compliance ledger (product PRD §12 differentiator): an append-only,
+/// hash-chained log of consent/suppression events. Each entry's hash includes the
+/// previous entry's hash (lib/compliance-ledger.ts), so altering any past entry breaks
+/// every hash after it — a verifiable, exportable audit trail rather than a table that
+/// could be quietly edited.
+model ComplianceLedgerEntry {
+  id             String   @id @default(cuid())
+  organizationId String
+  /// 1-based, per-org, gap-free — the position in the chain.
+  sequence       Int
+  eventType      String
+  payload        Json
+  prevHash       String
+  hash           String
+  createdAt      DateTime @default(now())
+
+  @@unique([organizationId, sequence])
+  @@index([organizationId, createdAt])
 }
 
 // ---- better-auth (Stage 1: email/password; Stage 2 adds OAuth accounts) ----
@@ -268,6 +301,10 @@ model SendingAccount {
   imapPort       Int? // IMAP port (993)
   lastPolledAt   DateTime? // last successful inbound poll
   gmailHistoryId String? // Gmail API history cursor (gmail_oauth only)
+  // When set, this mailbox's inbound mail is a lead-aggregator's notification email
+  // (JustDial, Sulekha, TradeIndia — dev PRD §3.7-3.8's webhook-less fallback), parsed via
+  // lib/email-lead-parser.ts and ingested as new leads instead of matched as a reply.
+  leadSourceKey  String?
   // Per-account DKIM (SMTP accounts) — overrides the env default signing
   dkimDomain     String?
   dkimSelector   String?
@@ -322,6 +359,14 @@ model Organization {
   createdAt   DateTime     @default(now())
   members     Member[]
   invitations Invitation[]
+
+  // ---- app-owned org state ----
+  // Nullable, no default — same reasoning as User's app-owned fields: better-auth's
+  // organization plugin only writes the fields above, so a non-nullable addition here
+  // would read as drift to `better-auth generate` and could break its inserts.
+  // { startHour, endHour, timezoneOffsetMinutes, days: number[] } — gates the
+  // auto-notification-on-capture send (lib/notify.ts). Null = sane built-in default.
+  businessHours Json?
 
   @@map("organization")
 }
@@ -486,11 +531,14 @@ model LinkedInAction {
   id             String    @id @default(uuid())
   organizationId String
   leadId         String
+  lead           Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
   campaignId     String?
   type           String    @default("auto") // auto | invite | message
   linkedinUrl    String
   note           String? // rendered invite note / message body
-  status         String    @default("pending") // pending | in_progress | sent | failed | skipped
+  // pending | in_progress (extension opening the tab) | drafted (filled, awaiting a human's
+  // own Send click) | sent | failed | skipped
+  status         String    @default("pending")
   result         String? // extension-reported detail
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
@@ -554,6 +602,23 @@ model ContactIdentity {
   @@index([organizationId])
 }
 
+/// ---- WhatsApp templates ----------------------------------------------------
+/// Outside the 24h session window (see lib/channels/whatsapp.ts), only an approved
+/// template may be sent — this is what a sender picks from once that path is built.
+/// Enforcement (refusing a free-form send outside the window) doesn't depend on this
+/// table existing; it's the future "which template" management surface.
+model WhatsAppTemplate {
+  id               String   @id @default(cuid())
+  organizationId   String
+  name             String
+  twilioContentSid String
+  approved         Boolean  @default(false)
+  createdAt        DateTime @default(now())
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
 /// ---- Lead sources + ROI ---------------------------------------------------
 model LeadSource {
   id             String   @id @default(cuid())
@@ -584,6 +649,12 @@ model Pipeline {
   isDefault      Boolean    @default(false)
   archivedAt     DateTime?
   createdAt      DateTime   @default(now())
+
+  /// manual | round_robin | workload — territory/source-based rules aren't modeled (no
+  /// territory concept exists yet), so those aren't offered as options.
+  assignmentRule      String  @default("manual")
+  /// round_robin's cursor — the userId assigned last, so the next pick continues from there.
+  lastAssignedMemberId String?
 
   stages PipelineStage[]
   items  PipelineItem[]

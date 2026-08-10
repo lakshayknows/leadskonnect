@@ -1,31 +1,25 @@
 import type { NextRequest } from "next/server";
 import { z } from "zod";
+import type { Department } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { ok, fail } from "@/lib/http";
-import { requireOrg, requireRole } from "@/lib/tenant";
-import { createPipeline, ensureDefaultPipeline, getBoard } from "@/lib/pipeline";
+import { requireOrg, requireRole, requireDepartmentAccess, isDepartmentScoped } from "@/lib/tenant";
+import { createPipeline, getBoard, listPipelines } from "@/lib/pipeline";
 
 export const runtime = "nodejs";
 
 export async function GET(req: NextRequest) {
   const ctx = await requireOrg(req);
   if (ctx instanceof Response) return ctx;
+  // Group leaders/members (PRD §4) only ever see their own department; owner/admin see all.
+  const department = (isDepartmentScoped(ctx) ? ctx.department : undefined) as Department | undefined;
 
   const pipelineId = req.nextUrl.searchParams.get("pipelineId") ?? undefined;
   if (req.nextUrl.searchParams.get("view") === "board") {
-    return ok(await getBoard(ctx.orgId, pipelineId));
+    return ok(await getBoard(ctx.orgId, pipelineId, department));
   }
 
-  await ensureDefaultPipeline(ctx.orgId);
-  const pipelines = await prisma.pipeline.findMany({
-    where: { organizationId: ctx.orgId, archivedAt: null },
-    orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
-    include: {
-      stages: { orderBy: { position: "asc" } },
-      _count: { select: { items: true } },
-    },
-  });
-  return ok(pipelines);
+  return ok(await listPipelines(ctx.orgId, department));
 }
 
 const Create = z.object({
@@ -44,11 +38,48 @@ export async function POST(req: NextRequest) {
   const parsed = Create.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return fail("Pick a department and an optional name.", 422);
 
+  // A group leader can only ever configure their own department's pipeline — override
+  // rather than trust whatever department the request body claims.
+  let department = parsed.data.department;
+  if (ctx.role === "group_leader") {
+    if (!ctx.department) return fail("Ask an admin to assign you to a department first.", 403);
+    department = ctx.department as Department;
+  }
+
   try {
-    return ok(await createPipeline(ctx.orgId, parsed.data.department, parsed.data));
+    return ok(await createPipeline(ctx.orgId, department, { name: parsed.data.name, isDefault: parsed.data.isDefault }));
   } catch (e) {
     const msg = (e as Error).message;
     if (msg.includes("Unique")) return fail("A pipeline with that name already exists.", 409);
     return fail(msg, 400);
   }
+}
+
+const Patch = z.object({
+  pipelineId: z.string().min(1),
+  assignmentRule: z.enum(["manual", "round_robin", "workload"]),
+});
+
+export async function PATCH(req: NextRequest) {
+  const ctx = await requireOrg(req);
+  if (ctx instanceof Response) return ctx;
+  const gate = requireRole(ctx, ["owner", "admin", "group_leader"]);
+  if (gate) return gate;
+
+  const parsed = Patch.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return fail("pipelineId and assignmentRule are required.", 422);
+
+  const pipeline = await prisma.pipeline.findFirst({
+    where: { id: parsed.data.pipelineId, organizationId: ctx.orgId },
+    select: { department: true },
+  });
+  if (!pipeline) return fail("Pipeline not found.", 404);
+  const deptGate = requireDepartmentAccess(ctx, pipeline.department);
+  if (deptGate) return deptGate;
+
+  const updated = await prisma.pipeline.update({
+    where: { id: parsed.data.pipelineId },
+    data: { assignmentRule: parsed.data.assignmentRule },
+  });
+  return ok({ id: updated.id, assignmentRule: updated.assignmentRule });
 }

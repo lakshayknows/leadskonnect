@@ -90,6 +90,7 @@ async function getTransporter() {
 export const emailChannel: Channel = {
   name: "email",
   isConfigured: () => configured.email,
+  capabilities: () => ({ send: true, receive: true, templates: false, requiresOptIn: false }),
 
   async send(lead: Lead, rendered: RenderedMessage, account = "default"): Promise<SendResult> {
     if (!lead.email) return { ok: false, skipped: true, reason: "lead has no email" };

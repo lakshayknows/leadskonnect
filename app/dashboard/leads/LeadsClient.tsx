@@ -16,6 +16,7 @@ type Lead = {
   company: string | null;
   stage: string;
   tags: string[];
+  score: number | null;
 };
 
 type LeadsResponse = { items: Lead[]; total: number; page: number; pageSize: number; totalPages: number };
@@ -470,6 +471,7 @@ export default function LeadsPage() {
                   <th className="px-4 py-3">LinkedIn</th>
                   <th className="px-4 py-3">Tags</th>
                   <th className="px-4 py-3">Stage</th>
+                  <th className="px-4 py-3">Score</th>
                   <th className="px-4 py-3"></th>
                 </tr>
               </thead>
@@ -480,14 +482,14 @@ export default function LeadsPage() {
                   Array.from({ length: 8 }).map((_, i) => (
                     <tr key={`sk-${i}`}>
                       <td className="px-4 py-3"><Skeleton className="h-4 w-4" /></td>
-                      {Array.from({ length: 6 }).map((__, c) => (
+                      {Array.from({ length: 7 }).map((__, c) => (
                         <td key={c} className="px-4 py-3"><Skeleton className={`h-3.5 ${c === 0 ? "w-32" : "w-20"}`} /></td>
                       ))}
                     </tr>
                   ))
                 ) : leads.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-10">
+                    <td colSpan={8} className="px-4 py-10">
                       {hasFilters ? (
                         <NoResults
                           query={debouncedSearch.trim() || undefined}
@@ -522,6 +524,15 @@ export default function LeadsPage() {
                         </div>
                       </td>
                       <td className="px-4 py-3"><span className="rounded-full bg-tint px-2 py-0.5 font-mono text-xs">{l.stage}</span></td>
+                      <td className="px-4 py-3">
+                        {l.score != null ? (
+                          <span className={`rounded-full px-2 py-0.5 font-mono text-xs ${l.score >= 60 ? "bg-success-soft text-success-strong" : "bg-tint text-ink-soft"}`}>
+                            {l.score}
+                          </span>
+                        ) : (
+                          <span className="text-ink-faint">—</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3 text-right">
                         <button onClick={() => del(l.id)} className="text-ink-soft transition-colors hover:text-danger" aria-label="Delete">
                           <Trash2 className="h-4 w-4" />

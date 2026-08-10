@@ -27,7 +27,15 @@ export interface AdvanceJob {
   enrollmentId: string;
 }
 
-export type QueueJob = SendJob | AdvanceJob;
+/** A fixed-content capture acknowledgment, delayed until business hours reopen. Carries
+ *  only ids (not pre-rendered content) so the lead's current data is what actually sends. */
+export interface AckJob {
+  kind: "lead-ack";
+  organizationId: string;
+  leadId: string;
+}
+
+export type QueueJob = SendJob | AdvanceJob | AckJob;
 
 export const SEND_QUEUE = "followthroo-sends";
 

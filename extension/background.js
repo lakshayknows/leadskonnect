@@ -2,9 +2,13 @@
  * Followthroo LinkedIn Assistant — background service worker.
  *
  * On a paced alarm it: polls the app for ONE queued action, opens the target profile in a
- * background tab, performs the invite/message via an injected script, reports the result,
- * then schedules the next tick at a humanized delay. One action per tick keeps it well
- * under LinkedIn's radar and survives the MV3 service-worker lifecycle.
+ * FOREGROUNDED tab, fills the invite note / message box via an injected script, and STOPS —
+ * it never clicks Send. A real person reviews what was filled and sends it themselves inside
+ * their own LinkedIn tab, then confirms (or skips) from the popup. That confirmation is what
+ * reports the outcome back to the app; nothing here acts autonomously past the draft.
+ *
+ * While a draft is awaiting review, polling pauses (one action in flight at a time — no
+ * stacking foregrounded tabs). It resumes once the popup reports sent/skipped.
  *
  * Every step logs to the service-worker console AND stores `lastStatus` (shown in the
  * popup) so "nothing happened" always has a visible reason.
@@ -12,7 +16,7 @@
 const POLL_ALARM = "ft-linkedin-poll";
 
 function cfg() {
-  return new Promise((r) => chrome.storage.local.get(["apiBase", "token", "enabled", "stats"], r));
+  return new Promise((r) => chrome.storage.local.get(["apiBase", "token", "enabled", "stats", "draft"], r));
 }
 function setStatus(msg, isError) {
   console.log(`[followthroo] ${msg}`);
@@ -30,33 +34,36 @@ function waitForTab(tabId) {
   });
 }
 
-async function runAction(action) {
+/** Opens the profile FOREGROUNDED and fills the note/message box. Never clicks Send. */
+async function draftAction(action) {
   let tab;
   try {
-    setStatus(`opening ${action.linkedinUrl}`);
-    tab = await chrome.tabs.create({ url: action.linkedinUrl, active: false });
+    setStatus(`opening ${action.linkedinUrl} for review`);
+    tab = await chrome.tabs.create({ url: action.linkedinUrl, active: true });
     await waitForTab(tab.id);
     const [res] = await chrome.scripting.executeScript({
       target: { tabId: tab.id },
-      func: performLinkedInAction,
+      func: fillLinkedInAction,
       args: [action],
     });
-    return res?.result || { status: "failed", result: "no result from page" };
+    const outcome = res?.result || { status: "failed", result: "no result from page" };
+    return { ...outcome, tabId: tab.id };
   } catch (e) {
-    return { status: "failed", result: String((e && e.message) || e) };
-  } finally {
-    if (tab && tab.id) chrome.tabs.remove(tab.id).catch(() => {});
+    return { status: "failed", result: String((e && e.message) || e), tabId: tab && tab.id };
   }
 }
 
 async function pollOnce() {
-  const { apiBase, token, enabled, stats } = await cfg();
+  const { apiBase, token, enabled, stats, draft } = await cfg();
   if (!enabled) return setStatus("paused — press Start in the popup");
   if (!token || !apiBase) return setStatus("not configured — set App URL + token, then Save", true);
 
-  // Guard the most common misconfig: the apex redirects to www and drops the auth header.
-  if (/^https?:\/\/followthroo\.com/i.test(apiBase)) {
-    return setStatus('App URL must be "https://www.followthroo.com" (with www), not the apex', true);
+  // A draft is already awaiting human review — don't open another tab on top of it.
+  if (draft) return setStatus("awaiting your review — open the popup to confirm or skip");
+
+  // Guard the most common misconfig: the wrong host has no queue endpoint behind it.
+  if (!/^https?:\/\/(app\.followthroo\.com|localhost:3000|127\.0\.0\.1:3000)/i.test(apiBase)) {
+    return setStatus('App URL should be "https://app.followthroo.com" (the product lives there, not on the marketing site)', true);
   }
 
   setStatus("polling for queued actions…");
@@ -79,7 +86,33 @@ async function pollOnce() {
     return setStatus("connected — queue is empty (add a LinkedIn campaign step + leads with a LinkedIn URL)");
   }
 
-  const outcome = await runAction(action);
+  const outcome = await draftAction(action);
+
+  if (outcome.status === "drafted") {
+    await chrome.storage.local.set({
+      draft: {
+        actionId: action.id,
+        tabId: outcome.tabId,
+        kind: outcome.kind,
+        note: action.note,
+        linkedinUrl: action.linkedinUrl,
+        leadName: action.leadName || null,
+      },
+    });
+    try {
+      await fetch(`${apiBase}/api/linkedin/queue`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ actionId: action.id, status: "drafted" }),
+      });
+    } catch { /* best-effort — the server's own stale-reclaim covers a missed update */ }
+    setStatus("drafted — review it in the LinkedIn tab, then confirm in this popup");
+    return; // polling stays paused until the popup reports sent/skipped
+  }
+
+  // Nothing to review (already pending, no button found, not logged in, etc.) — this is a
+  // terminal outcome with no human step, report it and move on exactly as before.
+  if (outcome.tabId) chrome.tabs.remove(outcome.tabId).catch(() => {});
   try {
     await fetch(`${apiBase}/api/linkedin/queue`, {
       method: "POST",
@@ -88,15 +121,19 @@ async function pollOnce() {
     });
   } catch { /* reconciled on the next poll */ }
 
-  const today = new Date().toDateString();
-  const s = stats && stats.day === today ? stats : { day: today, sent: 0, failed: 0, skipped: 0 };
-  s[outcome.status] = (s[outcome.status] || 0) + 1;
-  s.lastAt = Date.now();
-  chrome.storage.local.set({ stats: s });
+  recordStat(stats, outcome.status);
   setStatus(`action ${outcome.status}: ${outcome.result}`, outcome.status === "failed");
 
   const delay = pacing.minDelaySec + Math.random() * (pacing.maxDelaySec - pacing.minDelaySec);
   schedule(delay);
+}
+
+function recordStat(stats, status) {
+  const today = new Date().toDateString();
+  const s = stats && stats.day === today ? stats : { day: today, sent: 0, failed: 0, skipped: 0 };
+  s[status] = (s[status] || 0) + 1;
+  s.lastAt = Date.now();
+  chrome.storage.local.set({ stats: s });
 }
 
 chrome.alarms.onAlarm.addListener((a) => { if (a.name === POLL_ALARM) pollOnce(); });
@@ -105,10 +142,11 @@ chrome.runtime.onStartup.addListener(() => schedule(5));
 chrome.storage.onChanged.addListener((ch) => { if (ch.enabled && ch.enabled.newValue) { setStatus("started"); schedule(3); } });
 
 /**
- * Injected into the LinkedIn profile page. Best-effort DOM automation — LinkedIn changes
+ * Injected into the LinkedIn profile page. Fills the invite note or message box and stops —
+ * it never clicks Send. Best-effort DOM automation for the fill step only; LinkedIn changes
  * its markup often, so selectors are defensive and every path reports a clear outcome.
  */
-async function performLinkedInAction(action) {
+async function fillLinkedInAction(action) {
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
   const all = (sel) => Array.from(document.querySelectorAll(sel));
   const btnByLabel = (re) =>
@@ -125,7 +163,7 @@ async function performLinkedInAction(action) {
   const pending = btnByLabel(/pending/i);
   const messageBtn = btnByLabel(/^Message\b/i);
 
-  async function sendMessage() {
+  async function fillMessage() {
     const mb = messageBtn || btnByLabel(/^Message\b/i);
     if (!mb) return { status: "skipped", result: "no Message button" };
     mb.click();
@@ -136,15 +174,10 @@ async function performLinkedInAction(action) {
     if (!box) return { status: "failed", result: "message box not found" };
     box.focus();
     document.execCommand("insertText", false, note || "Hi!");
-    await sleep(900);
-    const send = all("button").find((b) => /^Send$/i.test((b.textContent || "").trim()) && !b.disabled);
-    if (!send) return { status: "failed", result: "Send button not found" };
-    send.click();
-    await sleep(1400);
-    return { status: "sent", result: "message sent" };
+    return { status: "drafted", result: "message drafted — review it and click Send yourself", kind: "message" };
   }
 
-  async function sendInvite() {
+  async function fillInvite() {
     let connect = btnByLabel(/^(Connect|Invite)\b/i);
     if (!connect) {
       const more = btnByLabel(/^More\b/i);
@@ -158,23 +191,17 @@ async function performLinkedInAction(action) {
       addNote.click();
       await sleep(1200);
       const ta = document.querySelector('textarea#custom-message, textarea[name="message"], textarea');
-      if (ta) { ta.focus(); ta.value = note; ta.dispatchEvent(new Event("input", { bubbles: true })); await sleep(600); }
+      if (ta) { ta.focus(); ta.value = note; ta.dispatchEvent(new Event("input", { bubbles: true })); }
     }
-    const send = all("button").find(
-      (b) => /^(Send|Send invitation|Send now|Send without a note)$/i.test(((b.getAttribute("aria-label") || b.textContent || "").trim())) && !b.disabled
-    );
-    if (!send) return { status: "failed", result: "Send invitation button not found" };
-    send.click();
-    await sleep(1400);
-    return { status: "sent", result: "invitation sent" };
+    return { status: "drafted", result: "invitation drafted — review it and click Send yourself", kind: "invite" };
   }
 
   try {
     if (pending) return { status: "skipped", result: "invite already pending" };
-    if (action.type === "message") return await sendMessage();
-    const invited = await sendInvite();
+    if (action.type === "message") return await fillMessage();
+    const invited = await fillInvite();
     if (invited) return invited;
-    if (messageBtn) return await sendMessage(); // already connected → message instead
+    if (messageBtn) return await fillMessage(); // already connected → message instead
     return { status: "skipped", result: "no Connect or Message action available" };
   } catch (e) {
     return { status: "failed", result: String((e && e.message) || e) };

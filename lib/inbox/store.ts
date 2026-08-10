@@ -9,6 +9,9 @@
  */
 import { prisma } from "../db";
 import { logActivity } from "../crm";
+import { recordConversationEvent } from "../conversation";
+import { recomputeAndSaveLeadScore } from "../scoring";
+import { classifyReplyIntent } from "../agent";
 import type { Channel } from "@prisma/client";
 
 interface InboundInput {
@@ -83,6 +86,22 @@ export async function recordInbound(orgId: string, input: InboundInput): Promise
   if (lead) {
     await logActivity({ organizationId: orgId, leadId: lead.id, type: "replied", channel, meta: { subject: input.subject } });
     await prisma.lead.update({ where: { id: lead.id }, data: { stage: "replied" } });
+    // Best-effort — a slow/unavailable classifier should never block recording the reply.
+    const intent = await classifyReplyIntent(input.body ?? input.subject ?? "").catch(() => null);
+    await recordConversationEvent({
+      organizationId: orgId,
+      leadId: lead.id,
+      channel,
+      direction: "inbound",
+      subject: input.subject ?? null,
+      body: input.body ?? null,
+      externalId: input.providerMessageId ?? null,
+      occurredAt: input.sentAt,
+      meta: intent ? { intent } : undefined,
+    });
+    // A reply is itself an engagement signal — recompute now rather than wait for the
+    // next unrelated touch to pick it up.
+    await recomputeAndSaveLeadScore(lead.id, orgId).catch(() => {});
   }
 
   return { recorded: true, matched: !!lead };

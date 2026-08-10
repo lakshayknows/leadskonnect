@@ -11,6 +11,8 @@ import { resolveContact, ensureSource } from "./identity";
 import { ensureDefaultPipeline, addToPipeline } from "./pipeline";
 import { isSuppressed } from "./crm";
 import { invalidate } from "./cache";
+import { notifyOnCapture } from "./notify";
+import { recomputeAndSaveLeadScore } from "./scoring";
 import type { InboundEvent } from "./channels/types";
 
 export type IngestResult = {
@@ -77,12 +79,24 @@ export async function ingestEvent(organizationId: string, event: InboundEvent): 
   if (!suppressed && !duplicate) {
     const pipeline = await ensureDefaultPipeline(organizationId);
     const sourceId = event.sourceKey ? await ensureSource(organizationId, event.sourceKey) : null;
-    await addToPipeline({
+    // Checked ahead of the (idempotent) call so the capture notification only fires once,
+    // on the touch that actually creates the pipeline item — not on every repeat webhook.
+    const alreadyInPipeline = await prisma.pipelineItem.findUnique({
+      where: { pipelineId_leadId: { pipelineId: pipeline.id, leadId: resolved.leadId } },
+      select: { id: true },
+    });
+    const item = await addToPipeline({
       organizationId,
       pipelineId: pipeline.id,
       leadId: resolved.leadId,
       sourceId,
     });
+    if (!alreadyInPipeline) {
+      await notifyOnCapture({ organizationId, leadId: resolved.leadId, ownerId: item.ownerId }).catch((e) =>
+        console.error("[ingest] notifyOnCapture failed:", e),
+      );
+      await recomputeAndSaveLeadScore(resolved.leadId, organizationId);
+    }
   }
 
   invalidate(`stats:${organizationId}`);

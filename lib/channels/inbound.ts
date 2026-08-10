@@ -162,6 +162,45 @@ export const metaLeadAdsAdapter = {
 };
 
 /**
+ * Google Ads Lead Form Extensions (dev PRD §3.5).
+ *
+ * The webhook posts a `google_key` shared secret (set on the lead form asset's webhook
+ * config, not an HMAC over the body like Meta) plus `user_column_data`: an array of
+ * `{column_name, string_value}` rather than a flat object — flattened here before handing
+ * off to the shared `mapPayload`, so identity/dedupe/pipeline-entry stay common.
+ */
+export const googleAdsAdapter = {
+  name: "google_ads",
+  capabilities: () => INBOUND_CAPS,
+  isConfigured: () => !!process.env.GOOGLE_ADS_WEBHOOK_KEY,
+
+  verify(payload: unknown): boolean {
+    const key = process.env.GOOGLE_ADS_WEBHOOK_KEY;
+    if (!key) return false;
+    const googleKey = (payload as { google_key?: string } | null)?.google_key;
+    return !!googleKey && googleKey === key;
+  },
+
+  async receive(payload: unknown): Promise<InboundEvent[]> {
+    if (!payload || typeof payload !== "object") return [];
+    const p = payload as { lead_id?: string; user_column_data?: { column_name?: string; string_value?: string }[] };
+    const flat: Record<string, unknown> = {};
+    for (const col of p.user_column_data ?? []) {
+      if (col.column_name) flat[col.column_name] = col.string_value;
+    }
+    const e = mapPayload(flat, "google_ads", {
+      email: ["EMAIL"],
+      phone: ["PHONE_NUMBER"],
+      fullName: ["FULL_NAME"],
+      company: ["COMPANY_NAME"],
+      title: ["JOB_TITLE"],
+    });
+    if (e && p.lead_id) e.externalId = `google_ads:${p.lead_id}`;
+    return e ? [e] : [];
+  },
+};
+
+/**
  * Aggregators without a documented public API (IndiaMART push, JustDial,
  * Sulekha, TradeIndia). Payload shape is account-dependent, so this validates
  * nothing about structure and maps defensively — per the developer PRD's
@@ -200,10 +239,34 @@ export const justdialAdapter = aggregatorAdapter("justdial", {
   message: ["category", "CATEGORY", "area"],
 });
 
+// Sulekha and TradeIndia (dev PRD §3.8): same "no documented public API" pattern as
+// JustDial. Field names below are a best-effort guess at common aggregator conventions,
+// not verified against a real payload — treat as a starting point to adjust once an
+// account's actual webhook (or email) sample is in hand.
+export const sulekhaAdapter = aggregatorAdapter("sulekha", {
+  email: ["email", "customer_email", "user_email"],
+  phone: ["mobile", "phone", "customer_mobile", "user_mobile"],
+  fullName: ["name", "customer_name", "user_name"],
+  message: ["message", "requirement", "enquiry_details"],
+});
+
+export const tradeindiaAdapter = aggregatorAdapter("tradeindia", {
+  email: ["email", "EMAIL", "buyer_email"],
+  phone: ["mobile", "MOBILE", "buyer_mobile", "phone"],
+  fullName: ["name", "NAME", "buyer_name"],
+  company: ["company", "buyer_company"],
+  message: ["message", "requirement", "product_name"],
+});
+
+// google_ads is deliberately NOT in this map — like meta_lead_ads, it needs its shared
+// key/signature checked before receive() runs, so the route special-cases it rather than
+// going through the generic dispatch (which would call receive() unauthenticated).
 export const INBOUND_ADAPTERS = {
   web_form: webFormAdapter,
   indiamart: indiamartAdapter,
   justdial: justdialAdapter,
+  sulekha: sulekhaAdapter,
+  tradeindia: tradeindiaAdapter,
 } as const;
 
 export type InboundAdapterKey = keyof typeof INBOUND_ADAPTERS;

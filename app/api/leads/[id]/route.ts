@@ -3,6 +3,8 @@ import { prisma } from "@/lib/db";
 import { ok, fail } from "@/lib/http";
 import { requireOrg } from "@/lib/tenant";
 import { invalidate } from "@/lib/cache";
+import { recomputeAndSaveLeadScore } from "@/lib/scoring";
+import { suppress } from "@/lib/crm";
 
 export const runtime = "nodejs";
 
@@ -11,7 +13,10 @@ type Ctx = { params: Promise<{ id: string }> };
 // Fields the client is allowed to PATCH (never id / organizationId / relations).
 const PATCHABLE = new Set([
   "firstName", "lastName", "email", "phone", "linkedinUrl", "company", "title", "stage", "tags", "custom", "optedOut", "consent",
+  // Scoring v1 qualifying signals (product PRD §6) — manually set for now.
+  "budgetMentioned", "timelineMentioned", "decisionMakerConfirmed",
 ]);
+const SCORE_SIGNALS = new Set(["budgetMentioned", "timelineMentioned", "decisionMakerConfirmed"]);
 
 export async function GET(req: NextRequest, { params }: Ctx) {
   const ctx = await requireOrg(req);
@@ -34,6 +39,9 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   // Scope the update to this org so a foreign id can't be mutated.
   const res = await prisma.lead.updateMany({ where: { id, organizationId: ctx.orgId }, data });
   if (res.count === 0) return fail("not found", 404);
+  if (Object.keys(data).some((k) => SCORE_SIGNALS.has(k))) {
+    await recomputeAndSaveLeadScore(id, ctx.orgId);
+  }
   const lead = await prisma.lead.findUnique({ where: { id } });
   return ok(lead);
 }
@@ -46,11 +54,10 @@ export async function DELETE(req: NextRequest, { params }: Ctx) {
   const lead = await prisma.lead.findFirst({ where: { id, organizationId: ctx.orgId } });
   if (!lead) return fail("not found", 404);
   if (lead.email) {
-    await prisma.suppression.upsert({
-      where: { organizationId_email: { organizationId: ctx.orgId, email: lead.email } },
-      create: { organizationId: ctx.orgId, email: lead.email, reason: "gdpr" },
-      update: { reason: "gdpr" },
-    });
+    // Routed through suppress() (not a direct upsert) so the GDPR erasure itself lands
+    // on the compliance ledger — the audit trail is meaningless if the one consent event
+    // that matters most for a regulator skips it.
+    await suppress(ctx.orgId, { email: lead.email, phone: lead.phone ?? undefined, linkedinUrl: lead.linkedinUrl ?? undefined }, "gdpr");
   }
   await prisma.lead.delete({ where: { id } });
   invalidate("leads:");
