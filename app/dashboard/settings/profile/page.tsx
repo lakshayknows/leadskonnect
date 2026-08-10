@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { User } from "lucide-react";
 import { authClient, useSession } from "@/lib/auth-client";
-import { DashHeader, Panel, Banner, Input, Label } from "@/components/dashboard/ui";
+import { DashHeader, Panel, Banner, Input, Label } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +37,7 @@ export default function ProfilePage() {
           <form onSubmit={save} className="space-y-4">
             {msg && <Banner kind={msg.kind}>{msg.text}</Banner>}
             <div className="flex items-center gap-3">
-              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-accent text-lg font-bold text-white">
+              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-accent text-lg font-bold text-on-solid">
                 {(name || session?.user?.email || "U").slice(0, 1).toUpperCase()}
               </span>
               <div className="text-sm text-ink-soft">This name appears at the bottom of your emails.</div>

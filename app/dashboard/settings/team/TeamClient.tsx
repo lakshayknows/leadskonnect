@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { UserPlus, Trash2, Building2, Copy, Check, Shield } from "lucide-react";
 import { authClient, useSession } from "@/lib/auth-client";
-import { DashHeader, Panel, Banner, Input, Select, Label } from "@/components/dashboard/ui";
+import { Banner, DashHeader, Input, Label, Panel, Select, useConfirm, usePrompt } from "@/components/ui";
+import { Skeleton } from "@/components/ui";
 
 type Role = "owner" | "admin" | "member";
 
@@ -19,6 +20,8 @@ export default function TeamClient() {
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ kind: "error" | "success" | "info"; text: string } | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const confirm = useConfirm();
+  const prompt = usePrompt();
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const members: any[] = (org as any)?.members ?? [];
@@ -51,7 +54,13 @@ export default function TeamClient() {
   }
 
   async function removeMember(memberIdOrEmail: string) {
-    if (!confirm("Remove this member from the workspace?")) return;
+    const ok = await confirm({
+      title: "Remove this member?",
+      body: "They lose access to this workspace's contacts, campaigns and inbox immediately.",
+      confirmLabel: "Remove member",
+      tone: "danger",
+    });
+    if (!ok) return;
     await authClient.organization.removeMember({ memberIdOrEmail });
     refetch?.();
   }
@@ -67,10 +76,16 @@ export default function TeamClient() {
   }
 
   async function createOrg() {
-    const name = prompt("New workspace name?");
-    if (!name?.trim()) return;
+    const name = await prompt({
+      title: "Create a workspace",
+      body: "Workspaces keep contacts, campaigns and sending accounts separate.",
+      label: "Workspace name",
+      placeholder: "Acme Sales",
+      confirmLabel: "Create workspace",
+    });
+    if (!name) return;
     const slug = `${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "")}-${Math.random().toString(36).slice(2, 6)}`;
-    const res = await authClient.organization.create({ name: name.trim(), slug });
+    const res = await authClient.organization.create({ name, slug });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const id = (res.data as any)?.id;
     if (id) await switchOrg(id);
@@ -155,7 +170,7 @@ export default function TeamClient() {
         <Panel>
           <h2 className="mb-4 font-display text-base font-bold">Members</h2>
           {isPending ? (
-            <p className="text-sm text-ink-soft">Loading…</p>
+            <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-10 w-full rounded-xl" />)}</div>
           ) : (
             <div className="divide-y divide-line">
               {members.map((m) => (
@@ -182,7 +197,7 @@ export default function TeamClient() {
                     {canManage && m.role !== "owner" && m.userId !== session?.user?.id && (
                       <button
                         onClick={() => removeMember(m.id)}
-                        className="rounded-lg p-1.5 text-ink-soft hover:bg-tint hover:text-red-600"
+                        className="rounded-lg p-1.5 text-ink-soft hover:bg-tint hover:text-danger"
                         title="Remove"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -219,7 +234,7 @@ export default function TeamClient() {
                       {canManage && (
                         <button
                           onClick={() => cancelInvite(inv.id)}
-                          className="rounded-lg p-1.5 text-ink-soft hover:bg-tint hover:text-red-600"
+                          className="rounded-lg p-1.5 text-ink-soft hover:bg-tint hover:text-danger"
                           title="Cancel"
                         >
                           <Trash2 className="h-4 w-4" />

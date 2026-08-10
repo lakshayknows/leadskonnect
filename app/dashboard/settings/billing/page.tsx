@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Check, Sparkles } from "lucide-react";
-import { DashHeader, Panel } from "@/components/dashboard/ui";
+import { DashHeader, Panel } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -36,7 +36,7 @@ export default function Page() {
           {PLANS.map((p) => (
             <Panel key={p.name} className={`relative flex flex-col ${p.highlight ? "!border-accent ring-1 ring-accent" : ""}`}>
               {p.highlight && (
-                <span className="absolute -top-3 left-5 flex items-center gap-1 rounded-full bg-accent px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
+                <span className="absolute -top-3 left-5 flex items-center gap-1 rounded-full bg-accent px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-on-solid">
                   <Sparkles className="h-3 w-3" /> Popular
                 </span>
               )}

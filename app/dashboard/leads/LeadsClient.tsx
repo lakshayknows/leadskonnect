@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
 import { Trash2, Upload, Plus, Tag, FolderPlus, Rocket, X, Pencil, Check, Users, Linkedin } from "lucide-react";
 import { api } from "@/lib/client";
-import { DashHeader, Panel, Banner, Input, Label, Select } from "@/components/dashboard/ui";
+import { Banner, DashHeader, Dialog, EmptyState, Input, Label, NoResults, Panel, Select, Skeleton, useConfirm, usePrompt } from "@/components/ui";
+import { tourTarget } from "@/components/dashboard/tour/target";
 
 type Lead = {
   id: string;
@@ -55,9 +56,14 @@ export default function LeadsPage() {
   const { data, isLoading, error, mutate } = useSWR<LeadsResponse>(`/api/leads?${params}`);
   const { data: segments, mutate: mutateSegments } = useSWR<Segment[]>("/api/segments");
   const { data: campaigns } = useSWR<Campaign[]>("/api/campaigns");
+  const confirm = useConfirm();
+  const prompt = usePrompt();
 
   const leads = data?.items ?? [];
   const total = data?.total ?? 0;
+  // Distinguishes "you have no contacts" from "your filters match nothing" —
+  // they need different copy and a different action.
+  const hasFilters = !!(debouncedSearch.trim() || tagFilter.length || groupFilter || book);
   const totalPages = data?.totalPages ?? 1;
 
   // All tags seen on the current page (for quick filter chips).
@@ -133,7 +139,13 @@ export default function LeadsPage() {
   }
 
   async function del(id: string) {
-    if (!confirm("Delete this lead? They'll be added to the suppression list.")) return;
+    const ok = await confirm({
+      title: "Delete this contact?",
+      body: "They'll be added to the suppression list, so no campaign can reach them again.",
+      confirmLabel: "Delete contact",
+      tone: "danger",
+    });
+    if (!ok) return;
     try {
       await api(`/api/leads/${id}`, { method: "DELETE" });
       mutate();
@@ -144,10 +156,19 @@ export default function LeadsPage() {
 
   // Inline add/edit a contact's LinkedIn URL (what the extension acts on).
   async function setLinkedin(id: string, current: string | null) {
-    const url = prompt("LinkedIn profile URL for this contact:", current ?? "");
+    const url = await prompt({
+      title: "LinkedIn profile",
+      body: "The extension acts on this URL when it sends invites and messages.",
+      label: "Profile URL",
+      placeholder: "https://www.linkedin.com/in/…",
+      defaultValue: current ?? "",
+      confirmLabel: "Save URL",
+      // Blank is meaningful here — it clears the URL — so accept it.
+      validate: (v) => (!v || /^https?:\/\/(www\.)?linkedin\.com\//i.test(v) ? null : "Enter a linkedin.com profile URL."),
+    });
     if (url === null) return;
     try {
-      await api(`/api/leads/${id}`, { method: "PATCH", body: { linkedinUrl: url.trim() || null } });
+      await api(`/api/leads/${id}`, { method: "PATCH", body: { linkedinUrl: url || null } });
       mutate();
     } catch (e) {
       setMsg({ kind: "error", text: (e as Error).message });
@@ -158,10 +179,15 @@ export default function LeadsPage() {
   const selectedIds = () => Array.from(selected);
 
   async function bulkAddTag() {
-    const tag = prompt("Tag to add to selected leads:");
-    if (!tag?.trim()) return;
-    await api("/api/leads/bulk", { body: { leadIds: selectedIds(), addTags: [tag.trim()] } });
-    setMsg({ kind: "success", text: `Tagged ${selected.size} lead(s) “${tag.trim()}”.` });
+    const tag = await prompt({
+      title: `Tag ${selected.size} contact${selected.size === 1 ? "" : "s"}`,
+      label: "Tag",
+      placeholder: "warm-lead",
+      confirmLabel: "Add tag",
+    });
+    if (!tag) return;
+    await api("/api/leads/bulk", { body: { leadIds: selectedIds(), addTags: [tag] } });
+    setMsg({ kind: "success", text: `Tagged ${selected.size} lead(s) “${tag}”.` });
     mutate();
   }
 
@@ -174,7 +200,12 @@ export default function LeadsPage() {
 
   async function bulkEnroll(campaignId: string) {
     if (!campaignId) return;
-    if (!confirm(`Enroll ${selected.size} selected lead(s) into this campaign?`)) return;
+    const ok = await confirm({
+      title: `Enroll ${selected.size} contact${selected.size === 1 ? "" : "s"}?`,
+      body: "They'll start receiving this campaign's sequence on its normal schedule.",
+      confirmLabel: "Enroll",
+    });
+    if (!ok) return;
     try {
       const res = await api<{ enrolled: number; skipped: number }>(`/api/campaigns/${campaignId}/enroll`, {
         body: { leadIds: selectedIds() },
@@ -202,7 +233,13 @@ export default function LeadsPage() {
   }
 
   async function deleteGroup(id: string) {
-    if (!confirm("Delete this group? (Leads are not deleted.)")) return;
+    const ok = await confirm({
+      title: "Delete this group?",
+      body: "The contacts in it are kept — only the group is removed.",
+      confirmLabel: "Delete group",
+      tone: "danger",
+    });
+    if (!ok) return;
     await api(`/api/segments?id=${id}`, { method: "DELETE" });
     mutateSegments();
   }
@@ -228,7 +265,7 @@ export default function LeadsPage() {
         title="Leads"
         subtitle={`${total.toLocaleString()} in your list`}
         action={
-          <label className="btn btn-ghost !py-2 !text-sm cursor-pointer">
+          <label {...tourTarget("leads-import")} className="btn btn-ghost !py-2 !text-sm cursor-pointer">
             <Upload className="h-4 w-4" /> Import CSV
             <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => e.target.files?.[0] && importCsv(e.target.files[0])} />
           </label>
@@ -290,7 +327,7 @@ export default function LeadsPage() {
                         }}
                         className="!py-1 !text-sm"
                       />
-                      <button onClick={() => renameGroup(s.id, editingGroup.name)} className="shrink-0 text-emerald-600 hover:text-emerald-700" title="Save">
+                      <button onClick={() => renameGroup(s.id, editingGroup.name)} className="shrink-0 text-success hover:text-success-strong" title="Save">
                         <Check className="h-4 w-4" />
                       </button>
                       <button onClick={() => setEditingGroup(null)} className="shrink-0 text-ink-soft hover:text-ink" title="Cancel">
@@ -302,13 +339,13 @@ export default function LeadsPage() {
                       <span className="truncate font-medium">{s.name}</span>
                       <span className="flex items-center gap-1.5 shrink-0">
                         <span className="rounded-full bg-tint px-2 py-0.5 font-mono text-xs">{s.count}</span>
-                        <button onClick={() => setManagingGroup(s)} className="text-ink-soft hover:text-indigo-600" aria-label="Edit members" title="Edit members">
+                        <button onClick={() => setManagingGroup(s)} className="text-ink-soft hover:text-accent" aria-label="Edit members" title="Edit members">
                           <Users className="h-3.5 w-3.5" />
                         </button>
                         <button onClick={() => setEditingGroup({ id: s.id, name: s.name })} className="text-ink-soft hover:text-ink" aria-label="Rename group">
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
-                        <button onClick={() => deleteGroup(s.id)} className="text-ink-soft hover:text-red-600" aria-label="Delete group">
+                        <button onClick={() => deleteGroup(s.id)} className="text-ink-soft hover:text-danger" aria-label="Delete group">
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
                       </span>
@@ -352,13 +389,13 @@ export default function LeadsPage() {
             <div className="flex rounded-xl border border-line p-1">
               <button
                 onClick={() => { setBook(""); setPage(1); setSelected(new Set()); }}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${book === "" ? "bg-ink text-white" : "text-ink-soft hover:bg-tint"}`}
+                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${book === "" ? "bg-ink text-ink-invert" : "text-ink-soft hover:bg-tint"}`}
               >
                 All contacts
               </button>
               <button
                 onClick={() => { setBook("linkedin"); setPage(1); setSelected(new Set()); }}
-                className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${book === "linkedin" ? "bg-ink text-white" : "text-ink-soft hover:bg-tint"}`}
+                className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${book === "linkedin" ? "bg-ink text-ink-invert" : "text-ink-soft hover:bg-tint"}`}
               >
                 <Linkedin className="h-3.5 w-3.5" /> LinkedIn only
               </button>
@@ -383,7 +420,7 @@ export default function LeadsPage() {
                   <div key={t} className="flex items-center gap-0.5">
                     <button
                       onClick={() => { setPage(1); setTagFilter((f) => (on ? f.filter((x) => x !== t) : [...f, t])); }}
-                      className={`flex items-center gap-1 rounded-l-full px-2.5 py-1 text-xs transition ${on ? "bg-ink text-white" : "bg-tint text-ink-soft hover:text-ink"}`}
+                      className={`flex items-center gap-1 rounded-l-full px-2.5 py-1 text-xs transition ${on ? "bg-ink text-ink-invert" : "bg-tint text-ink-soft hover:text-ink"}`}
                     >
                       <Tag className="h-3 w-3" /> {t} {on && <X className="h-3 w-3" />}
                     </button>
@@ -391,7 +428,7 @@ export default function LeadsPage() {
                       <button
                         onClick={() => createGroupFromTag(t)}
                         title={`Create group "${t}"`}
-                        className="rounded-r-full bg-tint px-1.5 py-1 text-xs text-ink-soft transition hover:bg-indigo-100 hover:text-indigo-600"
+                        className="rounded-r-full bg-tint px-1.5 py-1 text-xs text-ink-soft transition hover:bg-accent-soft hover:text-accent"
                       >
                         <FolderPlus className="h-3 w-3" />
                       </button>
@@ -404,24 +441,24 @@ export default function LeadsPage() {
 
           {/* Bulk action bar */}
           {selected.size > 0 && (
-            <div className="flex flex-wrap items-center gap-3 rounded-xl border border-ink bg-ink px-4 py-2.5 text-sm text-white">
+            <div className="flex flex-wrap items-center gap-3 rounded-xl border border-ink bg-ink px-4 py-2.5 text-sm text-ink-invert">
               <span className="font-medium">{selected.size} selected</span>
-              <button onClick={bulkAddTag} className="flex items-center gap-1 rounded-lg bg-white/15 px-2.5 py-1 hover:bg-white/25">
+              <button onClick={bulkAddTag} className="flex items-center gap-1 rounded-lg bg-ink-invert/15 px-2.5 py-1 hover:bg-ink-invert/25">
                 <Tag className="h-3.5 w-3.5" /> Add tag
               </button>
-              <Select onChange={(e) => { bulkAddToGroup(e.target.value); e.target.value = ""; }} className="!w-40 !bg-white/15 !text-white !border-white/20 !py-1 text-xs" defaultValue="">
+              <Select onChange={(e) => { bulkAddToGroup(e.target.value); e.target.value = ""; }} className="!w-40 !bg-ink-invert/15 !text-ink-invert !border-ink-invert/20 !py-1 text-xs" defaultValue="">
                 <option value="" className="text-ink">Add to group…</option>
                 {(segments ?? []).map((s) => <option key={s.id} value={s.id} className="text-ink">{s.name}</option>)}
               </Select>
-              <Select onChange={(e) => { bulkEnroll(e.target.value); e.target.value = ""; }} className="!w-44 !bg-white/15 !text-white !border-white/20 !py-1 text-xs" defaultValue="">
+              <Select onChange={(e) => { bulkEnroll(e.target.value); e.target.value = ""; }} className="!w-44 !bg-ink-invert/15 !text-ink-invert !border-ink-invert/20 !py-1 text-xs" defaultValue="">
                 <option value="" className="text-ink">Enroll in campaign…</option>
                 {(campaigns ?? []).map((c) => <option key={c.id} value={c.id} className="text-ink">{c.name}</option>)}
               </Select>
-              <button onClick={() => setSelected(new Set())} className="ml-auto text-white/70 hover:text-white">Clear</button>
+              <button onClick={() => setSelected(new Set())} className="ml-auto text-ink-invert/70 hover:text-ink-invert">Clear</button>
             </div>
           )}
 
-          <div className="overflow-hidden rounded-2xl border border-line bg-white">
+          <div className="overflow-hidden rounded-2xl border border-line bg-surface">
             <table className="w-full text-left text-sm">
               <thead className="bg-tint font-mono text-xs uppercase tracking-wide text-ink-soft">
                 <tr>
@@ -438,9 +475,34 @@ export default function LeadsPage() {
               </thead>
               <tbody className="divide-y divide-line">
                 {isLoading ? (
-                  <tr><td colSpan={7} className="px-4 py-8 text-center text-ink-soft">Loading…</td></tr>
+                  // Skeleton rows rather than a "Loading…" string: the table keeps
+                  // its height, so nothing below it jumps when the data lands.
+                  Array.from({ length: 8 }).map((_, i) => (
+                    <tr key={`sk-${i}`}>
+                      <td className="px-4 py-3"><Skeleton className="h-4 w-4" /></td>
+                      {Array.from({ length: 6 }).map((__, c) => (
+                        <td key={c} className="px-4 py-3"><Skeleton className={`h-3.5 ${c === 0 ? "w-32" : "w-20"}`} /></td>
+                      ))}
+                    </tr>
+                  ))
                 ) : leads.length === 0 ? (
-                  <tr><td colSpan={7} className="px-4 py-8 text-center text-ink-soft">No contacts found.</td></tr>
+                  <tr>
+                    <td colSpan={7} className="px-4 py-10">
+                      {hasFilters ? (
+                        <NoResults
+                          query={debouncedSearch.trim() || undefined}
+                          onClear={() => { setSearch(""); setTagFilter([]); setGroupFilter(""); setBook(""); setPage(1); }}
+                        />
+                      ) : (
+                        <EmptyState
+                          icon={Users}
+                          title="No contacts yet"
+                          body="Contacts are who your campaigns reach. Import a CSV to bring a list in, or add someone using the form on the left."
+                          className="border-0 bg-transparent py-0"
+                        />
+                      )}
+                    </td>
+                  </tr>
                 ) : (
                   leads.map((l) => (
                     <tr key={l.id} className={selected.has(l.id) ? "bg-tint/50" : ""}>
@@ -461,7 +523,7 @@ export default function LeadsPage() {
                       </td>
                       <td className="px-4 py-3"><span className="rounded-full bg-tint px-2 py-0.5 font-mono text-xs">{l.stage}</span></td>
                       <td className="px-4 py-3 text-right">
-                        <button onClick={() => del(l.id)} className="text-ink-soft transition-colors hover:text-red-600" aria-label="Delete">
+                        <button onClick={() => del(l.id)} className="text-ink-soft transition-colors hover:text-danger" aria-label="Delete">
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </td>
@@ -557,12 +619,15 @@ function GroupMembersModal({ segment, selectedLeadIds, onClose, onSaved }: Group
   const dirty = JSON.stringify([...pendingIds].sort()) !== JSON.stringify([...segment.leadIds].sort());
 
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4" onClick={onClose}>
-      <div
-        className="flex w-full max-w-lg flex-col rounded-2xl border border-line bg-white shadow-2xl"
-        style={{ maxHeight: "85vh" }}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Dialog
+      open
+      onClose={onClose}
+      title={`Edit members — ${segment.name}`}
+      size="md"
+      chrome={false}
+      className="max-h-[85vh]"
+    >
+      <div className="flex max-h-[85vh] flex-col">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-line px-5 py-4">
           <div>
@@ -574,13 +639,13 @@ function GroupMembersModal({ segment, selectedLeadIds, onClose, onSaved }: Group
 
         {/* Quick-add bar */}
         {addable.length > 0 && (
-          <div className="flex items-center justify-between gap-3 border-b border-line bg-indigo-50 px-5 py-3">
-            <span className="text-xs text-indigo-700">
+          <div className="flex items-center justify-between gap-3 border-b border-line bg-accent-soft px-5 py-3">
+            <span className="text-xs text-accent-strong">
               <strong>{addable.length}</strong> selected lead(s) not in this group
             </span>
             <button
               onClick={addSelected}
-              className="flex items-center gap-1.5 rounded-xl bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-700"
+              className="flex items-center gap-1.5 rounded-xl bg-accent px-3 py-1.5 text-xs font-semibold text-on-solid transition hover:bg-accent-strong"
             >
               <Plus className="h-3.5 w-3.5" /> Add to group
             </button>
@@ -599,7 +664,7 @@ function GroupMembersModal({ segment, selectedLeadIds, onClose, onSaved }: Group
 
         {/* Members list */}
         <div className="flex-1 overflow-y-auto px-5 py-3 space-y-1.5">
-          {isLoading && <p className="text-sm text-ink-soft">Loading…</p>}
+          {isLoading && <div className="space-y-1.5">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-xl" />)}</div>}
           {!isLoading && filtered.length === 0 && (
             <p className="py-6 text-center text-sm text-ink-soft">
               {pendingIds.length === 0 ? "Group is empty." : "No matches."}
@@ -613,7 +678,7 @@ function GroupMembersModal({ segment, selectedLeadIds, onClose, onSaved }: Group
               </div>
               <button
                 onClick={() => removeLead(l.id)}
-                className="shrink-0 rounded-full p-1 text-ink-soft transition hover:bg-red-50 hover:text-red-600"
+                className="shrink-0 rounded-full p-1 text-ink-soft transition hover:bg-danger-soft hover:text-danger"
                 title="Remove from group"
               >
                 <X className="h-3.5 w-3.5" />
@@ -630,12 +695,12 @@ function GroupMembersModal({ segment, selectedLeadIds, onClose, onSaved }: Group
           <button
             onClick={save}
             disabled={!dirty || saving}
-            className="rounded-xl bg-ink px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-40"
+            className="rounded-xl bg-ink px-4 py-2 text-sm font-semibold text-ink-invert transition hover:opacity-90 disabled:opacity-40"
           >
             {saving ? "Saving…" : `Save changes${dirty ? ` (${pendingIds.length} leads)` : ""}`}
           </button>
         </div>
       </div>
-    </div>
+    </Dialog>
   );
 }

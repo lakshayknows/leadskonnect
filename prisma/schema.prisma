@@ -182,6 +182,20 @@ model User {
   members            Member[]
   sentInvitations    Invitation[]
 
+  // ---- app-owned user state ----
+  // All nullable with NO defaults, deliberately: better-auth's prismaAdapter
+  // writes only the fields above, so any non-nullable addition would break its
+  // inserts, and a @default would read as schema drift to `better-auth generate`.
+  // These are read/written server-side via /api/onboarding, not through the
+  // session payload — a cookie-cached session would keep replaying a finished
+  // tour until the cache expired.
+  onboardingCompletedAt DateTime?
+  onboardingSkippedAt   DateTime?
+  onboardingStep        Int? // last-seen step index, so a mid-tour reload resumes
+  tourVersion           Int? // TOUR_VERSION they finished; a bump re-offers the tour
+  checklistState        Json? // { dismissedAt } — completion itself is always derived
+  themePreference       String? // "light" | "dark" | "system"
+
   @@map("user")
 }
 

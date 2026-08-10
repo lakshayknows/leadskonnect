@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import useSWR from "swr";
 import Link from "next/link";
 import { Building2, Search, ArrowRight } from "lucide-react";
-import { DashHeader, Panel, Input } from "@/components/dashboard/ui";
+import { DashHeader, EmptyState, Input, Panel, Skeleton } from "@/components/ui";
 
 type Company = { company: string; count: number };
 
@@ -29,21 +29,27 @@ export default function CompaniesClient() {
         </div>
 
         {isLoading ? (
-          <Panel><p className="text-sm text-ink-soft">Loading…</p></Panel>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="rounded-2xl border border-line bg-surface p-5">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="mt-2 h-3 w-20" />
+              </div>
+            ))}
+          </div>
         ) : filtered.length === 0 ? (
-          <Panel>
-            <div className="py-10 text-center">
-              <Building2 className="mx-auto h-10 w-10 text-ink-soft/40" />
-              <p className="mt-3 text-sm text-ink-soft">No companies yet. They appear as you add contacts with a company.</p>
-            </div>
-          </Panel>
+          <EmptyState
+            icon={Building2}
+            title="No companies yet"
+            body="Companies are grouped from your contacts. Add contacts with a company name and they appear here, ready to enroll together."
+          />
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {filtered.map((c) => (
               <Link
                 key={c.company}
                 href={`/dashboard/companies/${encodeURIComponent(c.company)}`}
-                className="group flex items-center gap-3 rounded-2xl border border-line bg-white p-4 shadow-sm transition hover:border-accent hover:shadow-md"
+                className="group flex items-center gap-3 rounded-2xl border border-line bg-surface p-4 shadow-sm transition hover:border-accent hover:shadow-md"
               >
                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft font-display text-sm font-bold text-accent-strong">
                   {c.company.slice(0, 2).toUpperCase()}

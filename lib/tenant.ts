@@ -5,6 +5,7 @@
  * handlers (returns a Response to short-circuit on auth failure) and `getServerTenant()`
  * in Server Components (returns null when unauthenticated).
  */
+import { cache } from "react";
 import type { NextRequest } from "next/server";
 import { headers as nextHeaders } from "next/headers";
 import { auth } from "./auth";
@@ -50,11 +51,18 @@ export async function requireOrg(req: NextRequest): Promise<TenantContext | Resp
   return ctx;
 }
 
-/** For Server Components. Returns null when unauthenticated / no org. */
-export async function getServerTenant(): Promise<TenantContext | null> {
+/**
+ * For Server Components. Returns null when unauthenticated / no org.
+ *
+ * Wrapped in React's `cache()` so the dashboard layout and the page it renders
+ * share one session lookup per request instead of each paying for their own.
+ * Keyed on the (empty) argument list rather than a Headers object, whose
+ * identity would differ between callers and defeat the cache.
+ */
+export const getServerTenant = cache(async (): Promise<TenantContext | null> => {
   if (!configured.db) return null;
   return resolveTenant(await nextHeaders());
-}
+});
 
 /** Role gate helper — throws a Response when the caller lacks the required role. */
 export function requireRole(ctx: TenantContext, roles: string[]): Response | null {

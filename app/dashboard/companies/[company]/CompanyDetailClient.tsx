@@ -5,7 +5,7 @@ import Link from "next/link";
 import useSWR from "swr";
 import { Building2, ArrowLeft, Rocket, FolderPlus, Linkedin as LinkedinIcon } from "lucide-react";
 import { api } from "@/lib/client";
-import { DashHeader, Panel, Banner, Select } from "@/components/dashboard/ui";
+import { Banner, DashHeader, Panel, Select, Skeleton, useConfirm } from "@/components/ui";
 
 type Lead = { id: string; firstName: string | null; lastName: string | null; email: string | null; linkedinUrl: string | null; stage: string };
 type LeadsResponse = { items: Lead[]; total: number };
@@ -21,10 +21,16 @@ export default function CompanyDetailClient({ company }: { company: string }) {
 
   const leads = data?.items ?? [];
   const ids = leads.map((l) => l.id);
+  const confirm = useConfirm();
 
   async function enrollAll(campaignId: string) {
     if (!campaignId || ids.length === 0) return;
-    if (!confirm(`Enroll all ${ids.length} contact(s) at ${company} into this campaign?`)) return;
+    const ok = await confirm({
+      title: `Enroll ${ids.length} contact${ids.length === 1 ? "" : "s"} at ${company}?`,
+      body: "Everyone at this company starts receiving the campaign's sequence.",
+      confirmLabel: "Enroll",
+    });
+    if (!ok) return;
     try {
       const res = await api<{ enrolled: number; skipped: number }>(`/api/campaigns/${campaignId}/enroll`, { body: { leadIds: ids } });
       setMsg({ kind: "success", text: `Enrolled ${res.enrolled}, skipped ${res.skipped} already in campaign.` });
@@ -70,7 +76,7 @@ export default function CompanyDetailClient({ company }: { company: string }) {
           </Panel>
         )}
 
-        <div className="overflow-hidden rounded-2xl border border-line bg-white">
+        <div className="overflow-hidden rounded-2xl border border-line bg-surface">
           <table className="w-full text-left text-sm">
             <thead className="bg-tint font-mono text-xs uppercase tracking-wide text-ink-soft">
               <tr>
@@ -82,7 +88,7 @@ export default function CompanyDetailClient({ company }: { company: string }) {
             </thead>
             <tbody className="divide-y divide-line">
               {isLoading ? (
-                <tr><td colSpan={4} className="px-4 py-8 text-center text-ink-soft">Loading…</td></tr>
+                <>{Array.from({ length: 6 }).map((_, i) => (<tr key={i}>{Array.from({ length: 4 }).map((__, c) => (<td key={c} className="px-4 py-3"><Skeleton className="h-3.5 w-24" /></td>))}</tr>))}</>
               ) : leads.length === 0 ? (
                 <tr><td colSpan={4} className="px-4 py-8 text-center text-ink-soft">No contacts at this company.</td></tr>
               ) : (

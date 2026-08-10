@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { api } from "@/lib/client";
-import { DashHeader, Panel, Banner, Input, Select, Label } from "@/components/dashboard/ui";
+import { Banner, DashHeader, EmptyState, Input, Label, Panel, Select, useConfirm } from "@/components/ui";
 import { Trash2, ShieldCheck, Mail, Server, RefreshCw } from "lucide-react";
 
 type SendingAccount = {
@@ -22,6 +22,7 @@ type SendingAccount = {
 
 export default function SendingAccountsPage() {
   const { data: accounts = [], mutate } = useSWR<SendingAccount[]>("/api/sending-accounts");
+  const confirm = useConfirm();
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -103,7 +104,13 @@ export default function SendingAccountsPage() {
   }
 
   async function remove(id: string) {
-    if (!confirm("Are you sure you want to delete this sending account?")) return;
+    const ok = await confirm({
+      title: "Delete this sending account?",
+      body: "Campaigns using it will stop sending until you connect another mailbox.",
+      confirmLabel: "Delete account",
+      tone: "danger",
+    });
+    if (!ok) return;
     try {
       await api(`/api/sending-accounts?id=${id}`, { method: "DELETE" });
       setMsg({ kind: "success", text: "Sending account deleted." });
@@ -224,7 +231,7 @@ export default function SendingAccountsPage() {
                 {testBusy ? (
                   <RefreshCw className="h-4 w-4 animate-spin" />
                 ) : (
-                  <ShieldCheck className="h-4 w-4 text-emerald-600" />
+                  <ShieldCheck className="h-4 w-4 text-success" />
                 )}
                 Test SMTP
               </button>
@@ -242,11 +249,11 @@ export default function SendingAccountsPage() {
         <div className="space-y-4">
           {msg && <Banner kind={msg.kind}>{msg.text}</Banner>}
           {accounts.length === 0 ? (
-            <Panel>
-              <p className="text-sm text-ink-soft">
-                No custom sending accounts configured. Campaigns and AI Agent will fall back to using default server settings.
-              </p>
-            </Panel>
+            <EmptyState
+              icon={Mail}
+              title="No mailbox connected"
+              body="Campaigns and the agent need somewhere to send from. Connect Gmail in one click, or add SMTP details using the form on the left."
+            />
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
               {accounts.map((acc) => (
@@ -256,7 +263,7 @@ export default function SendingAccountsPage() {
                       <Mail className="h-5 w-5 text-action" />
                       <h3 className="font-display font-bold">{acc.name}</h3>
                       {acc.active && (
-                        <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-[10px] font-bold text-emerald-800">
+                        <span className="rounded bg-success-soft px-1.5 py-0.5 text-[10px] font-bold text-success-strong">
                           Active
                         </span>
                       )}
@@ -282,7 +289,7 @@ export default function SendingAccountsPage() {
                     </span>
                     <button
                       onClick={() => remove(acc.id)}
-                      className="rounded-lg p-1.5 text-ink-soft hover:bg-red-50 hover:text-red-600 transition"
+                      className="rounded-lg p-1.5 text-ink-soft hover:bg-danger-soft hover:text-danger transition"
                       title="Delete account"
                     >
                       <Trash2 className="h-4 w-4" />
