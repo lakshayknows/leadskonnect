@@ -12,6 +12,7 @@ import { ensureDefaultPipeline, addToPipeline } from "./pipeline";
 import { isSuppressed } from "./crm";
 import { invalidate } from "./cache";
 import { notifyOnCapture } from "./notify";
+import { recomputeAndSaveLeadScore } from "./scoring";
 import type { InboundEvent } from "./channels/types";
 
 export type IngestResult = {
@@ -94,6 +95,7 @@ export async function ingestEvent(organizationId: string, event: InboundEvent): 
       await notifyOnCapture({ organizationId, leadId: resolved.leadId, ownerId: item.ownerId }).catch((e) =>
         console.error("[ingest] notifyOnCapture failed:", e),
       );
+      await recomputeAndSaveLeadScore(resolved.leadId, organizationId);
     }
   }
 

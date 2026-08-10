@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
+import type { Department } from "@prisma/client";
 import { ok } from "@/lib/http";
-import { requireOrg } from "@/lib/tenant";
-import { getReport } from "@/lib/reports";
+import { requireOrg, isDepartmentScoped } from "@/lib/tenant";
+import { getReport, getPipelineFunnels, getSourceRoi, getResponseLeaderboard } from "@/lib/reports";
 
 export const runtime = "nodejs";
 
@@ -10,5 +11,14 @@ export async function GET(req: NextRequest) {
   const ctx = await requireOrg(req);
   if (ctx instanceof Response) return ctx;
   const days = Math.min(Math.max(Number(req.nextUrl.searchParams.get("days") ?? 30), 7), 90);
-  return ok(await getReport(ctx.orgId, days));
+  const department = (isDepartmentScoped(ctx) ? ctx.department : undefined) as Department | undefined;
+
+  const [report, pipelineFunnels, sourceRoi, responseLeaderboard] = await Promise.all([
+    getReport(ctx.orgId, days),
+    getPipelineFunnels(ctx.orgId, department),
+    getSourceRoi(ctx.orgId),
+    getResponseLeaderboard(ctx.orgId, days),
+  ]);
+
+  return ok({ ...report, pipelineFunnels, sourceRoi, responseLeaderboard });
 }

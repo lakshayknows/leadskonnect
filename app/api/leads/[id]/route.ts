@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { ok, fail } from "@/lib/http";
 import { requireOrg } from "@/lib/tenant";
 import { invalidate } from "@/lib/cache";
+import { recomputeAndSaveLeadScore } from "@/lib/scoring";
 
 export const runtime = "nodejs";
 
@@ -11,7 +12,10 @@ type Ctx = { params: Promise<{ id: string }> };
 // Fields the client is allowed to PATCH (never id / organizationId / relations).
 const PATCHABLE = new Set([
   "firstName", "lastName", "email", "phone", "linkedinUrl", "company", "title", "stage", "tags", "custom", "optedOut", "consent",
+  // Scoring v1 qualifying signals (product PRD §6) — manually set for now.
+  "budgetMentioned", "timelineMentioned", "decisionMakerConfirmed",
 ]);
+const SCORE_SIGNALS = new Set(["budgetMentioned", "timelineMentioned", "decisionMakerConfirmed"]);
 
 export async function GET(req: NextRequest, { params }: Ctx) {
   const ctx = await requireOrg(req);
@@ -34,6 +38,9 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   // Scope the update to this org so a foreign id can't be mutated.
   const res = await prisma.lead.updateMany({ where: { id, organizationId: ctx.orgId }, data });
   if (res.count === 0) return fail("not found", 404);
+  if (Object.keys(data).some((k) => SCORE_SIGNALS.has(k))) {
+    await recomputeAndSaveLeadScore(id, ctx.orgId);
+  }
   const lead = await prisma.lead.findUnique({ where: { id } });
   return ok(lead);
 }

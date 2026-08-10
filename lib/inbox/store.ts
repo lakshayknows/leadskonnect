@@ -10,6 +10,7 @@
 import { prisma } from "../db";
 import { logActivity } from "../crm";
 import { recordConversationEvent } from "../conversation";
+import { recomputeAndSaveLeadScore } from "../scoring";
 import type { Channel } from "@prisma/client";
 
 interface InboundInput {
@@ -94,6 +95,9 @@ export async function recordInbound(orgId: string, input: InboundInput): Promise
       externalId: input.providerMessageId ?? null,
       occurredAt: input.sentAt,
     });
+    // A reply is itself an engagement signal — recompute now rather than wait for the
+    // next unrelated touch to pick it up.
+    await recomputeAndSaveLeadScore(lead.id, orgId).catch(() => {});
   }
 
   return { recorded: true, matched: !!lead };

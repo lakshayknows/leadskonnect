@@ -66,6 +66,15 @@ model Lead {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
+  // ---- scoring v1 (product PRD §6) ----
+  // 0-100, recomputed by lib/scoring.ts on capture and on inbound reply. The three
+  // qualifying signals are manually set for now (AI-driven extraction is a later phase);
+  // nullable/unset reads as "not yet known", not "no".
+  score                  Int?
+  budgetMentioned        Boolean?
+  timelineMentioned      Boolean?
+  decisionMakerConfirmed Boolean?
+
   messages           Message[]
   activities         ActivityLog[]
   enrollments        Enrollment[]

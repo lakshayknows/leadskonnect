@@ -576,7 +576,7 @@ export async function getBoard(organizationId: string, pipelineId?: string, depa
       where: { pipelineId: pipeline.id, organizationId },
       orderBy: { enteredStageAt: "asc" },
       include: {
-        lead: { select: { id: true, firstName: true, lastName: true, email: true, company: true } },
+        lead: { select: { id: true, firstName: true, lastName: true, email: true, company: true, score: true } },
         source: { select: { key: true, label: true } },
       },
     }),
@@ -601,6 +601,7 @@ export async function getBoard(organizationId: string, pipelineId?: string, depa
           source: i.source?.label ?? null,
           value: i.value ? Number(i.value) : null,
           ownerId: i.ownerId,
+          score: i.lead.score,
           enteredStageAt: i.enteredStageAt.toISOString(),
           slaDueAt: i.slaDueAt?.toISOString() ?? null,
           overdue: !!(i.slaDueAt && i.slaDueAt.getTime() < now),

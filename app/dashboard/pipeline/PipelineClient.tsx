@@ -9,7 +9,7 @@ import { DashHeader, Panel, Banner, Select, EmptyState, Skeleton, Badge, useProm
 
 type Item = {
   id: string; leadId: string; name: string; company: string | null; email: string | null;
-  source: string | null; value: number | null; enteredStageAt: string;
+  source: string | null; value: number | null; score: number | null; enteredStageAt: string;
   slaDueAt: string | null; overdue: boolean;
 };
 type Stage = { id: string; name: string; kind: "open" | "won" | "lost"; slaHours: number | null; items: Item[] };
@@ -17,6 +17,11 @@ type Board = { pipeline: { id: string; name: string; department: string }; stage
 type PipelineSummary = { id: string; name: string; department: string; _count: { items: number } };
 
 const TONE = { won: "success", lost: "danger", open: "neutral" } as const;
+
+/** Score is a signal strength, not a status — quiet tones only. */
+function scoreTone(score: number): "success" | "neutral" {
+  return score >= 60 ? "success" : "neutral";
+}
 
 function sinceHours(iso: string) {
   return Math.floor((Date.now() - new Date(iso).getTime()) / 3_600_000);
@@ -180,6 +185,7 @@ export default function PipelineClient() {
                       )}
                       <div className="mt-2 flex flex-wrap items-center gap-1.5">
                         {item.source && <Badge tone="neutral">{item.source}</Badge>}
+                        {item.score != null && <Badge tone={scoreTone(item.score)}>{item.score}</Badge>}
                         <span
                           className={cn(
                             "inline-flex items-center gap-1 font-mono text-[10px]",

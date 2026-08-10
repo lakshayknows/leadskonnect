@@ -6,8 +6,8 @@ import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip,
   BarChart, Bar, Legend,
 } from "recharts";
-import { Users, Send, MailOpen, MousePointerClick, Reply, TrendingUp } from "lucide-react";
-import { DashHeader, Panel, Skeleton } from "@/components/ui";
+import { Users, Send, MailOpen, MousePointerClick, Reply, TrendingUp, GitBranch, IndianRupee, Timer } from "lucide-react";
+import { DashHeader, Panel, Skeleton, Badge } from "@/components/ui";
 
 type Report = {
   days: number;
@@ -16,6 +16,18 @@ type Report = {
   funnel: { stage: string; count: number }[];
   series: { date: string; sent: number; opened: number; clicked: number; replied: number }[];
   byCampaign: { id: string; name: string; enrolled: number; sent: number; opened: number; replied: number }[];
+  pipelineFunnels: {
+    pipelineId: string; pipelineName: string; department: string;
+    stages: { name: string; position: number; kind: string; count: number }[];
+  }[];
+  sourceRoi: {
+    sourceId: string; key: string; label: string; monthlyCost: number | null;
+    totalItems: number; wonItems: number; wonValue: number; costPerWon: number | null;
+  }[];
+  responseLeaderboard: {
+    ownerId: string; ownerName: string | null; ownerEmail: string;
+    itemsRespondedTo: number; avgResponseHours: number;
+  }[];
 };
 
 // Recharts writes these straight onto SVG paint attributes, which a class
@@ -159,6 +171,111 @@ export default function ReportsClient() {
             ))}
           </div>
         </Panel>
+
+        {/* Pipeline funnels — the new Pipeline model, not the legacy Lead.stage above */}
+        <Panel>
+          <div className="mb-4 flex items-center gap-2">
+            <GitBranch className="h-4 w-4 text-ink-soft" />
+            <h2 className="font-display text-base font-bold">Pipeline funnels</h2>
+          </div>
+          {(data?.pipelineFunnels ?? []).length === 0 ? (
+            <p className="text-sm text-ink-soft">No pipelines yet.</p>
+          ) : (
+            <div className="grid gap-6 sm:grid-cols-2">
+              {(data?.pipelineFunnels ?? []).map((p) => {
+                const max = Math.max(1, ...p.stages.map((s) => s.count));
+                return (
+                  <div key={p.pipelineId}>
+                    <div className="mb-2 flex items-center gap-2">
+                      <span className="font-medium">{p.pipelineName}</span>
+                      <Badge tone="neutral" className="capitalize">{p.department}</Badge>
+                    </div>
+                    <div className="space-y-2">
+                      {p.stages.map((s) => (
+                        <div key={s.name}>
+                          <div className="mb-1 flex items-center justify-between text-xs">
+                            <span>{s.name}</span>
+                            <span className="font-mono text-ink-soft">{s.count}</span>
+                          </div>
+                          <div className="h-2 overflow-hidden rounded-full bg-tint">
+                            <div
+                              className={`h-full rounded-full ${s.kind === "won" ? "bg-success" : s.kind === "lost" ? "bg-danger" : "bg-ink"}`}
+                              style={{ width: `${(s.count / max) * 100}%` }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Panel>
+
+        <div className="grid gap-6 lg:grid-cols-2">
+          {/* Cost-per-source ROI */}
+          <Panel>
+            <div className="mb-4 flex items-center gap-2">
+              <IndianRupee className="h-4 w-4 text-ink-soft" />
+              <h2 className="font-display text-base font-bold">Source ROI</h2>
+            </div>
+            {(data?.sourceRoi ?? []).length === 0 ? (
+              <p className="text-sm text-ink-soft">No lead sources yet.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-line text-left font-mono text-xs uppercase tracking-wide text-ink-soft">
+                      <th className="py-2 pr-3 font-medium">Source</th>
+                      <th className="py-2 pr-3 text-right font-medium">Leads</th>
+                      <th className="py-2 pr-3 text-right font-medium">Won</th>
+                      <th className="py-2 text-right font-medium">Cost / win</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-line">
+                    {(data?.sourceRoi ?? []).map((s) => (
+                      <tr key={s.sourceId}>
+                        <td className="py-2 pr-3">{s.label}</td>
+                        <td className="py-2 pr-3 text-right font-mono tabular-nums">{s.totalItems}</td>
+                        <td className="py-2 pr-3 text-right font-mono tabular-nums">{s.wonItems}</td>
+                        <td className="py-2 text-right font-mono tabular-nums text-ink-soft">
+                          {s.costPerWon != null ? `₹${s.costPerWon.toLocaleString()}` : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Panel>
+
+          {/* Response-time leaderboard */}
+          <Panel>
+            <div className="mb-4 flex items-center gap-2">
+              <Timer className="h-4 w-4 text-ink-soft" />
+              <h2 className="font-display text-base font-bold">Response-time leaderboard</h2>
+            </div>
+            {(data?.responseLeaderboard ?? []).length === 0 ? (
+              <p className="text-sm text-ink-soft">No responses in this window yet.</p>
+            ) : (
+              <div className="space-y-2">
+                {(data?.responseLeaderboard ?? []).map((r, i) => (
+                  <div key={r.ownerId} className="flex items-center justify-between gap-3 text-sm">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs text-ink-faint">#{i + 1}</span>
+                      <span className="font-medium">{r.ownerName || r.ownerEmail}</span>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-mono tabular-nums">{r.avgResponseHours}h</span>
+                      <span className="ml-1.5 text-xs text-ink-soft">avg · {r.itemsRespondedTo} contacts</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Panel>
+        </div>
       </div>
     </>
   );
