@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { ok, fail } from "@/lib/http";
 import { ingestMany } from "@/lib/ingest";
-import { INBOUND_ADAPTERS, metaLeadAdsAdapter, type InboundAdapterKey } from "@/lib/channels/inbound";
+import { INBOUND_ADAPTERS, metaLeadAdsAdapter, googleAdsAdapter, type InboundAdapterKey } from "@/lib/channels/inbound";
 import { ingestKeyFor } from "@/lib/ingest-key";
 
 export const runtime = "nodejs";
@@ -69,6 +69,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ sou
       if (e) events.push(e);
     }
     return ok(await ingestMany(auth.orgId, events));
+  }
+
+  if (source === "google_ads") {
+    if (!googleAdsAdapter.verify(payload)) return fail("Bad google_key.", 401);
+    return ok(await ingestMany(auth.orgId, await googleAdsAdapter.receive(payload)));
   }
 
   const adapter = INBOUND_ADAPTERS[source as InboundAdapterKey];

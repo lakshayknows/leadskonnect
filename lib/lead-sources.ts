@@ -10,6 +10,13 @@ import { prisma } from "./db";
 import { ingestKeyFor } from "./ingest-key";
 import { env, configured } from "./env";
 
+/** Sources whose adapter needs env-level credentials before the webhook will accept
+ *  anything — checked against `configured` rather than assumed always-ready. */
+const ENV_GATED_SOURCES: Record<string, keyof typeof configured> = {
+  meta_lead_ads: "meta",
+  google_ads: "googleAds",
+};
+
 export type SourceInfo = { key: string; label: string; instructions: string };
 
 export const KNOWN_SOURCES: SourceInfo[] = [
@@ -36,6 +43,24 @@ export const KNOWN_SOURCES: SourceInfo[] = [
     label: "Meta Lead Ads",
     instructions:
       'Meta App Dashboard → Webhooks → Page → Subscribe to the "leadgen" field. Use the URL below, and set the Verify Token to whatever you put in META_VERIFY_TOKEN.',
+  },
+  {
+    key: "google_ads",
+    label: "Google Ads Lead Forms",
+    instructions:
+      'Lead form asset editor → "Other data integration options" → Webhook integration. Paste the URL below, set the key to whatever you put in GOOGLE_ADS_WEBHOOK_KEY, then use "Send test data" to confirm before going live.',
+  },
+  {
+    key: "sulekha",
+    label: "Sulekha",
+    instructions:
+      "No self-serve API — ask Sulekha's seller/account support team to deliver leads to the URL below. Get a sample payload from them first; the field mapping here is a best-effort default.",
+  },
+  {
+    key: "tradeindia",
+    label: "TradeIndia",
+    instructions:
+      "No self-serve API — ask TradeIndia's account manager to deliver leads to the URL below. Get a sample payload from them first; the field mapping here is a best-effort default.",
   },
 ];
 
@@ -68,9 +93,9 @@ export async function listSources(organizationId: string) {
       active: s.active,
       instructions: info?.instructions ?? "Custom source — map its payload fields in lib/channels/inbound.ts.",
       ingestUrl: ingestUrlFor(organizationId, s.key),
-      // The three other sources need only the URL; Meta additionally needs the
-      // signature/verify-token env vars before it will accept anything.
-      needsEnvSetup: s.key === "meta_lead_ads" && !configured.meta,
+      // Most sources need only the URL; Meta and Google Ads additionally need env-level
+      // credentials (signature/verify-token, or a shared webhook key) before they'll work.
+      needsEnvSetup: s.key in ENV_GATED_SOURCES && !configured[ENV_GATED_SOURCES[s.key]],
     };
   });
 }

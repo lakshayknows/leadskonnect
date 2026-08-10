@@ -278,6 +278,10 @@ model SendingAccount {
   imapPort       Int? // IMAP port (993)
   lastPolledAt   DateTime? // last successful inbound poll
   gmailHistoryId String? // Gmail API history cursor (gmail_oauth only)
+  // When set, this mailbox's inbound mail is a lead-aggregator's notification email
+  // (JustDial, Sulekha, TradeIndia — dev PRD §3.7-3.8's webhook-less fallback), parsed via
+  // lib/email-lead-parser.ts and ingested as new leads instead of matched as a reply.
+  leadSourceKey  String?
   // Per-account DKIM (SMTP accounts) — overrides the env default signing
   dkimDomain     String?
   dkimSelector   String?

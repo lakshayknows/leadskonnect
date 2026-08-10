@@ -15,6 +15,7 @@ export async function GET() {
       linkedin: configured.linkedin,
       agent: configured.agent,
       meta: configured.meta,
+      googleAds: configured.googleAds,
     },
   });
 }

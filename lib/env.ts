@@ -100,6 +100,17 @@ export const env = {
     appSecret: get("META_APP_SECRET"),
     pageAccessToken: get("META_PAGE_ACCESS_TOKEN"),
   },
+
+  // Google Ads Lead Form Extensions inbound webhook (/api/inbound/google_ads).
+  googleAds: {
+    webhookKey: get("GOOGLE_ADS_WEBHOOK_KEY"),
+  },
+
+  // IndiaMART's separate historical-backfill key (scripts/indiamart-backfill.ts) —
+  // distinct from the Push webhook's ingest key, generated on the same Lead Manager page.
+  indiamartPull: {
+    apiKey: get("INDIAMART_PULL_API_KEY"),
+  },
 };
 
 export const configured = {
@@ -112,4 +123,5 @@ export const configured = {
   qstash: !!(env.qstash.url && env.qstash.token),
   google: !!(env.google.clientId && env.google.clientSecret),
   meta: !!(env.meta.verifyToken && env.meta.appSecret && env.meta.pageAccessToken),
+  googleAds: !!env.googleAds.webhookKey,
 };
