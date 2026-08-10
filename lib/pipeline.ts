@@ -99,11 +99,22 @@ export async function createPipeline(
   });
 }
 
-/** Every non-archived pipeline for an org, with its stages and item count. */
-export async function listPipelines(organizationId: string) {
-  await ensureDefaultPipeline(organizationId);
+/**
+ * Every non-archived pipeline for an org, with its stages and item count. Pass
+ * `department` for a group-leader/member caller (PRD §4) so they only ever see their own
+ * department's pipeline(s) — omit it for owner/admin, who see every department.
+ */
+export async function listPipelines(organizationId: string, department?: Department) {
+  if (department) {
+    // A department-scoped caller still needs *a* pipeline to land on — seed theirs if
+    // it doesn't exist yet, same idea as ensureDefaultPipeline but per-department.
+    const has = await prisma.pipeline.findFirst({ where: { organizationId, department, archivedAt: null } });
+    if (!has) await createPipeline(organizationId, department);
+  } else {
+    await ensureDefaultPipeline(organizationId);
+  }
   return prisma.pipeline.findMany({
-    where: { organizationId, archivedAt: null },
+    where: { organizationId, archivedAt: null, ...(department && { department }) },
     orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
     include: {
       stages: { orderBy: { position: "asc" } },
@@ -374,14 +385,19 @@ export async function moveToStage(args: {
 }
 
 /**
- * Everything past its SLA, most overdue first. Cross-pipeline and
- * cross-department by design — the PRD's ageing view is one list, not one per
- * team.
+ * Everything past its SLA, most overdue first. Cross-pipeline and cross-department by
+ * default (the PRD's ageing view is one list, not one per team) — but a group-leader/
+ * member caller passes `department` to scope it to just their own, per PRD §4.
  */
-export async function getAgeing(organizationId: string, limit = 100) {
+export async function getAgeing(organizationId: string, limit = 100, department?: Department) {
   const now = new Date();
   const items = await prisma.pipelineItem.findMany({
-    where: { organizationId, closedAt: null, slaDueAt: { not: null, lt: now } },
+    where: {
+      organizationId,
+      closedAt: null,
+      slaDueAt: { not: null, lt: now },
+      ...(department && { pipeline: { department } }),
+    },
     orderBy: { slaDueAt: "asc" },
     take: limit,
     include: {
@@ -437,11 +453,22 @@ export async function sweepSlaBreaches(organizationId: string) {
   return { breached: due.length, escalated };
 }
 
-/** Board data: stages in order, each with its items. */
-export async function getBoard(organizationId: string, pipelineId?: string) {
-  const pipeline = pipelineId
-    ? await prisma.pipeline.findFirst({ where: { id: pipelineId, organizationId } })
-    : await ensureDefaultPipeline(organizationId);
+/**
+ * Board data: stages in order, each with its items. `department` scopes a group-leader/
+ * member caller to their own department (PRD §4) — an explicit `pipelineId` outside that
+ * department returns null (not found) rather than leaking another team's board.
+ */
+export async function getBoard(organizationId: string, pipelineId?: string, department?: Department) {
+  let pipeline;
+  if (pipelineId) {
+    pipeline = await prisma.pipeline.findFirst({ where: { id: pipelineId, organizationId } });
+    if (pipeline && department && pipeline.department !== department) return null;
+  } else if (department) {
+    pipeline = await prisma.pipeline.findFirst({ where: { organizationId, department, archivedAt: null }, orderBy: { createdAt: "asc" } });
+    if (!pipeline) pipeline = await createPipeline(organizationId, department);
+  } else {
+    pipeline = await ensureDefaultPipeline(organizationId);
+  }
   if (!pipeline) return null;
 
   const [stages, items] = await Promise.all([

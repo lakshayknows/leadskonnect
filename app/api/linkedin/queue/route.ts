@@ -29,14 +29,16 @@ export async function GET(req: NextRequest) {
     ok({
       pacing: { minDelaySec: account.minDelaySec, maxDelaySec: account.maxDelaySec },
       mode: account.mode,
-      actions: actions.map((a) => ({ id: a.id, type: a.type, linkedinUrl: a.linkedinUrl, note: a.note })),
+      actions: actions.map((a) => ({ id: a.id, type: a.type, linkedinUrl: a.linkedinUrl, note: a.note, leadName: a.leadName })),
     })
   );
 }
 
 const Report = z.object({
   actionId: z.string(),
-  status: z.enum(["sent", "failed", "skipped"]),
+  // "drafted" is a non-terminal checkpoint — tab opened and filled, awaiting the human's
+  // own Send click — reported so the queue's daily cap and stale-reclaim both see it.
+  status: z.enum(["sent", "failed", "skipped", "drafted"]),
   result: z.string().optional(),
   liMemberName: z.string().optional(),
 });

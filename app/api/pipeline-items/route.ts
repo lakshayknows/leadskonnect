@@ -1,7 +1,8 @@
 import type { NextRequest } from "next/server";
 import { z } from "zod";
+import { prisma } from "@/lib/db";
 import { ok, fail } from "@/lib/http";
-import { requireOrg } from "@/lib/tenant";
+import { requireOrg, requireDepartmentAccess } from "@/lib/tenant";
 import { addToPipeline, moveToStage, BackwardMoveNeedsReason } from "@/lib/pipeline";
 
 export const runtime = "nodejs";
@@ -13,6 +14,15 @@ export async function POST(req: NextRequest) {
   if (ctx instanceof Response) return ctx;
   const parsed = Add.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return fail("pipelineId and leadId are required.", 422);
+
+  const pipeline = await prisma.pipeline.findFirst({
+    where: { id: parsed.data.pipelineId, organizationId: ctx.orgId },
+    select: { department: true },
+  });
+  if (!pipeline) return fail("Pipeline not found.", 404);
+  const gate = requireDepartmentAccess(ctx, pipeline.department);
+  if (gate) return gate;
+
   return ok(await addToPipeline({ organizationId: ctx.orgId, ...parsed.data }));
 }
 
@@ -28,6 +38,14 @@ export async function PATCH(req: NextRequest) {
   if (ctx instanceof Response) return ctx;
   const parsed = Move.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return fail("itemId and toStageId are required.", 422);
+
+  const item = await prisma.pipelineItem.findFirst({
+    where: { id: parsed.data.itemId, organizationId: ctx.orgId },
+    select: { pipeline: { select: { department: true } } },
+  });
+  if (!item) return fail("Pipeline item not found.", 404);
+  const gate = requireDepartmentAccess(ctx, item.pipeline.department);
+  if (gate) return gate;
 
   try {
     return ok(

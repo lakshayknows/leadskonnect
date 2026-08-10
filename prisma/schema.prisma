@@ -75,6 +75,7 @@ model Lead {
   leadSourceId       String?
   pipelineItems      PipelineItem[]
   conversationEvents ConversationEvent[]
+  linkedInActions    LinkedInAction[]
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -486,11 +487,14 @@ model LinkedInAction {
   id             String    @id @default(uuid())
   organizationId String
   leadId         String
+  lead           Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
   campaignId     String?
   type           String    @default("auto") // auto | invite | message
   linkedinUrl    String
   note           String? // rendered invite note / message body
-  status         String    @default("pending") // pending | in_progress | sent | failed | skipped
+  // pending | in_progress (extension opening the tab) | drafted (filled, awaiting a human's
+  // own Send click) | sent | failed | skipped
+  status         String    @default("pending")
   result         String? // extension-reported detail
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt

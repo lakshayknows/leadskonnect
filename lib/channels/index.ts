@@ -6,6 +6,7 @@ import type { Channel, Lead, SendResult } from "./types";
 import type { RenderedMessage } from "../templates";
 import { acquire } from "../ratelimit";
 import { isSuppressed } from "../crm";
+import { recordConversationEvent } from "../conversation";
 
 export const channels: Record<Channel["name"], Channel> = {
   email: emailChannel,
@@ -42,5 +43,23 @@ export async function safeSend(
     };
   }
 
-  return channel.send(lead, rendered, account);
+  const result = await channel.send(lead, rendered, account);
+
+  // LinkedIn's "ok" here means "queued for the extension to draft," not "a human actually
+  // sent it" — that confirmation writes its own ConversationEvent later, from
+  // lib/linkedin/queue.ts::completeAction, once the person clicks "I sent it."
+  if (result.ok && !result.skipped && channelName !== "linkedin") {
+    await recordConversationEvent({
+      organizationId: orgId,
+      leadId: lead.id,
+      channel: channelName,
+      direction: "outbound",
+      subject: rendered.subject ?? null,
+      body: rendered.body ?? null,
+      status: "sent",
+      externalId: result.providerId ?? null,
+    });
+  }
+
+  return result;
 }

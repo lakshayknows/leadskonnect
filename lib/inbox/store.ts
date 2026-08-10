@@ -9,6 +9,7 @@
  */
 import { prisma } from "../db";
 import { logActivity } from "../crm";
+import { recordConversationEvent } from "../conversation";
 import type { Channel } from "@prisma/client";
 
 interface InboundInput {
@@ -83,6 +84,16 @@ export async function recordInbound(orgId: string, input: InboundInput): Promise
   if (lead) {
     await logActivity({ organizationId: orgId, leadId: lead.id, type: "replied", channel, meta: { subject: input.subject } });
     await prisma.lead.update({ where: { id: lead.id }, data: { stage: "replied" } });
+    await recordConversationEvent({
+      organizationId: orgId,
+      leadId: lead.id,
+      channel,
+      direction: "inbound",
+      subject: input.subject ?? null,
+      body: input.body ?? null,
+      externalId: input.providerMessageId ?? null,
+      occurredAt: input.sentAt,
+    });
   }
 
   return { recorded: true, matched: !!lead };

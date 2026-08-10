@@ -5,9 +5,11 @@
  */
 import { prisma } from "../db";
 import { logActivity } from "../crm";
+import { recordConversationEvent } from "../conversation";
 import { randomUUID } from "node:crypto";
 
 const STALE_MS = 15 * 60 * 1000; // reclaim actions stuck "in_progress" (browser closed mid-run)
+const DRAFT_STALE_MS = 40 * 60 * 1000; // longer grace for "drafted" — a human has to actually read and act
 
 function startOfDay() {
   const d = new Date();
@@ -69,12 +71,20 @@ export async function claimActions(account: ClaimAccount, limit: number) {
   const selected = account.selectedCampaignIds ?? [];
 
   await prisma.linkedInAction.updateMany({
-    where: { organizationId, status: "in_progress", updatedAt: { lt: new Date(Date.now() - STALE_MS) } },
+    where: {
+      organizationId,
+      OR: [
+        { status: "in_progress", updatedAt: { lt: new Date(Date.now() - STALE_MS) } },
+        // A human never came back to confirm or skip a drafted action — release it rather
+        // than let it block the queue forever.
+        { status: "drafted", updatedAt: { lt: new Date(Date.now() - DRAFT_STALE_MS) } },
+      ],
+    },
     data: { status: "pending" },
   });
 
   const usedGlobal = await prisma.linkedInAction.count({
-    where: { organizationId, status: { in: ["sent", "in_progress"] }, updatedAt: { gte: startOfToday } },
+    where: { organizationId, status: { in: ["sent", "in_progress", "drafted"] }, updatedAt: { gte: startOfToday } },
   });
   const take = Math.min(Math.max(0, account.dailyInviteCap - usedGlobal), limit);
   if (take <= 0) return [];
@@ -85,13 +95,14 @@ export async function claimActions(account: ClaimAccount, limit: number) {
     where: { organizationId, status: "pending" },
     orderBy: { createdAt: "asc" },
     take: take * 5 + 20,
+    include: { lead: { select: { firstName: true, lastName: true } } },
   });
 
   const usedCache = new Map<string, number>();
   const usedFor = async (cid: string) => {
     if (!usedCache.has(cid)) {
       usedCache.set(cid, await prisma.linkedInAction.count({
-        where: { organizationId, campaignId: cid, status: { in: ["sent", "in_progress"] }, updatedAt: { gte: startOfToday } },
+        where: { organizationId, campaignId: cid, status: { in: ["sent", "in_progress", "drafted"] }, updatedAt: { gte: startOfToday } },
       }));
     }
     return usedCache.get(cid)!;
@@ -119,13 +130,19 @@ export async function claimActions(account: ClaimAccount, limit: number) {
   return picked.map((a) => ({
     ...a,
     type: settings[a.campaignId ?? ""]?.mode || account.mode || a.type || "auto",
+    leadName: [a.lead?.firstName, a.lead?.lastName].filter(Boolean).join(" ") || null,
   }));
 }
 
-/** Extension reports the outcome; reflected as a Message + activity so it shows in the CRM. */
+/**
+ * Extension reports the outcome. `"drafted"` is a non-terminal checkpoint — the tab is open
+ * and filled, waiting on a human — so it only updates status, no CRM side effects yet.
+ * `"sent"`/`"failed"`/`"skipped"` are terminal and reflected as a Message + activity (+
+ * ConversationEvent) so they show up in the CRM.
+ */
 export async function completeAction(
   organizationId: string,
-  input: { actionId: string; status: "sent" | "failed" | "skipped"; result?: string }
+  input: { actionId: string; status: "sent" | "failed" | "skipped" | "drafted"; result?: string }
 ) {
   const action = await prisma.linkedInAction.findFirst({ where: { id: input.actionId, organizationId } });
   if (!action) return null;
@@ -138,6 +155,8 @@ export async function completeAction(
       sentAt: input.status === "sent" ? new Date() : null,
     },
   });
+
+  if (input.status === "drafted") return updated; // awaiting human review — nothing else to record yet
 
   if (input.status === "sent") {
     await prisma.message
@@ -156,6 +175,15 @@ export async function completeAction(
       .catch(() => {});
     // Move the lead forward from "new" so the pipeline reflects the touch.
     await prisma.lead.updateMany({ where: { id: action.leadId, stage: "new" }, data: { stage: "contacted" } }).catch(() => {});
+    await recordConversationEvent({
+      organizationId,
+      leadId: action.leadId,
+      channel: "linkedin",
+      direction: "outbound",
+      body: action.note,
+      status: "sent",
+      externalId: action.id,
+    });
   }
 
   await logActivity({

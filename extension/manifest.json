@@ -6,8 +6,7 @@
   "permissions": ["storage", "alarms", "scripting", "tabs"],
   "host_permissions": [
     "https://www.linkedin.com/*",
-    "https://www.followthroo.com/*",
-    "https://followthroo.com/*",
+    "https://app.followthroo.com/*",
     "http://localhost:3000/*"
   ],
   "background": { "service_worker": "background.js" },

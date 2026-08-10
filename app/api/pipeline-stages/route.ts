@@ -1,7 +1,8 @@
 import type { NextRequest } from "next/server";
 import { z } from "zod";
+import { prisma } from "@/lib/db";
 import { ok, fail } from "@/lib/http";
-import { requireOrg, requireRole } from "@/lib/tenant";
+import { requireOrg, requireRole, requireDepartmentAccess } from "@/lib/tenant";
 import { addStage, updateStage, deleteStage, StageHasItems } from "@/lib/pipeline";
 
 export const runtime = "nodejs";
@@ -24,6 +25,14 @@ export async function POST(req: NextRequest) {
 
   const parsed = Add.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return fail("pipelineId and name are required.", 422);
+
+  const pipeline = await prisma.pipeline.findFirst({
+    where: { id: parsed.data.pipelineId, organizationId: ctx.orgId },
+    select: { department: true },
+  });
+  if (!pipeline) return fail("Pipeline not found.", 404);
+  const deptGate = requireDepartmentAccess(ctx, pipeline.department);
+  if (deptGate) return deptGate;
 
   try {
     return ok(await addStage({ organizationId: ctx.orgId, ...parsed.data }));
@@ -49,6 +58,14 @@ export async function PATCH(req: NextRequest) {
   const parsed = Patch.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return fail("stageId is required.", 422);
 
+  const stage = await prisma.pipelineStage.findFirst({
+    where: { id: parsed.data.stageId, pipeline: { organizationId: ctx.orgId } },
+    select: { pipeline: { select: { department: true } } },
+  });
+  if (!stage) return fail("Stage not found.", 404);
+  const deptGate = requireDepartmentAccess(ctx, stage.pipeline.department);
+  if (deptGate) return deptGate;
+
   try {
     return ok(await updateStage({ organizationId: ctx.orgId, ...parsed.data }));
   } catch (e) {
@@ -66,6 +83,14 @@ export async function DELETE(req: NextRequest) {
 
   const parsed = Delete.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return fail("stageId is required.", 422);
+
+  const stage = await prisma.pipelineStage.findFirst({
+    where: { id: parsed.data.stageId, pipeline: { organizationId: ctx.orgId } },
+    select: { pipeline: { select: { department: true } } },
+  });
+  if (!stage) return fail("Stage not found.", 404);
+  const deptGate = requireDepartmentAccess(ctx, stage.pipeline.department);
+  if (deptGate) return deptGate;
 
   try {
     await deleteStage({ organizationId: ctx.orgId, stageId: parsed.data.stageId });
