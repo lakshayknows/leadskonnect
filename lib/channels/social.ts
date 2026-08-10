@@ -9,6 +9,7 @@ import type { RenderedMessage } from "../templates";
 export const socialChannel: Channel = {
   name: "social",
   isConfigured: () => false,
+  capabilities: () => ({ send: false, receive: false, templates: false, requiresOptIn: false }),
 
   async send(_lead: Lead, _rendered: RenderedMessage): Promise<SendResult> {
     return {

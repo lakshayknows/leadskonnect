@@ -14,6 +14,8 @@ export const linkedinChannel: Channel = {
   name: "linkedin",
   // Automation is client-side (the extension), so there are no server creds to gate on.
   isConfigured: () => true,
+  // humanAssisted is no longer aspirational — the extension drafts and a person sends.
+  capabilities: () => ({ send: true, receive: false, templates: false, requiresOptIn: false, humanAssisted: true }),
 
   async send(lead: Lead, rendered: RenderedMessage): Promise<SendResult> {
     if (!lead.linkedinUrl) return { ok: false, skipped: true, reason: "lead has no linkedinUrl" };

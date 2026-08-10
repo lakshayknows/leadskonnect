@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Users2, Mail, CreditCard, Bell, ArrowRight, Linkedin, User, Webhook, Workflow } from "lucide-react";
+import { Users2, Mail, CreditCard, Bell, ArrowRight, Linkedin, User, Webhook, Workflow, MessageCircle } from "lucide-react";
 import { ReplayTourCard } from "@/components/dashboard/tour/ReplayTourButton";
 import { DashHeader } from "@/components/ui";
 
@@ -12,6 +12,7 @@ const CARDS = [
   { href: "/dashboard/settings/sources", icon: Webhook, title: "Lead sources", desc: "Webhook URLs for Meta, IndiaMART, JustDial & web forms." },
   { href: "/dashboard/accounts", icon: Mail, title: "Sending accounts", desc: "Connect the mailboxes you send from." },
   { href: "/dashboard/settings/linkedin", icon: Linkedin, title: "LinkedIn", desc: "Automate invites & messages via the extension." },
+  { href: "/dashboard/settings/channels", icon: MessageCircle, title: "Business channels", desc: "WhatsApp connection status; SMS setup requirements." },
   { href: "/dashboard/settings/billing", icon: CreditCard, title: "Plans & billing", desc: "Your current plan and what's included." },
   { href: "/dashboard/settings/notifications", icon: Bell, title: "Notifications", desc: "Choose what we email you about." },
 ];

@@ -553,6 +553,26 @@ export async function sweepSlaBreaches(organizationId: string) {
 }
 
 /**
+ * Sweep every org with at least one pipeline — the scheduled-cron entry point
+ * (scripts/setup-qstash-schedules.ts, every 15 min). `GET /api/ageing` already sweeps
+ * its own org on read, so this exists purely to catch a breach even when nobody's
+ * looking at the Ageing page — "real-time" here means a tight polling loop, not a
+ * message bus, which is disproportionate to what a Vercel-serverless app needs.
+ */
+export async function sweepAllOrgsSlaBreaches() {
+  const orgs = await prisma.pipeline.findMany({
+    where: { archivedAt: null },
+    distinct: ["organizationId"],
+    select: { organizationId: true },
+  });
+  const results: Record<string, { breached: number; escalated: number }> = {};
+  for (const { organizationId } of orgs) {
+    results[organizationId] = await sweepSlaBreaches(organizationId);
+  }
+  return { orgs: orgs.length, results };
+}
+
+/**
  * Board data: stages in order, each with its items. `department` scopes a group-leader/
  * member caller to their own department (PRD §4) — an explicit `pipelineId` outside that
  * department returns null (not found) rather than leaking another team's board.

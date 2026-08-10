@@ -582,6 +582,23 @@ model ContactIdentity {
   @@index([organizationId])
 }
 
+/// ---- WhatsApp templates ----------------------------------------------------
+/// Outside the 24h session window (see lib/channels/whatsapp.ts), only an approved
+/// template may be sent — this is what a sender picks from once that path is built.
+/// Enforcement (refusing a free-form send outside the window) doesn't depend on this
+/// table existing; it's the future "which template" management surface.
+model WhatsAppTemplate {
+  id               String   @id @default(cuid())
+  organizationId   String
+  name             String
+  twilioContentSid String
+  approved         Boolean  @default(false)
+  createdAt        DateTime @default(now())
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
 /// ---- Lead sources + ROI ---------------------------------------------------
 model LeadSource {
   id             String   @id @default(cuid())
