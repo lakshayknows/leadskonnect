@@ -17,7 +17,10 @@ import type { OnboardingState } from "@/lib/queries";
 
 /** The dashboard is unusable below this width, so the tour doesn't run there. */
 const MIN_WIDTH = 1024;
-const TARGET_TIMEOUT_MS = 5000;
+const TARGET_TIMEOUT_MS = 8000;
+// Route transitions get their own, longer budget: every dashboard page is
+// force-dynamic and awaits Postgres, and a dev-mode first compile is slower still.
+const NAV_TIMEOUT_MS = 15000;
 
 export type TourStatus = "off" | "navigating" | "active" | "paused";
 
@@ -46,6 +49,10 @@ function patch(body: Record<string, unknown>) {
     method: "PATCH",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(body),
+    // Survives the page being closed or navigated away from mid-flight. Without
+    // it, skipping and immediately closing the tab can lose the write, and the
+    // tour reappears on the next visit — the exact thing it must never do.
+    keepalive: true,
   }).catch(() => {});
 }
 
@@ -106,6 +113,40 @@ function waitForTarget(id: TourStep["target"], signal: AbortSignal): Promise<HTM
   });
 }
 
+/**
+ * Resolve once the router has actually landed on `path`.
+ *
+ * `router.push` inside `startTransition` returns immediately, but the URL only
+ * changes once the RSC payload arrives — and every dashboard page is
+ * force-dynamic, so that can take seconds. Waiting for the target *before*
+ * waiting for the route meant a slow page could time out mid-navigation, mark
+ * the step active while still on the old route, and trip the off-route guard
+ * into pausing a tour that was working fine.
+ */
+function waitForPath(path: string, signal: AbortSignal, timeout: number): Promise<boolean> {
+  if (window.location.pathname === path) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    let done = false;
+    const settle = (v: boolean) => {
+      if (done) return;
+      done = true;
+      cancelAnimationFrame(raf);
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+      resolve(v);
+    };
+    const onAbort = () => settle(false);
+    let raf = 0;
+    const tick = () => {
+      if (window.location.pathname === path) return settle(true);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    const timer = setTimeout(() => settle(false), timeout);
+    signal.addEventListener("abort", onAbort);
+  });
+}
+
 /** Resolve once the element's rect stops moving, so the ring doesn't chase a smooth scroll. */
 function settleRect(el: HTMLElement): Promise<void> {
   return new Promise((resolve) => {
@@ -141,18 +182,23 @@ export function TourProvider({
   // Lazy initialiser, NOT an effect: on a genuine first login the overlay is
   // present in the very first client paint, and for everyone else it never
   // renders at all — not even for one frame. An effect would flash it.
+  const resumeIndex = Math.min(initial?.step ?? 0, PRODUCT_TOUR.length - 1);
+
   const [status, setStatus] = useState<TourStatus>(() => {
     if (typeof window === "undefined") return "off";
     if (window.innerWidth < MIN_WIDTH) return "off";
     if (!initial) return "off";
-    const unseen = !initial.completedAt && !initial.skippedAt;
-    return unseen ? "navigating" : "off";
+    if (initial.completedAt || initial.skippedAt) return "off";
+    // Autostart only where the tour is already meant to be — /dashboard for a
+    // new user, or the route it was left on mid-tour. Someone who deep-links to
+    // another page asked for THAT page; navigating them away would be the tour
+    // stealing their navigation, which no autostarting thing should ever do.
+    // They still get it next time they land on /dashboard, or from Settings.
+    if (window.location.pathname !== PRODUCT_TOUR[resumeIndex].path) return "off";
+    return "navigating";
   });
 
-  const [index, setIndex] = useState(() => {
-    if (!initial) return 0;
-    return Math.min(initial.step ?? 0, PRODUCT_TOUR.length - 1);
-  });
+  const [index, setIndex] = useState(resumeIndex);
   const [target, setTarget] = useState<HTMLElement | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
@@ -174,6 +220,10 @@ export function TourProvider({
 
       if (s.path !== window.location.pathname) {
         startTransition(() => router.push(s.path));
+        // Land the route first. Only once we're on the right page does hunting
+        // for the target mean anything.
+        await waitForPath(s.path, ac.signal, NAV_TIMEOUT_MS);
+        if (ac.signal.aborted) return;
       }
 
       const el = await waitForTarget(s.target, ac.signal);
@@ -267,10 +317,13 @@ export function TourProvider({
   // If the user navigates away mid-tour, pause rather than yanking them back.
   useEffect(() => {
     if (status !== "active" || !step) return;
-    if (pathname !== step.path) {
-      setStatus("paused");
-      setTarget(null);
-    }
+    if (pathname === step.path) return;
+    // A step is only genuinely "off-route" if no navigation of ours is pending.
+    // Without this guard a slow route push looks identical to the user
+    // wandering off, and the tour pauses itself mid-step.
+    if (abortRef.current && !abortRef.current.signal.aborted) return;
+    setStatus("paused");
+    setTarget(null);
   }, [pathname, status, step]);
 
   const value = useMemo<TourApi>(
