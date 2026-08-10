@@ -14,6 +14,7 @@ export async function GET() {
       whatsapp: configured.whatsapp,
       linkedin: configured.linkedin,
       agent: configured.agent,
+      meta: configured.meta,
     },
   });
 }

@@ -93,6 +93,13 @@ export const env = {
     clientId: get("GOOGLE_CLIENT_ID"),
     clientSecret: get("GOOGLE_CLIENT_SECRET"),
   },
+
+  // Meta Lead Ads inbound webhook (/api/inbound/meta_lead_ads).
+  meta: {
+    verifyToken: get("META_VERIFY_TOKEN"),
+    appSecret: get("META_APP_SECRET"),
+    pageAccessToken: get("META_PAGE_ACCESS_TOKEN"),
+  },
 };
 
 export const configured = {
@@ -104,4 +111,5 @@ export const configured = {
   agent: !!env.nvidia.apiKey,
   qstash: !!(env.qstash.url && env.qstash.token),
   google: !!(env.google.clientId && env.google.clientSecret),
+  meta: !!(env.meta.verifyToken && env.meta.appSecret && env.meta.pageAccessToken),
 };

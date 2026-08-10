@@ -1,12 +1,31 @@
 "use client";
 
 import { useState } from "react";
+import useSWR from "swr";
 import { UserPlus, Trash2, Building2, Copy, Check, Shield } from "lucide-react";
 import { authClient, useSession } from "@/lib/auth-client";
+import { api } from "@/lib/client";
 import { Banner, DashHeader, Input, Label, Panel, Select, useConfirm, usePrompt } from "@/components/ui";
 import { Skeleton } from "@/components/ui";
 
-type Role = "owner" | "admin" | "member";
+type Role = "owner" | "admin" | "group_leader" | "member";
+type Department = "marketing" | "sales" | "support" | "collections" | "recruitment";
+type ApiMember = {
+  id: string;
+  userId: string;
+  role: Role;
+  department: Department | null;
+  managerId: string | null;
+  user: { id: string; name: string | null; email: string };
+};
+
+const DEPARTMENTS: { value: Department; label: string }[] = [
+  { value: "sales", label: "Sales" },
+  { value: "marketing", label: "Marketing" },
+  { value: "support", label: "Support" },
+  { value: "collections", label: "Collections" },
+  { value: "recruitment", label: "Recruitment" },
+];
 
 const appUrl = typeof window !== "undefined" ? window.location.origin : "";
 
@@ -14,6 +33,13 @@ export default function TeamClient() {
   const { data: session } = useSession();
   const { data: org, isPending, refetch } = authClient.useActiveOrganization();
   const { data: orgs } = authClient.useListOrganizations();
+  // better-auth's own member list has no concept of department/manager — those are
+  // custom columns on the same table, so the source of truth here is our own route.
+  const {
+    data: members = [],
+    isLoading: membersLoading,
+    mutate: refetchMembers,
+  } = useSWR<ApiMember[]>("/api/team/members");
 
   const [email, setEmail] = useState("");
   const [role, setRole] = useState<Role>("member");
@@ -24,18 +50,33 @@ export default function TeamClient() {
   const prompt = usePrompt();
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const members: any[] = (org as any)?.members ?? [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const invitations: any[] = ((org as any)?.invitations ?? []).filter((i: any) => i.status === "pending");
   const me = members.find((m) => m.userId === session?.user?.id);
   const canManage = me?.role === "owner" || me?.role === "admin";
+
+  async function updateHierarchy(
+    memberId: string,
+    data: { department?: Department | null; managerId?: string | null },
+  ) {
+    setMsg(null);
+    try {
+      await api(`/api/team/members/${memberId}`, { method: "PATCH", body: data });
+      await refetchMembers();
+    } catch (e) {
+      setMsg({ kind: "error", text: (e as Error).message });
+    }
+  }
 
   async function invite(e: React.FormEvent) {
     e.preventDefault();
     if (!email.trim()) return;
     setBusy(true);
     setMsg(null);
-    const res = await authClient.organization.inviteMember({ email: email.trim(), role });
+    // better-auth's role type is closed to the roles configured on its `organization`
+    // plugin (owner/admin/member); `role` is a plain string column with a 4th value
+    // (group_leader) it has no static knowledge of, so the cast is required, not lazy.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const res = await authClient.organization.inviteMember({ email: email.trim(), role: role as any });
     setBusy(false);
     if (res.error) return setMsg({ kind: "error", text: res.error.message ?? "Failed to invite" });
     setEmail("");
@@ -63,11 +104,14 @@ export default function TeamClient() {
     if (!ok) return;
     await authClient.organization.removeMember({ memberIdOrEmail });
     refetch?.();
+    refetchMembers();
   }
 
   async function changeRole(memberId: string, newRole: Role) {
-    await authClient.organization.updateMemberRole({ memberId, role: newRole });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await authClient.organization.updateMemberRole({ memberId, role: newRole as any });
     refetch?.();
+    refetchMembers();
   }
 
   async function switchOrg(organizationId: string) {
@@ -156,6 +200,7 @@ export default function TeamClient() {
                 <Label>Role</Label>
                 <Select value={role} onChange={(e) => setRole(e.target.value as Role)}>
                   <option value="member">Member</option>
+                  <option value="group_leader">Group leader</option>
                   <option value="admin">Admin</option>
                 </Select>
               </div>
@@ -169,43 +214,89 @@ export default function TeamClient() {
         {/* Members */}
         <Panel>
           <h2 className="mb-4 font-display text-base font-bold">Members</h2>
-          {isPending ? (
+          {membersLoading ? (
             <div className="space-y-2">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-10 w-full rounded-xl" />)}</div>
           ) : (
             <div className="divide-y divide-line">
-              {members.map((m) => (
-                <div key={m.id} className="flex items-center justify-between gap-3 py-3">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-medium">{m.user?.name || m.user?.email}</div>
-                    <div className="truncate text-xs text-ink-soft">{m.user?.email}</div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {canManage && m.role !== "owner" && m.userId !== session?.user?.id ? (
-                      <Select
-                        value={m.role}
-                        onChange={(e) => changeRole(m.id, e.target.value as Role)}
-                        className="w-28 !py-1.5 text-xs"
-                      >
-                        <option value="member">Member</option>
-                        <option value="admin">Admin</option>
-                      </Select>
+              {members.map((m) => {
+                const editable = canManage && m.role !== "owner" && m.userId !== session?.user?.id;
+                const manager = members.find((x) => x.id === m.managerId);
+                return (
+                  <div key={m.id} className="space-y-2 py-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-medium">{m.user?.name || m.user?.email}</div>
+                        <div className="truncate text-xs text-ink-soft">{m.user?.email}</div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {editable ? (
+                          <Select
+                            value={m.role}
+                            onChange={(e) => changeRole(m.id, e.target.value as Role)}
+                            className="w-32 !py-1.5 text-xs"
+                          >
+                            <option value="member">Member</option>
+                            <option value="group_leader">Group leader</option>
+                            <option value="admin">Admin</option>
+                          </Select>
+                        ) : (
+                          <span className="flex items-center gap-1 rounded-lg bg-tint px-2.5 py-1 text-xs font-medium capitalize">
+                            {m.role === "owner" && <Shield className="h-3 w-3" />} {m.role.replace("_", " ")}
+                          </span>
+                        )}
+                        {editable && (
+                          <button
+                            onClick={() => removeMember(m.id)}
+                            className="rounded-lg p-1.5 text-ink-soft hover:bg-tint hover:text-danger"
+                            title="Remove"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Org hierarchy (PRD §4): which department this person's pipeline
+                        work belongs to, and who the SLA escalation chain walks to. */}
+                    {editable ? (
+                      <div className="flex flex-wrap items-center gap-2 pl-0.5">
+                        <Select
+                          value={m.department ?? ""}
+                          onChange={(e) => updateHierarchy(m.id, { department: (e.target.value || null) as Department | null })}
+                          className="w-36 !py-1.5 text-xs"
+                        >
+                          <option value="">No department</option>
+                          {DEPARTMENTS.map((d) => (
+                            <option key={d.value} value={d.value}>{d.label}</option>
+                          ))}
+                        </Select>
+                        <span className="text-xs text-ink-faint">reports to</span>
+                        <Select
+                          value={m.managerId ?? ""}
+                          onChange={(e) => updateHierarchy(m.id, { managerId: e.target.value || null })}
+                          className="w-40 !py-1.5 text-xs"
+                        >
+                          <option value="">Nobody</option>
+                          {members
+                            .filter((x) => x.id !== m.id)
+                            .map((x) => (
+                              <option key={x.id} value={x.id}>{x.user?.name || x.user?.email}</option>
+                            ))}
+                        </Select>
+                      </div>
                     ) : (
-                      <span className="flex items-center gap-1 rounded-lg bg-tint px-2.5 py-1 text-xs font-medium capitalize">
-                        {m.role === "owner" && <Shield className="h-3 w-3" />} {m.role}
-                      </span>
-                    )}
-                    {canManage && m.role !== "owner" && m.userId !== session?.user?.id && (
-                      <button
-                        onClick={() => removeMember(m.id)}
-                        className="rounded-lg p-1.5 text-ink-soft hover:bg-tint hover:text-danger"
-                        title="Remove"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      (m.department || manager) && (
+                        <div className="flex flex-wrap items-center gap-1.5 pl-0.5 text-xs text-ink-soft">
+                          {m.department && (
+                            <span className="rounded-md bg-tint px-2 py-0.5 capitalize">{m.department}</span>
+                          )}
+                          {manager && <span>reports to {manager.user?.name || manager.user?.email}</span>}
+                        </div>
+                      )
                     )}
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </Panel>

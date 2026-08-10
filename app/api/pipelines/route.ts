@@ -1,9 +1,8 @@
 import type { NextRequest } from "next/server";
 import { z } from "zod";
-import { prisma } from "@/lib/db";
 import { ok, fail } from "@/lib/http";
 import { requireOrg, requireRole } from "@/lib/tenant";
-import { createPipeline, ensureDefaultPipeline, getBoard } from "@/lib/pipeline";
+import { createPipeline, getBoard, listPipelines } from "@/lib/pipeline";
 
 export const runtime = "nodejs";
 
@@ -16,16 +15,7 @@ export async function GET(req: NextRequest) {
     return ok(await getBoard(ctx.orgId, pipelineId));
   }
 
-  await ensureDefaultPipeline(ctx.orgId);
-  const pipelines = await prisma.pipeline.findMany({
-    where: { organizationId: ctx.orgId, archivedAt: null },
-    orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
-    include: {
-      stages: { orderBy: { position: "asc" } },
-      _count: { select: { items: true } },
-    },
-  });
-  return ok(pipelines);
+  return ok(await listPipelines(ctx.orgId));
 }
 
 const Create = z.object({

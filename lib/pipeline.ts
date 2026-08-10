@@ -99,6 +99,19 @@ export async function createPipeline(
   });
 }
 
+/** Every non-archived pipeline for an org, with its stages and item count. */
+export async function listPipelines(organizationId: string) {
+  await ensureDefaultPipeline(organizationId);
+  return prisma.pipeline.findMany({
+    where: { organizationId, archivedAt: null },
+    orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+    include: {
+      stages: { orderBy: { position: "asc" } },
+      _count: { select: { items: true } },
+    },
+  });
+}
+
 /** Idempotent: the org's default Sales pipeline, created on first use. */
 export async function ensureDefaultPipeline(organizationId: string) {
   const existing = await prisma.pipeline.findFirst({
@@ -108,6 +121,134 @@ export async function ensureDefaultPipeline(organizationId: string) {
   });
   if (existing) return existing;
   return createPipeline(organizationId, "sales", { isDefault: true });
+}
+
+export class StageHasItems extends Error {
+  constructor() {
+    super("This stage still has contacts in it — move them first.");
+    this.name = "StageHasItems";
+  }
+}
+
+/**
+ * Reassign every stage in `orderedIds` to its index as the new position.
+ *
+ * Two passes because `@@unique([pipelineId, position])` is checked per
+ * statement, not deferred: swapping two stages' positions directly would have
+ * one UPDATE collide with the row that hasn't moved yet. Landing everyone on a
+ * distinct negative position first guarantees no positive value is held by more
+ * than one row at any point, so the second pass can never collide.
+ */
+async function reindexStages(pipelineId: string, orderedIds: string[]) {
+  await prisma.$transaction(
+    orderedIds.map((id, i) => prisma.pipelineStage.update({ where: { id }, data: { position: -(i + 1) } })),
+  );
+  await prisma.$transaction(
+    orderedIds.map((id, i) => prisma.pipelineStage.update({ where: { id }, data: { position: i } })),
+  );
+}
+
+/** Add a stage to a pipeline, inserted at `atPosition` (default: append). */
+export async function addStage(args: {
+  organizationId: string;
+  pipelineId: string;
+  name: string;
+  kind?: StageKind;
+  slaHours?: number | null;
+  atPosition?: number;
+}) {
+  const pipeline = await prisma.pipeline.findFirst({
+    where: { id: args.pipelineId, organizationId: args.organizationId },
+  });
+  if (!pipeline) throw new Error("Pipeline not found.");
+
+  const stages = await prisma.pipelineStage.findMany({
+    where: { pipelineId: args.pipelineId },
+    orderBy: { position: "asc" },
+  });
+
+  const created = await prisma.pipelineStage.create({
+    data: {
+      pipelineId: args.pipelineId,
+      name: args.name,
+      kind: args.kind ?? "open",
+      slaHours: args.slaHours ?? null,
+      // Placeholder — reindexStages below assigns the real, final position.
+      position: stages.length,
+    },
+  });
+
+  const ids = stages.map((s) => s.id);
+  ids.splice(Math.max(0, Math.min(args.atPosition ?? ids.length, ids.length)), 0, created.id);
+  await reindexStages(args.pipelineId, ids);
+
+  invalidate(`pipeline:${args.organizationId}`);
+  return prisma.pipelineStage.findUniqueOrThrow({ where: { id: created.id } });
+}
+
+/** Rename, retime, retype, or reorder a stage. Any subset of fields may be passed. */
+export async function updateStage(args: {
+  organizationId: string;
+  stageId: string;
+  name?: string;
+  kind?: StageKind;
+  slaHours?: number | null;
+  /** New 0-based position among the pipeline's stages. */
+  position?: number;
+}) {
+  const stage = await prisma.pipelineStage.findFirst({
+    where: { id: args.stageId, pipeline: { organizationId: args.organizationId } },
+  });
+  if (!stage) throw new Error("Stage not found.");
+
+  const { name, kind, slaHours } = args;
+  if (name !== undefined || kind !== undefined || slaHours !== undefined) {
+    await prisma.pipelineStage.update({
+      where: { id: stage.id },
+      data: {
+        ...(name !== undefined && { name }),
+        ...(kind !== undefined && { kind }),
+        ...(slaHours !== undefined && { slaHours }),
+      },
+    });
+  }
+
+  if (args.position !== undefined) {
+    const siblings = await prisma.pipelineStage.findMany({
+      where: { pipelineId: stage.pipelineId },
+      orderBy: { position: "asc" },
+    });
+    const ids = siblings.map((s) => s.id).filter((id) => id !== stage.id);
+    ids.splice(Math.max(0, Math.min(args.position, ids.length)), 0, stage.id);
+    await reindexStages(stage.pipelineId, ids);
+  }
+
+  invalidate(`pipeline:${args.organizationId}`);
+  return prisma.pipelineStage.findUniqueOrThrow({ where: { id: stage.id } });
+}
+
+/** Remove a stage. Refuses if it still holds contacts, or if it's the pipeline's last stage. */
+export async function deleteStage(args: { organizationId: string; stageId: string }) {
+  const stage = await prisma.pipelineStage.findFirst({
+    where: { id: args.stageId, pipeline: { organizationId: args.organizationId } },
+    include: { _count: { select: { items: true } } },
+  });
+  if (!stage) throw new Error("Stage not found.");
+  if (stage._count.items > 0) throw new StageHasItems();
+
+  const siblings = await prisma.pipelineStage.findMany({
+    where: { pipelineId: stage.pipelineId },
+    orderBy: { position: "asc" },
+  });
+  if (siblings.length <= 1) throw new Error("A pipeline needs at least one stage.");
+
+  await prisma.pipelineStage.delete({ where: { id: stage.id } });
+  await reindexStages(
+    stage.pipelineId,
+    siblings.filter((s) => s.id !== stage.id).map((s) => s.id),
+  );
+
+  invalidate(`pipeline:${args.organizationId}`);
 }
 
 function slaDue(from: Date, slaHours: number | null | undefined): Date | null {
