@@ -32,6 +32,9 @@ enum MessageStatus {
   bounced
   replied
   failed
+  /// Confidence-gated autonomy (product PRD §7): the agent wrote this but wasn't
+  /// confident enough to send unattended — awaiting human approval on the Agent page.
+  draft
 }
 
 enum CampaignStatus {

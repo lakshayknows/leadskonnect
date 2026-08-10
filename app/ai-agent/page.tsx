@@ -11,7 +11,7 @@ export default function AiAgentPage() {
       <PageHero
         kicker="AI Agent"
         title="An agent that runs the whole campaign"
-        subtitle="Powered by Claude (claude-opus-4-8). Give it a brief and a lead list; it personalizes and sends across channels — and can never outrun a rate limit."
+        subtitle="Powered by Claude. Give it a brief and a lead list; it personalizes and sends across channels, qualifies contacts from the conversation, and can never outrun a rate limit."
       />
       <FeatureGrid
         items={[

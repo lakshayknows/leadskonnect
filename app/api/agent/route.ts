@@ -13,16 +13,17 @@ const RunAgent = z.object({
   brief: z.string().min(1),
   maxSteps: z.number().min(1).max(50).optional(),
   sendingAccountId: z.string().optional(),
+  confidenceThreshold: z.number().min(0).max(1).optional(),
 });
 
 export async function POST(req: NextRequest) {
   try {
     const ctx = await requireOrg(req);
     if (ctx instanceof Response) return ctx;
-    if (!configured.agent) return fail("NVIDIA_API_KEY not configured", 503);
+    if (!configured.agent) return fail("ANTHROPIC_API_KEY not configured", 503);
 
     const parsed = RunAgent.safeParse(await req.json().catch(() => null));
-    if (!parsed.success) return fail("expected { leadIds[], brief, maxSteps?, sendingAccountId? }");
+    if (!parsed.success) return fail("expected { leadIds[], brief, maxSteps?, sendingAccountId?, confidenceThreshold? }");
 
     const result = await runAgent({ orgId: ctx.orgId, userId: ctx.userId, ...parsed.data });
     return ok(result);
