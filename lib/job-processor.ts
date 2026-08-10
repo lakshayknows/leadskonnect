@@ -4,7 +4,7 @@ import { renderMessage } from "./templates";
 import { logActivity } from "./crm";
 import { recordOutbound } from "./inbox/store";
 import { injectTracking } from "./tracking";
-import { senderNameForCampaign } from "./sender";
+import { senderNameForCampaign, senderNameForAccount } from "./sender";
 import { randomUUID } from "node:crypto";
 import type { SendJob } from "./queue";
 
@@ -25,7 +25,10 @@ export async function processSendJob(jobData: SendJob) {
     ? await prisma.template.findFirst({ where: { id: templateId, organizationId } })
     : null;
 
-  const senderName = await senderNameForCampaign(campaignId, organizationId);
+  // The sending account's own name (the identity email's From header already shows)
+  // wins over the campaign creator's, so every channel this job touches signs consistently.
+  const senderName =
+    (await senderNameForAccount(account)) || (await senderNameForCampaign(campaignId, organizationId));
   const rendered = tpl
     ? renderMessage(tpl, lead, { senderName })
     : { body: "", subject: undefined };

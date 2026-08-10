@@ -30,7 +30,7 @@ import { prisma } from "./db";
 import { safeSend } from "./channels";
 import { renderMessage } from "./templates";
 import { logActivity } from "./crm";
-import { senderNameForUser, senderNameForCampaign } from "./sender";
+import { senderNameForUser, senderNameForCampaign, senderNameForAccount } from "./sender";
 import { moveToStage, BackwardMoveNeedsReason } from "./pipeline";
 import { recomputeAndSaveLeadScore } from "./scoring";
 import type { Channel } from "./channels/types";
@@ -296,7 +296,13 @@ export async function runAgent(opts: {
     return { ok: false, summary: "ANTHROPIC_API_KEY not set", steps: 0 };
   }
 
-  const senderName = (await senderNameForUser(opts.userId)) || (await senderNameForCampaign(undefined, opts.orgId));
+  // Same priority as the job processor (lib/job-processor.ts): the sending account's
+  // identity, if one was picked for this run, wins over the individual user's — so an
+  // agent sending as "Support Desk" doesn't sign its LinkedIn/email copy as someone else.
+  const senderName =
+    (await senderNameForAccount(opts.sendingAccountId)) ||
+    (await senderNameForUser(opts.userId)) ||
+    (await senderNameForCampaign(undefined, opts.orgId));
   const threshold = Math.min(1, Math.max(0, opts.confidenceThreshold ?? 0.7));
 
   const AnthropicSDK = (await import("@anthropic-ai/sdk")).default;

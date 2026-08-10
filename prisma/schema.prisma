@@ -185,6 +185,26 @@ model Suppression {
   @@index([organizationId])
 }
 
+/// Tamper-evident compliance ledger (product PRD §12 differentiator): an append-only,
+/// hash-chained log of consent/suppression events. Each entry's hash includes the
+/// previous entry's hash (lib/compliance-ledger.ts), so altering any past entry breaks
+/// every hash after it — a verifiable, exportable audit trail rather than a table that
+/// could be quietly edited.
+model ComplianceLedgerEntry {
+  id             String   @id @default(cuid())
+  organizationId String
+  /// 1-based, per-org, gap-free — the position in the chain.
+  sequence       Int
+  eventType      String
+  payload        Json
+  prevHash       String
+  hash           String
+  createdAt      DateTime @default(now())
+
+  @@unique([organizationId, sequence])
+  @@index([organizationId, createdAt])
+}
+
 // ---- better-auth (Stage 1: email/password; Stage 2 adds OAuth accounts) ----
 model User {
   id            String    @id @default(cuid())

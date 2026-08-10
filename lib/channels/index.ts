@@ -7,6 +7,7 @@ import type { RenderedMessage } from "../templates";
 import { acquire } from "../ratelimit";
 import { isSuppressed } from "../crm";
 import { recordConversationEvent } from "../conversation";
+import { isQuietHours } from "../quiet-hours";
 
 export const channels: Record<Channel["name"], Channel> = {
   email: emailChannel,
@@ -32,6 +33,10 @@ export async function safeSend(
 
   if (await isSuppressed(orgId, { email: lead.email, phone: lead.phone, linkedinUrl: lead.linkedinUrl })) {
     return { ok: false, skipped: true, reason: "suppressed" };
+  }
+
+  if (channelName === "whatsapp" && isQuietHours(lead.phone)) {
+    return { ok: false, skipped: true, reason: "quiet hours at the contact's estimated local time" };
   }
 
   const quota = await acquire(channelName, account, orgId);
