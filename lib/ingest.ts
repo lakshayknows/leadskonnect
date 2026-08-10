@@ -1,0 +1,112 @@
+/**
+ * One ingestion path for every inbound source.
+ *
+ * Adapters differ; what happens to their output must not. Every event resolves
+ * through the identity graph, writes to the unified conversation timeline, tags
+ * its source, and enters the department's pipeline — so a Meta lead, an
+ * IndiaMART push and a website form are indistinguishable downstream.
+ */
+import { prisma } from "./db";
+import { resolveContact, ensureSource } from "./identity";
+import { ensureDefaultPipeline, addToPipeline } from "./pipeline";
+import { isSuppressed } from "./crm";
+import { invalidate } from "./cache";
+import type { InboundEvent } from "./channels/types";
+
+export type IngestResult = {
+  leadId: string | null;
+  created: boolean;
+  merged: string[];
+  suppressed: boolean;
+  duplicate: boolean;
+};
+
+export async function ingestEvent(organizationId: string, event: InboundEvent): Promise<IngestResult> {
+  const base: IngestResult = { leadId: null, created: false, merged: [], suppressed: false, duplicate: false };
+
+  if (event.identities.length === 0) return base;
+
+  // Resolve first, so even a suppressed contact's history stays on one record.
+  const resolved = await resolveContact({
+    organizationId,
+    identities: event.identities,
+    profile: event.profile,
+    sourceKey: event.sourceKey,
+    source: event.sourceKey,
+  });
+
+  const email = event.identities.find((i) => i.kind === "email")?.value;
+  const phone = event.identities.find((i) => i.kind === "phone")?.value;
+  const suppressed = await isSuppressed(organizationId, { email, phone });
+
+  // Webhook retries are expected — Meta retries for up to 48h — so dedupe on
+  // the provider's own id rather than trusting delivery to be exactly-once.
+  let duplicate = false;
+  if (event.externalId) {
+    const existing = await prisma.conversationEvent.findUnique({
+      where: {
+        organizationId_channel_externalId: {
+          organizationId,
+          channel: event.channel,
+          externalId: event.externalId,
+        },
+      },
+      select: { id: true },
+    });
+    if (existing) duplicate = true;
+  }
+
+  if (!duplicate) {
+    await prisma.conversationEvent.create({
+      data: {
+        organizationId,
+        leadId: resolved.leadId,
+        channel: event.channel,
+        direction: event.direction,
+        subject: event.subject ?? null,
+        body: event.body ?? null,
+        externalId: event.externalId ?? null,
+        occurredAt: event.occurredAt ?? new Date(),
+        meta: (event.meta ?? {}) as object,
+      },
+    });
+  }
+
+  // A suppressed contact is recorded but never enters a pipeline — putting them
+  // on a board invites a rep to work someone who has opted out.
+  if (!suppressed && !duplicate) {
+    const pipeline = await ensureDefaultPipeline(organizationId);
+    const sourceId = event.sourceKey ? await ensureSource(organizationId, event.sourceKey) : null;
+    await addToPipeline({
+      organizationId,
+      pipelineId: pipeline.id,
+      leadId: resolved.leadId,
+      sourceId,
+    });
+  }
+
+  invalidate(`stats:${organizationId}`);
+  invalidate(`activation:${organizationId}`);
+  invalidate(`leads:`);
+
+  return {
+    leadId: resolved.leadId,
+    created: resolved.created,
+    merged: resolved.mergedLeadIds,
+    suppressed,
+    duplicate,
+  };
+}
+
+export async function ingestMany(organizationId: string, events: InboundEvent[]) {
+  const results: IngestResult[] = [];
+  for (const e of events) results.push(await ingestEvent(organizationId, e));
+  return {
+    received: events.length,
+    created: results.filter((r) => r.created).length,
+    merged: results.reduce((n, r) => n + r.merged.length, 0),
+    duplicates: results.filter((r) => r.duplicate).length,
+    suppressed: results.filter((r) => r.suppressed).length,
+    results,
+  };
+}

@@ -66,10 +66,15 @@ model Lead {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  messages    Message[]
-  activities  ActivityLog[]
-  enrollments Enrollment[]
-  inboxThreads InboxThread[]
+  messages           Message[]
+  activities         ActivityLog[]
+  enrollments        Enrollment[]
+  inboxThreads       InboxThread[]
+  contactIdentities  ContactIdentity[]
+  leadSource         LeadSource?         @relation(fields: [leadSourceId], references: [id])
+  leadSourceId       String?
+  pipelineItems      PipelineItem[]
+  conversationEvents ConversationEvent[]
 
   @@unique([organizationId, email])
   @@index([organizationId])
@@ -179,8 +184,8 @@ model User {
   sessions      Session[]
   accounts      Account[]
 
-  members            Member[]
-  sentInvitations    Invitation[]
+  members         Member[]
+  sentInvitations Invitation[]
 
   // ---- app-owned user state ----
   // All nullable with NO defaults, deliberately: better-auth's prismaAdapter
@@ -245,19 +250,19 @@ model Verification {
 }
 
 model SendingAccount {
-  id             String   @id @default(uuid())
+  id             String    @id @default(uuid())
   organizationId String? // tenant scope
   name           String // e.g. "Support Desk" or "Personal Gmail"
   email          String
-  provider       String   @default("smtp") // "smtp" | "gmail_oauth"
+  provider       String    @default("smtp") // "smtp" | "gmail_oauth"
   host           String? // SMTP host (null for gmail_oauth)
-  port           Int      @default(587)
-  secure         Boolean  @default(false)
+  port           Int       @default(587)
+  secure         Boolean   @default(false)
   user           String? // SMTP user (null for gmail_oauth)
   pass           String? // SMTP app password (null for gmail_oauth)
   refreshToken   String? // Google OAuth refresh token (gmail_oauth only)
   from           String? // Optional customized "From" header (e.g. "John <john@domain.com>")
-  active         Boolean  @default(true)
+  active         Boolean   @default(true)
   // Reply-poller cursors (see lib/inbox/poller.ts)
   imapHost       String? // IMAP host for SMTP accounts (defaults host→imap if unset)
   imapPort       Int? // IMAP port (993)
@@ -267,8 +272,8 @@ model SendingAccount {
   dkimDomain     String?
   dkimSelector   String?
   dkimPrivateKey String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   campaigns Campaign[]
   warmup    Warmup?
@@ -327,10 +332,22 @@ model Member {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   userId         String
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  role           String       @default("member") // owner | admin | member
+  role           String       @default("member") // owner | admin | member | group_leader
   createdAt      DateTime     @default(now())
 
+  // ---- org hierarchy (PRD section 4): Admin -> Group Leader -> Member ----
+  // Department is tagged at the group-leader level so one org can run Marketing,
+  // Sales and Support side by side on the same core.
+  department Department?
+  // Self-referencing manager link — this is what the SLA escalation chain walks
+  // (rep -> group leader -> admin) rather than a hardcoded three-tier lookup.
+  managerId  String?
+  manager    Member?     @relation("MemberHierarchy", fields: [managerId], references: [id], onDelete: SetNull)
+  reports    Member[]    @relation("MemberHierarchy")
+
   @@unique([organizationId, userId])
+  @@index([organizationId, department])
+  @@index([managerId])
   @@map("member")
 }
 
@@ -444,22 +461,22 @@ model InboxMessage {
 // The official API can't send invites/DMs, so campaigns enqueue LinkedInActions and a
 // browser extension drains them from the user's own logged-in LinkedIn session.
 model LinkedInAccount {
-  id              String    @id @default(uuid())
-  organizationId  String
-  userId          String // the member whose LinkedIn session the extension drives
-  extToken        String    @unique // bearer the Chrome extension authenticates with
-  status          String    @default("pending") // pending | connected
-  liMemberName    String? // display name the extension reports on check-in
-  dailyInviteCap  Int       @default(20)
-  dailyMessageCap Int       @default(40)
-  minDelaySec     Int       @default(45) // humanized pacing floor
-  maxDelaySec     Int       @default(120)
-  mode            String    @default("auto") // auto | invite | message — default action type
-  selectedCampaignIds String[] @default([]) // empty = drain all campaigns' LinkedIn actions
-  campaignSettings Json     @default("{}") // per-campaign override: { [campaignId]: { cap, minDelaySec, maxDelaySec, mode, enabled } }
-  lastSeenAt      DateTime?
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+  id                  String    @id @default(uuid())
+  organizationId      String
+  userId              String // the member whose LinkedIn session the extension drives
+  extToken            String    @unique // bearer the Chrome extension authenticates with
+  status              String    @default("pending") // pending | connected
+  liMemberName        String? // display name the extension reports on check-in
+  dailyInviteCap      Int       @default(20)
+  dailyMessageCap     Int       @default(40)
+  minDelaySec         Int       @default(45) // humanized pacing floor
+  maxDelaySec         Int       @default(120)
+  mode                String    @default("auto") // auto | invite | message — default action type
+  selectedCampaignIds String[]  @default([]) // empty = drain all campaigns' LinkedIn actions
+  campaignSettings    Json      @default("{}") // per-campaign override: { [campaignId]: { cap, minDelaySec, maxDelaySec, mode, enabled } }
+  lastSeenAt          DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   @@unique([organizationId, userId])
   @@index([organizationId])
@@ -481,4 +498,210 @@ model LinkedInAction {
 
   @@index([organizationId, status])
   @@index([leadId])
+}
+
+// ===========================================================================
+// Unified CRM core (product PRD v2, section 13 MVP)
+//
+// The pipeline engine is deliberately generic: one set of mechanics that any
+// department configures for itself, rather than a sales pipeline that later
+// gets copy-pasted for support and collections.
+// ===========================================================================
+
+enum Department {
+  marketing
+  sales
+  support
+  collections
+  recruitment
+}
+
+/// How a stage terminates a pipeline. `open` stages are in-flight; won/lost are
+/// terminal and stop SLA timers.
+enum StageKind {
+  open
+  won
+  lost
+}
+
+enum IdentityKind {
+  email
+  phone
+  linkedin
+  external
+}
+
+/// ---- Identity graph -------------------------------------------------------
+/// Resolves a person across email, phone, LinkedIn handle and any future
+/// identifier onto ONE Lead. The unique constraint is what makes a second
+/// touch from a different channel merge instead of creating a duplicate.
+model ContactIdentity {
+  id             String       @id @default(cuid())
+  organizationId String
+  leadId         String
+  lead           Lead         @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  kind           IdentityKind
+  /// Normalised at write time (lowercased email, E.164 phone, canonical
+  /// linkedin path) so equality alone is enough to resolve.
+  value          String
+  /// Which adapter first supplied this identifier.
+  source         String?
+  verifiedAt     DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@unique([organizationId, kind, value])
+  @@index([leadId])
+  @@index([organizationId])
+}
+
+/// ---- Lead sources + ROI ---------------------------------------------------
+model LeadSource {
+  id             String   @id @default(cuid())
+  organizationId String
+  /// Stable machine key: meta_lead_ads | google_ads | indiamart | justdial |
+  /// web_form | manual | csv | …
+  key            String
+  label          String
+  /// Recurring spend for this source, so cost-per-conversion is derivable
+  /// rather than a separate BI exercise.
+  monthlyCost    Decimal? @db.Decimal(12, 2)
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+
+  leads Lead[]
+  items PipelineItem[]
+
+  @@unique([organizationId, key])
+  @@index([organizationId])
+}
+
+/// ---- Generic pipeline engine ---------------------------------------------
+model Pipeline {
+  id             String     @id @default(cuid())
+  organizationId String
+  name           String
+  department     Department @default(sales)
+  isDefault      Boolean    @default(false)
+  archivedAt     DateTime?
+  createdAt      DateTime   @default(now())
+
+  stages PipelineStage[]
+  items  PipelineItem[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId, department])
+}
+
+model PipelineStage {
+  id         String    @id @default(cuid())
+  pipelineId String
+  pipeline   Pipeline  @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  name       String
+  position   Int
+  kind       StageKind @default(open)
+  /// Hours an item may sit here before it counts as breached. Null = no SLA.
+  slaHours   Int?
+  createdAt  DateTime  @default(now())
+
+  items PipelineItem[]
+
+  @@unique([pipelineId, position])
+  @@index([pipelineId])
+}
+
+/// One contact travelling through one pipeline. Unique per (pipeline, lead) so
+/// a contact cannot be double-assigned into the same funnel.
+model PipelineItem {
+  id             String        @id @default(cuid())
+  organizationId String
+  pipelineId     String
+  pipeline       Pipeline      @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  stageId        String
+  stage          PipelineStage @relation(fields: [stageId], references: [id])
+  leadId         String
+  lead           Lead          @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  /// Assigned rep. Raw userId — memberships are per-org and may change.
+  ownerId        String?
+  value          Decimal?      @db.Decimal(12, 2)
+  sourceId       String?
+  source         LeadSource?   @relation(fields: [sourceId], references: [id])
+  enteredStageAt DateTime      @default(now())
+  /// Derived from the stage's slaHours on every move; null when the stage has
+  /// no SLA or the item is closed.
+  slaDueAt       DateTime?
+  slaBreachedAt  DateTime?
+  closedAt       DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  transitions StageTransition[]
+  escalations EscalationEvent[]
+
+  @@unique([pipelineId, leadId])
+  @@index([organizationId, stageId])
+  @@index([organizationId, ownerId])
+  // Drives the ageing sweep: find everything overdue without a table scan.
+  @@index([slaDueAt, slaBreachedAt])
+}
+
+/// Every stage move, including who or what caused it. `actorKind = "ai"` is how
+/// the PRD's headline metric — share of moves driven by AI extraction rather
+/// than a rep updating a dropdown — becomes measurable.
+model StageTransition {
+  id          String       @id @default(cuid())
+  itemId      String
+  item        PipelineItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  fromStageId String?
+  toStageId   String
+  /// forward | backward — backward moves require a reason.
+  direction   String
+  reason      String?
+  actorId     String?
+  /// user | ai | system
+  actorKind   String       @default("user")
+  at          DateTime     @default(now())
+
+  @@index([itemId, at])
+}
+
+model EscalationEvent {
+  id             String       @id @default(cuid())
+  organizationId String
+  itemId         String
+  item           PipelineItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  /// 1 = owner, 2 = group leader, 3 = admin — follows the org hierarchy.
+  level          Int
+  toUserId       String?
+  /// in_app | email | whatsapp | sms | push
+  channel        String       @default("in_app")
+  sentAt         DateTime     @default(now())
+  meta           Json         @default("{}")
+
+  @@index([organizationId, sentAt])
+  @@index([itemId])
+}
+
+/// ---- Unified conversation -------------------------------------------------
+/// One timeline per resolved identity. Every channel adapter writes the same
+/// shape here, so a WhatsApp acknowledgement, a manual call and a support reply
+/// land on one thread rather than in three separate tables.
+model ConversationEvent {
+  id             String   @id @default(cuid())
+  organizationId String
+  leadId         String
+  lead           Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  channel        Channel
+  /// inbound | outbound
+  direction      String
+  status         String?
+  subject        String?
+  body           String?
+  /// Provider message id — the dedupe key for webhook retries.
+  externalId     String?
+  occurredAt     DateTime @default(now())
+  meta           Json     @default("{}")
+  createdAt      DateTime @default(now())
+
+  @@unique([organizationId, channel, externalId])
+  @@index([organizationId, leadId, occurredAt])
 }

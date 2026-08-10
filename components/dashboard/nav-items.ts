@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, Building2, Database, Radar, Rocket, FileText, Inbox, Bot,
-  ListChecks, BarChart3, ShieldCheck, Phone, Video, Mail, Settings,
+  ListChecks, BarChart3, ShieldCheck, Phone, Video, Mail, Settings, GitBranch, AlertTriangle,
   type LucideIcon,
 } from "lucide-react";
 import type { TourTargetId } from "./tour/target";
@@ -18,6 +18,7 @@ export const NAV_GROUPS: NavGroup[] = [
     title: "Find & manage",
     items: [
       { label: "Contacts", href: "/dashboard/leads", icon: Users },
+      { label: "Pipeline", href: "/dashboard/pipeline", icon: GitBranch },
       { label: "Companies", href: "/dashboard/companies", icon: Building2 },
       { label: "People database", icon: Database, soon: true },
       { label: "Signal agents", icon: Radar, soon: true },
@@ -38,6 +39,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Reports", href: "/dashboard/reports", icon: BarChart3 },
       { label: "Deliverability", href: "/dashboard/deliverability", icon: ShieldCheck },
+      { label: "Ageing", href: "/dashboard/ageing", icon: AlertTriangle },
       { label: "Calls", icon: Phone, soon: true },
       { label: "Meetings", icon: Video, soon: true },
     ],
