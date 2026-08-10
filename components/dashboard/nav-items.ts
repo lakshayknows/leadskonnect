@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, Building2, Database, Radar, Rocket, FileText, Inbox, Bot,
-  ListChecks, BarChart3, ShieldCheck, Phone, Video, Mail, Settings, GitBranch, AlertTriangle,
+  ListChecks, BarChart3, ShieldCheck, Phone, Video, Mail, Settings, GitBranch, AlertTriangle, Bell,
   type LucideIcon,
 } from "lucide-react";
 import type { TourTargetId } from "./tour/target";
@@ -40,6 +40,7 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Reports", href: "/dashboard/reports", icon: BarChart3 },
       { label: "Deliverability", href: "/dashboard/deliverability", icon: ShieldCheck },
       { label: "Ageing", href: "/dashboard/ageing", icon: AlertTriangle },
+      { label: "Escalations", href: "/dashboard/escalations", icon: Bell },
       { label: "Calls", icon: Phone, soon: true },
       { label: "Meetings", icon: Video, soon: true },
     ],

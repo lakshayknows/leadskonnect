@@ -13,15 +13,23 @@ import {
 
 type StageKind = "open" | "won" | "lost";
 type Stage = { id: string; name: string; kind: StageKind; slaHours: number | null; position: number };
+type AssignmentRule = "manual" | "round_robin" | "workload";
 type PipelineRow = {
   id: string;
   name: string;
   department: Department;
   isDefault: boolean;
+  assignmentRule: AssignmentRule;
   stages: Stage[];
   _count: { items: number };
 };
 type Department = "marketing" | "sales" | "support" | "collections" | "recruitment";
+
+const ASSIGNMENT_RULES: { value: AssignmentRule; label: string }[] = [
+  { value: "manual", label: "Manual (nobody auto-assigned)" },
+  { value: "round_robin", label: "Round robin" },
+  { value: "workload", label: "Least busy rep" },
+];
 
 const DEPARTMENTS: { value: Department; label: string }[] = [
   { value: "sales", label: "Sales" },
@@ -50,6 +58,17 @@ export default function PipelinesClient() {
       await api("/api/pipelines", { method: "POST", body: { department } });
       await mutate();
       toast("Pipeline created.");
+    } catch (e) {
+      setMsg({ kind: "error", text: (e as Error).message });
+    }
+  }
+
+  async function setAssignmentRule(pipeline: PipelineRow, assignmentRule: AssignmentRule) {
+    setMsg(null);
+    try {
+      await api("/api/pipelines", { method: "PATCH", body: { pipelineId: pipeline.id, assignmentRule } });
+      await mutate();
+      toast("Auto-assignment updated.");
     } catch (e) {
       setMsg({ kind: "error", text: (e as Error).message });
     }
@@ -166,12 +185,24 @@ export default function PipelinesClient() {
 
             return (
               <Panel key={pipeline.id}>
-                <div className="mb-4 flex items-center justify-between gap-3">
+                <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                   <div className="flex items-center gap-2">
                     <h2 className="font-display text-base font-bold">{pipeline.name}</h2>
                     {pipeline.isDefault && <Badge tone="accent">Default</Badge>}
+                    <span className="text-xs text-ink-soft">{pipeline._count.items} in pipeline</span>
                   </div>
-                  <span className="text-xs text-ink-soft">{pipeline._count.items} in pipeline</span>
+                  <div className="flex items-center gap-1.5">
+                    <Label>Auto-assign new contacts</Label>
+                    <Select
+                      value={pipeline.assignmentRule}
+                      onChange={(e) => setAssignmentRule(pipeline, e.target.value as AssignmentRule)}
+                      className="w-56 !py-1.5 text-xs"
+                    >
+                      {ASSIGNMENT_RULES.map((r) => (
+                        <option key={r.value} value={r.value}>{r.label}</option>
+                      ))}
+                    </Select>
+                  </div>
                 </div>
 
                 <div className="divide-y divide-line">

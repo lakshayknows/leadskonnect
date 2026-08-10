@@ -5,8 +5,10 @@
 import type { QueueJob } from "./queue";
 import { processSendJob } from "./job-processor";
 import { advanceEnrollment } from "./campaign-engine";
+import { sendCaptureAck } from "./notify";
 
 export async function runJob(job: QueueJob): Promise<unknown> {
   if (job.kind === "advance") return advanceEnrollment(job.enrollmentId);
+  if (job.kind === "lead-ack") return sendCaptureAck(job.organizationId, job.leadId);
   return processSendJob(job);
 }

@@ -267,6 +267,60 @@ function slaDue(from: Date, slaHours: number | null | undefined): Date | null {
   return new Date(from.getTime() + slaHours * 3600_000);
 }
 
+/**
+ * Pick an owner per the pipeline's `assignmentRule`. `manual` (the default) returns null
+ * — nobody's assigned unless a caller says so explicitly. `territory`/`source`-based
+ * rules aren't implemented: there's no territory concept in the data model, and a
+ * source-routing table would be new scope, not a gap in what's already here.
+ */
+async function computeAutoAssignee(pipeline: {
+  id: string;
+  organizationId: string;
+  department: Department;
+  assignmentRule: string;
+  lastAssignedMemberId: string | null;
+}): Promise<string | null> {
+  if (pipeline.assignmentRule === "manual") return null;
+
+  const members = await prisma.member.findMany({
+    where: { organizationId: pipeline.organizationId, department: pipeline.department },
+    orderBy: { createdAt: "asc" },
+    select: { userId: true },
+  });
+  if (members.length === 0) return null;
+
+  if (pipeline.assignmentRule === "round_robin") {
+    const ids = members.map((m) => m.userId);
+    const lastIdx = pipeline.lastAssignedMemberId ? ids.indexOf(pipeline.lastAssignedMemberId) : -1;
+    const next = ids[(lastIdx + 1) % ids.length];
+    await prisma.pipeline.update({ where: { id: pipeline.id }, data: { lastAssignedMemberId: next } });
+    return next;
+  }
+
+  if (pipeline.assignmentRule === "workload") {
+    // Fewest currently-open items in THIS pipeline wins; members with zero open items
+    // never show up in the groupBy at all, hence the default-to-0 lookup below.
+    const counts = await prisma.pipelineItem.groupBy({
+      by: ["ownerId"],
+      where: { pipelineId: pipeline.id, closedAt: null },
+      _count: { _all: true },
+    });
+    const countFor = new Map(counts.filter((c) => c.ownerId).map((c) => [c.ownerId as string, c._count._all]));
+    let best = members[0].userId;
+    let bestCount = countFor.get(best) ?? 0;
+    for (const m of members) {
+      const c = countFor.get(m.userId) ?? 0;
+      if (c < bestCount) {
+        best = m.userId;
+        bestCount = c;
+      }
+    }
+    return best;
+  }
+
+  return null;
+}
+
 /** Put a contact into a pipeline at its first stage. Idempotent per pipeline. */
 export async function addToPipeline(args: {
   organizationId: string;
@@ -283,11 +337,18 @@ export async function addToPipeline(args: {
   });
   if (existing) return existing;
 
+  const pipeline = await prisma.pipeline.findFirst({ where: { id: pipelineId, organizationId } });
+  if (!pipeline) throw new Error("Pipeline not found.");
+
   const first = await prisma.pipelineStage.findFirst({
     where: { pipelineId },
     orderBy: { position: "asc" },
   });
   if (!first) throw new Error("Pipeline has no stages.");
+
+  // `undefined` means "not specified, auto-assign if the pipeline says to"; an explicit
+  // `null` means "leave unassigned" and is respected as-is.
+  const ownerId = args.ownerId !== undefined ? args.ownerId : await computeAutoAssignee(pipeline);
 
   const now = new Date();
   const item = await prisma.pipelineItem.create({
@@ -296,7 +357,7 @@ export async function addToPipeline(args: {
       pipelineId,
       stageId: first.id,
       leadId,
-      ownerId: args.ownerId ?? null,
+      ownerId,
       sourceId: args.sourceId ?? null,
       value: args.value ?? null,
       enteredStageAt: now,
@@ -415,15 +476,26 @@ export async function getAgeing(organizationId: string, limit = 100, department?
 }
 
 /**
- * Mark newly-breached items and record an escalation against the owner's
- * manager. Idempotent: `slaBreachedAt` is the guard, so re-running never
- * double-escalates.
+ * Mark newly-breached items, record an escalation against the owner's manager, and
+ * actually deliver it by email. Idempotent: `slaBreachedAt` is the guard, so re-running
+ * never double-escalates.
+ *
+ * Email is the only delivery channel today — WhatsApp would need a phone number on the
+ * escalation target, and neither User nor Member has one (confirmed absent; the same gap
+ * that blocks a per-rep "connect your number" flow for click-to-call). Recorded honestly
+ * in each event's `meta.channels` rather than claiming a delivery that didn't happen.
  */
 export async function sweepSlaBreaches(organizationId: string) {
   const now = new Date();
   const due = await prisma.pipelineItem.findMany({
     where: { organizationId, closedAt: null, slaBreachedAt: null, slaDueAt: { not: null, lt: now } },
-    select: { id: true, ownerId: true },
+    select: {
+      id: true,
+      ownerId: true,
+      lead: { select: { firstName: true, lastName: true, email: true } },
+      stage: { select: { name: true } },
+      pipeline: { select: { name: true } },
+    },
     take: 500,
   });
   if (due.length === 0) return { breached: 0, escalated: 0 };
@@ -443,8 +515,35 @@ export async function sweepSlaBreaches(organizationId: string) {
         })
       : null;
     const toUserId = manager?.manager?.userId ?? null;
+
+    const channels: string[] = [];
+    if (toUserId) {
+      const target = await prisma.user.findUnique({ where: { id: toUserId }, select: { email: true, name: true } });
+      if (target?.email) {
+        const contactName = [item.lead.firstName, item.lead.lastName].filter(Boolean).join(" ") || item.lead.email || "A contact";
+        const { emailChannel } = await import("./channels/email");
+        const sent = await emailChannel
+          .send(
+            { id: `escalation:${item.id}`, email: target.email, firstName: target.name },
+            {
+              subject: `Overdue: ${contactName} in ${item.pipeline.name}`,
+              body: `${contactName} has been sitting in "${item.stage.name}" past its SLA and needs attention.`,
+            },
+          )
+          .catch(() => ({ ok: false }));
+        if (sent.ok) channels.push("email");
+      }
+    }
+
     await prisma.escalationEvent.create({
-      data: { organizationId, itemId: item.id, level: toUserId ? 2 : 1, toUserId, channel: "in_app" },
+      data: {
+        organizationId,
+        itemId: item.id,
+        level: toUserId ? 2 : 1,
+        toUserId,
+        channel: channels[0] ?? "in_app",
+        meta: { channels, reason: toUserId ? undefined : "no manager on file to escalate to" },
+      },
     });
     escalated++;
   }
@@ -508,6 +607,41 @@ export async function getBoard(organizationId: string, pipelineId?: string, depa
         })),
     })),
   };
+}
+
+/** Escalation audit log, most recent first. `department` scopes a group-leader/member
+ *  caller to their own department, same as getAgeing. */
+export async function getEscalations(organizationId: string, limit = 100, department?: Department) {
+  const events = await prisma.escalationEvent.findMany({
+    where: { organizationId, ...(department && { item: { pipeline: { department } } }) },
+    orderBy: { sentAt: "desc" },
+    take: limit,
+    include: {
+      item: {
+        select: {
+          id: true,
+          lead: { select: { id: true, firstName: true, lastName: true, email: true } },
+          stage: { select: { name: true } },
+          pipeline: { select: { id: true, name: true, department: true } },
+        },
+      },
+    },
+  });
+  const userIds = [...new Set(events.map((e) => e.toUserId).filter((id): id is string => !!id))];
+  const users = userIds.length
+    ? await prisma.user.findMany({ where: { id: { in: userIds } }, select: { id: true, name: true, email: true } })
+    : [];
+  const userById = new Map(users.map((u) => [u.id, u]));
+
+  return events.map((e) => ({
+    id: e.id,
+    level: e.level,
+    channel: e.channel,
+    sentAt: e.sentAt.toISOString(),
+    meta: e.meta,
+    to: e.toUserId ? userById.get(e.toUserId) ?? null : null,
+    item: e.item,
+  }));
 }
 
 /** Share of stage moves the AI drove — the PRD's headline success metric. */

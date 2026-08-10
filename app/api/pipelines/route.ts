@@ -1,8 +1,9 @@
 import type { NextRequest } from "next/server";
 import { z } from "zod";
 import type { Department } from "@prisma/client";
+import { prisma } from "@/lib/db";
 import { ok, fail } from "@/lib/http";
-import { requireOrg, requireRole, isDepartmentScoped } from "@/lib/tenant";
+import { requireOrg, requireRole, requireDepartmentAccess, isDepartmentScoped } from "@/lib/tenant";
 import { createPipeline, getBoard, listPipelines } from "@/lib/pipeline";
 
 export const runtime = "nodejs";
@@ -52,4 +53,33 @@ export async function POST(req: NextRequest) {
     if (msg.includes("Unique")) return fail("A pipeline with that name already exists.", 409);
     return fail(msg, 400);
   }
+}
+
+const Patch = z.object({
+  pipelineId: z.string().min(1),
+  assignmentRule: z.enum(["manual", "round_robin", "workload"]),
+});
+
+export async function PATCH(req: NextRequest) {
+  const ctx = await requireOrg(req);
+  if (ctx instanceof Response) return ctx;
+  const gate = requireRole(ctx, ["owner", "admin", "group_leader"]);
+  if (gate) return gate;
+
+  const parsed = Patch.safeParse(await req.json().catch(() => null));
+  if (!parsed.success) return fail("pipelineId and assignmentRule are required.", 422);
+
+  const pipeline = await prisma.pipeline.findFirst({
+    where: { id: parsed.data.pipelineId, organizationId: ctx.orgId },
+    select: { department: true },
+  });
+  if (!pipeline) return fail("Pipeline not found.", 404);
+  const deptGate = requireDepartmentAccess(ctx, pipeline.department);
+  if (deptGate) return deptGate;
+
+  const updated = await prisma.pipeline.update({
+    where: { id: parsed.data.pipelineId },
+    data: { assignmentRule: parsed.data.assignmentRule },
+  });
+  return ok({ id: updated.id, assignmentRule: updated.assignmentRule });
 }

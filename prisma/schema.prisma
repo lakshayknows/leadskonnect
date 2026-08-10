@@ -324,6 +324,14 @@ model Organization {
   members     Member[]
   invitations Invitation[]
 
+  // ---- app-owned org state ----
+  // Nullable, no default — same reasoning as User's app-owned fields: better-auth's
+  // organization plugin only writes the fields above, so a non-nullable addition here
+  // would read as drift to `better-auth generate` and could break its inserts.
+  // { startHour, endHour, timezoneOffsetMinutes, days: number[] } — gates the
+  // auto-notification-on-capture send (lib/notify.ts). Null = sane built-in default.
+  businessHours Json?
+
   @@map("organization")
 }
 
@@ -588,6 +596,12 @@ model Pipeline {
   isDefault      Boolean    @default(false)
   archivedAt     DateTime?
   createdAt      DateTime   @default(now())
+
+  /// manual | round_robin | workload — territory/source-based rules aren't modeled (no
+  /// territory concept exists yet), so those aren't offered as options.
+  assignmentRule      String  @default("manual")
+  /// round_robin's cursor — the userId assigned last, so the next pick continues from there.
+  lastAssignedMemberId String?
 
   stages PipelineStage[]
   items  PipelineItem[]
