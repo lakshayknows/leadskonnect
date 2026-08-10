@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { DashHeader, Panel, Banner } from "@/components/dashboard/ui";
+import { DashHeader, Panel, Banner } from "@/components/ui";
 
 type Prefs = Record<string, boolean>;
 
@@ -54,7 +54,7 @@ export default function Page() {
                 onClick={() => toggle(o.key)}
                 className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition ${prefs[o.key] ? "bg-accent" : "bg-line"}`}
               >
-                <span className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition ${prefs[o.key] ? "translate-x-5" : "translate-x-0.5"}`} />
+                <span className={`inline-block h-5 w-5 transform rounded-full bg-surface shadow transition ${prefs[o.key] ? "translate-x-5" : "translate-x-0.5"}`} />
               </button>
             </div>
           ))}

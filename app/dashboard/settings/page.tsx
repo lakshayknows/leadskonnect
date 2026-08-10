@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Users2, Mail, CreditCard, Bell, ArrowRight, Linkedin, User } from "lucide-react";
-import { DashHeader } from "@/components/dashboard/ui";
+import { ReplayTourCard } from "@/components/dashboard/tour/ReplayTourButton";
+import { DashHeader } from "@/components/ui";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ export default function Page() {
           <Link
             key={c.href}
             href={c.href}
-            className="group flex items-start gap-4 rounded-2xl border border-line bg-white p-5 shadow-sm transition hover:border-accent hover:shadow-md"
+            className="group flex items-start gap-4 rounded-2xl border border-line bg-surface p-5 shadow-sm transition hover:border-accent hover:shadow-md"
           >
             <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-strong">
               <c.icon className="h-5 w-5" />
@@ -36,6 +37,7 @@ export default function Page() {
             </div>
           </Link>
         ))}
+        <ReplayTourCard />
       </div>
     </>
   );

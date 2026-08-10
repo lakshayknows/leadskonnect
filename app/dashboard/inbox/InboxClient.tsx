@@ -4,7 +4,7 @@ import { useState } from "react";
 import useSWR from "swr";
 import { Inbox as InboxIcon, RefreshCw, Send, Mail, ArrowDownLeft, ArrowUpRight } from "lucide-react";
 import { api } from "@/lib/client";
-import { DashHeader, Banner } from "@/components/dashboard/ui";
+import { Banner, DashHeader, EmptyState, Skeleton } from "@/components/ui";
 
 type ThreadListItem = {
   id: string;
@@ -110,7 +110,7 @@ export default function InboxClient() {
             <button
               key={f.key}
               onClick={() => { setFilter(f.key); setOpenId(null); }}
-              className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${filter === f.key ? "bg-ink text-white" : "bg-tint text-ink-soft hover:text-ink"}`}
+              className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${filter === f.key ? "bg-ink text-ink-invert" : "bg-tint text-ink-soft hover:text-ink"}`}
             >
               {f.label}
             </button>
@@ -119,14 +119,23 @@ export default function InboxClient() {
 
         <div className="mt-4 grid gap-4 lg:grid-cols-[360px_1fr]">
           {/* Thread list */}
-          <div className="overflow-hidden rounded-2xl border border-line bg-white">
+          <div className="overflow-hidden rounded-2xl border border-line bg-surface">
             {isLoading ? (
-              <div className="p-8 text-center text-sm text-ink-soft">Loading…</div>
-            ) : threads.length === 0 ? (
-              <div className="p-10 text-center">
-                <InboxIcon className="mx-auto h-10 w-10 text-ink-soft/40" />
-                <p className="mt-3 text-sm text-ink-soft">No conversations yet. Replies land here automatically.</p>
+              <div className="divide-y divide-line">
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <div key={i} className="space-y-2 px-4 py-3.5">
+                    <Skeleton className="h-3.5 w-40" />
+                    <Skeleton className="h-3 w-full max-w-[70%]" />
+                  </div>
+                ))}
               </div>
+            ) : threads.length === 0 ? (
+              <EmptyState
+                icon={InboxIcon}
+                title="No conversations yet"
+                body="Every reply — email, LinkedIn or WhatsApp — lands here on one thread per contact. Launch a campaign and the first responses show up automatically."
+                className="border-0"
+              />
             ) : (
               <ul className="divide-y divide-line">
                 {threads.map((t) => (
@@ -137,14 +146,14 @@ export default function InboxClient() {
                     >
                       <div className="flex items-center justify-between gap-2">
                         <span className="flex items-center gap-2 truncate text-sm font-semibold">
-                          {t.status === "unread" && <span className="h-2 w-2 shrink-0 rounded-full bg-indigo-500" />}
+                          {t.status === "unread" && <span className="h-2 w-2 shrink-0 rounded-full bg-accent" />}
                           {name(t.lead)}
                         </span>
                         <span className="shrink-0 font-mono text-[10px] text-ink-soft">{new Date(t.lastMessageAt).toLocaleDateString()}</span>
                       </div>
                       <div className="truncate text-xs text-ink-soft">{t.subject || "(no subject)"}</div>
                       <div className="mt-0.5 flex items-center gap-1 truncate text-xs text-ink-soft/80">
-                        {t.direction === "inbound" ? <ArrowDownLeft className="h-3 w-3 text-emerald-600" /> : <ArrowUpRight className="h-3 w-3" />}
+                        {t.direction === "inbound" ? <ArrowDownLeft className="h-3 w-3 text-success" /> : <ArrowUpRight className="h-3 w-3" />}
                         {t.preview}
                       </div>
                     </button>
@@ -155,11 +164,11 @@ export default function InboxClient() {
           </div>
 
           {/* Thread detail */}
-          <div className="flex min-h-[420px] flex-col overflow-hidden rounded-2xl border border-line bg-white">
+          <div className="flex min-h-[420px] flex-col overflow-hidden rounded-2xl border border-line bg-surface">
             {!thread ? (
               <div className="grid flex-1 place-items-center p-10 text-center text-sm text-ink-soft">
                 <div>
-                  <Mail className="mx-auto h-10 w-10 text-ink-soft/40" />
+                  <Mail className="mx-auto h-10 w-10 text-ink-faint" />
                   <p className="mt-3">Select a conversation.</p>
                 </div>
               </div>
@@ -175,7 +184,7 @@ export default function InboxClient() {
                       <button
                         key={a.key}
                         onClick={() => setStatus(a.key)}
-                        className={`rounded-lg px-2.5 py-1 text-xs transition ${thread.status === a.key ? "bg-ink text-white" : "bg-tint text-ink-soft hover:text-ink"}`}
+                        className={`rounded-lg px-2.5 py-1 text-xs transition ${thread.status === a.key ? "bg-ink text-ink-invert" : "bg-tint text-ink-soft hover:text-ink"}`}
                       >
                         {a.label}
                       </button>
@@ -185,10 +194,10 @@ export default function InboxClient() {
 
                 <div className="flex-1 space-y-3 overflow-y-auto p-5">
                   {thread.messages.map((m) => (
-                    <div key={m.id} className={`max-w-[80%] rounded-2xl border px-4 py-2.5 text-sm ${m.direction === "inbound" ? "border-line bg-tint" : "ml-auto border-ink bg-ink text-white"}`}>
-                      {m.subject && <div className={`mb-1 text-xs font-semibold ${m.direction === "inbound" ? "text-ink-soft" : "text-white/70"}`}>{m.subject}</div>}
+                    <div key={m.id} className={`max-w-[80%] rounded-2xl border px-4 py-2.5 text-sm ${m.direction === "inbound" ? "border-line bg-tint" : "ml-auto border-ink bg-ink text-ink-invert"}`}>
+                      {m.subject && <div className={`mb-1 text-xs font-semibold ${m.direction === "inbound" ? "text-ink-soft" : "text-ink-invert/70"}`}>{m.subject}</div>}
                       <div className="whitespace-pre-wrap">{(m.body ?? "").replace(/<[^>]+>/g, " ")}</div>
-                      <div className={`mt-1 text-[10px] ${m.direction === "inbound" ? "text-ink-soft" : "text-white/60"}`}>{new Date(m.sentAt).toLocaleString()}</div>
+                      <div className={`mt-1 text-[10px] ${m.direction === "inbound" ? "text-ink-soft" : "text-ink-invert/60"}`}>{new Date(m.sentAt).toLocaleString()}</div>
                     </div>
                   ))}
                 </div>

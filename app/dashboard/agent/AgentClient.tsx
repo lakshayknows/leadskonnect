@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import useSWR from "swr";
 import { Bot, Play } from "lucide-react";
 import { api } from "@/lib/client";
-import { DashHeader, Panel, Banner, Textarea, Label, Select } from "@/components/dashboard/ui";
+import { Banner, DashHeader, Label, Panel, Select, Textarea, useConfirm } from "@/components/ui";
 
 type Lead = { id: string; firstName: string | null; email: string; company: string | null };
 
@@ -12,6 +12,7 @@ export default function AgentPage() {
   const { data: leadsData } = useSWR<{ items: Lead[] }>("/api/leads?pageSize=200");
   const { data: accounts = [] } = useSWR<Array<{ id: string; name: string; email: string }>>("/api/sending-accounts");
   const leads = leadsData?.items ?? [];
+  const confirm = useConfirm();
 
   const [selectedAccount, setSelectedAccount] = useState("default");
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -40,7 +41,13 @@ export default function AgentPage() {
   async function run() {
     const leadIds = [...selected];
     if (leadIds.length === 0) return setMsg("Select at least one lead.");
-    if (!confirm(`Run the agent on ${leadIds.length} lead(s)? It may send REAL messages.`)) return;
+    const ok = await confirm({
+      title: `Run the agent on ${leadIds.length} contact${leadIds.length === 1 ? "" : "s"}?`,
+      body: "The agent sends real messages on your connected channels. This can't be undone.",
+      confirmLabel: "Run agent",
+      tone: "danger",
+    });
+    if (!ok) return;
     setBusy(true);
     setMsg(null);
     setResult(null);

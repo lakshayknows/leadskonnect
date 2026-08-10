@@ -7,7 +7,8 @@ import {
   Sparkles, Server, GitBranch, LayoutTemplate, PenLine, Trash2, Users, StopCircle, Pencil, Square,
 } from "lucide-react";
 import { api } from "@/lib/client";
-import { DashHeader, Panel, Banner, Input, Select, Label } from "@/components/dashboard/ui";
+import { Banner, DashHeader, Dialog, Input, Label, Panel, Select, useConfirm } from "@/components/ui";
+import { tourTarget } from "@/components/dashboard/tour/target";
 
 type Template = { id: string; channel: string; name: string };
 type SendingAccount = { id: string; name: string; email: string };
@@ -72,10 +73,10 @@ function displayNodes(seq: unknown): { kind: string; channel?: string; waitDays?
 
 const channelIcon = (channel?: string) => {
   switch (channel) {
-    case "email": return <Mail className="h-5 w-5 text-indigo-600" />;
-    case "linkedin": return <LinkIcon className="h-5 w-5 text-sky-600" />;
-    case "whatsapp": return <MessageSquare className="h-5 w-5 text-emerald-600" />;
-    default: return <Sparkles className="h-5 w-5 text-amber-500" />;
+    case "email": return <Mail className="h-5 w-5 text-accent" />;
+    case "linkedin": return <LinkIcon className="h-5 w-5 text-info" />;
+    case "whatsapp": return <MessageSquare className="h-5 w-5 text-success" />;
+    default: return <Sparkles className="h-5 w-5 text-warning" />;
   }
 };
 
@@ -84,6 +85,7 @@ export default function CampaignsPage() {
   const { data: templates = [] } = useSWR<Template[]>("/api/templates");
   const { data: sendingAccounts = [] } = useSWR<SendingAccount[]>("/api/sending-accounts");
   const { data: segments = [] } = useSWR<Segment[]>("/api/segments");
+  const confirm = useConfirm();
 
   const [mode, setMode] = useState<"list" | "choose" | "build">("list");
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
@@ -160,7 +162,13 @@ export default function CampaignsPage() {
   }
 
   async function stopCampaign(c: Campaign) {
-    if (!confirm(`Stop campaign "${c.name}"? Active enrollments will not receive further messages.`)) return;
+    const ok = await confirm({
+      title: `Stop "${c.name}"?`,
+      body: "Contacts partway through the sequence stop receiving it. You can't resume a stopped campaign.",
+      confirmLabel: "Stop campaign",
+      tone: "danger",
+    });
+    if (!ok) return;
     try {
       await api(`/api/campaigns/${c.id}`, { method: "PATCH", body: { status: "done" } });
       mutateCampaigns();
@@ -184,7 +192,7 @@ export default function CampaignsPage() {
         title="Campaigns"
         subtitle="Design conditional outreach sequences, then enroll a group or individual leads."
         action={mode === "list" && (
-          <button onClick={() => setMode("choose")} className="btn btn-primary flex items-center gap-1.5">
+          <button {...tourTarget("campaigns-new")} onClick={() => setMode("choose")} className="btn btn-primary flex items-center gap-1.5">
             <Plus className="h-4 w-4" /> New Campaign
           </button>
         )}
@@ -202,7 +210,7 @@ export default function CampaignsPage() {
             </div>
             <div className="grid gap-6 md:grid-cols-2">
               <Panel className="flex flex-col">
-                <LayoutTemplate className="h-8 w-8 text-indigo-600" />
+                <LayoutTemplate className="h-8 w-8 text-accent" />
                 <h3 className="mt-4 font-display text-lg font-bold">Start with a template</h3>
                 <p className="mt-1 text-sm text-ink-soft">Ready-made sequences you can tweak.</p>
                 <div className="mt-4 space-y-2">
@@ -215,7 +223,7 @@ export default function CampaignsPage() {
                 </div>
               </Panel>
               <Panel className="flex flex-col">
-                <PenLine className="h-8 w-8 text-emerald-600" />
+                <PenLine className="h-8 w-8 text-success" />
                 <h3 className="mt-4 font-display text-lg font-bold">Create manually</h3>
                 <p className="mt-1 text-sm text-ink-soft">Build steps and conditional branches from scratch.</p>
                 <ul className="mt-4 flex-1 space-y-2 text-sm text-ink-soft">
@@ -243,25 +251,25 @@ export default function CampaignsPage() {
             <div className="mt-6 grid gap-6 md:grid-cols-[1fr_320px]">
               <div className="flex flex-col items-center rounded-2xl border border-line/40 bg-canvas px-4 py-8">
                 <div className="w-full max-w-[460px]">
-                  <div className="flex items-center justify-center gap-3 rounded-2xl border-2 border-emerald-500 bg-emerald-50 px-5 py-3 text-center">
-                    <div className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                    <div className="font-mono text-xs font-bold uppercase tracking-wider text-emerald-950">Trigger: Enroll lead</div>
+                  <div className="flex items-center justify-center gap-3 rounded-2xl border-2 border-success/40 bg-success-soft px-5 py-3 text-center">
+                    <div className="h-2.5 w-2.5 rounded-full bg-success" />
+                    <div className="font-mono text-xs font-bold uppercase tracking-wider text-success-strong">Trigger: Enroll lead</div>
                   </div>
                   <Connector />
 
                   {nodes.map((n, i) => (
                     <div key={i} className="w-full">
-                      <div className="relative rounded-2xl border border-line bg-white p-5 shadow-sm">
-                        <div className="absolute -left-3 top-5 flex h-7 w-7 items-center justify-center rounded-full bg-ink font-mono text-xs font-bold text-white">{i + 1}</div>
+                      <div className="relative rounded-2xl border border-line bg-surface p-5 shadow-sm">
+                        <div className="absolute -left-3 top-5 flex h-7 w-7 items-center justify-center rounded-full bg-ink font-mono text-xs font-bold text-ink-invert">{i + 1}</div>
                         <div className="pl-4">
                           <div className="mb-4 flex items-center justify-between">
                             <div className="flex items-center gap-2">
-                              {n.type === "send" ? channelIcon(n.channel) : <GitBranch className="h-5 w-5 text-amber-600" />}
+                              {n.type === "send" ? channelIcon(n.channel) : <GitBranch className="h-5 w-5 text-warning" />}
                               <span className="font-display text-xs font-bold uppercase tracking-wide">
                                 {n.type === "send" ? `${n.channel} message` : "Condition"}
                               </span>
                             </div>
-                            <button type="button" onClick={() => setNodes((ns) => ns.filter((_, idx) => idx !== i))} className="rounded p-1 text-ink-soft transition hover:bg-red-50 hover:text-red-600">
+                            <button type="button" onClick={() => setNodes((ns) => ns.filter((_, idx) => idx !== i))} className="rounded p-1 text-ink-soft transition hover:bg-danger-soft hover:text-danger">
                               <Trash2 className="h-4 w-4" />
                             </button>
                           </div>
@@ -271,7 +279,7 @@ export default function CampaignsPage() {
                               <div className="flex items-center gap-2 rounded-xl border border-line/60 bg-canvas px-3 py-1.5">
                                 <Clock className="h-4 w-4 text-ink-soft" />
                                 <span className="text-xs text-ink-soft">Wait</span>
-                                <input type="number" min={0} value={n.waitDays} onChange={(e) => patchNode(i, { waitDays: Number(e.target.value) })} className="w-16 rounded border border-line bg-white px-2 py-0.5 text-center font-mono text-xs outline-none focus:border-ink" />
+                                <input type="number" min={0} value={n.waitDays} onChange={(e) => patchNode(i, { waitDays: Number(e.target.value) })} className="w-16 rounded border border-line bg-surface px-2 py-0.5 text-center font-mono text-xs outline-none focus:border-ink" />
                                 <span className="text-xs text-ink-soft">days, then send</span>
                               </div>
                               <div className="grid grid-cols-2 gap-2">
@@ -328,10 +336,10 @@ export default function CampaignsPage() {
                   ))}
 
                   <div className="flex items-center justify-center gap-2">
-                    <button type="button" onClick={() => setNodes((ns) => [...ns, newSend(2)])} className="flex items-center gap-1 rounded-full border-2 border-dashed border-ink-soft bg-white px-3 py-2 text-xs font-medium text-ink-soft transition hover:border-ink hover:text-ink">
+                    <button type="button" onClick={() => setNodes((ns) => [...ns, newSend(2)])} className="flex items-center gap-1 rounded-full border-2 border-dashed border-ink-soft bg-surface px-3 py-2 text-xs font-medium text-ink-soft transition hover:border-ink hover:text-ink">
                       <Plus className="h-4 w-4" /> Message
                     </button>
-                    <button type="button" onClick={() => setNodes((ns) => [...ns, newCond()])} className="flex items-center gap-1 rounded-full border-2 border-dashed border-amber-400 bg-white px-3 py-2 text-xs font-medium text-amber-700 transition hover:border-amber-600">
+                    <button type="button" onClick={() => setNodes((ns) => [...ns, newCond()])} className="flex items-center gap-1 rounded-full border-2 border-dashed border-warning/40 bg-surface px-3 py-2 text-xs font-medium text-warning-strong transition hover:border-warning/40">
                       <GitBranch className="h-4 w-4" /> Condition
                     </button>
                   </div>
@@ -356,7 +364,7 @@ export default function CampaignsPage() {
                   </div>
                 </Panel>
                 <div className="flex gap-2">
-                  <button onClick={() => { setMode("list"); setEditingCampaign(null); }} className="flex-1 rounded-xl border border-line bg-white py-3 text-sm font-semibold transition hover:bg-tint">Cancel</button>
+                  <button onClick={() => { setMode("list"); setEditingCampaign(null); }} className="flex-1 rounded-xl border border-line bg-surface py-3 text-sm font-semibold transition hover:bg-tint">Cancel</button>
                   <button onClick={save} disabled={busy} className="btn btn-primary flex-1 justify-center py-3 text-sm font-semibold disabled:opacity-50">{editingCampaign ? "Update campaign" : "Save campaign"}</button>
                 </div>
               </div>
@@ -369,7 +377,7 @@ export default function CampaignsPage() {
           campaigns.length === 0 ? (
             <Panel>
               <div className="py-10 text-center">
-                <Rocket className="mx-auto h-12 w-12 text-ink-soft/40" />
+                <Rocket className="mx-auto h-12 w-12 text-ink-faint" />
                 <h3 className="mt-4 text-base font-bold">No campaigns yet</h3>
                 <p className="mx-auto mt-1 max-w-sm text-sm text-ink-soft">Design a conditional sequence and enroll a group or individual leads.</p>
                 <button onClick={() => setMode("choose")} className="btn btn-primary mt-6 inline-flex">Create your first campaign</button>
@@ -384,15 +392,15 @@ export default function CampaignsPage() {
                     <div>
                       <div className="flex items-center justify-between gap-3">
                         <h3 className="font-display text-lg font-bold">{c.name}</h3>
-                        <span className={`rounded-full px-2.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider ${c.status === "active" ? "bg-emerald-100 text-emerald-800" : "bg-zinc-100 text-zinc-800"}`}>{c.status}</span>
+                        <span className={`rounded-full px-2.5 py-0.5 font-mono text-[10px] font-bold uppercase tracking-wider ${c.status === "active" ? "bg-success-soft text-success-strong" : "bg-tint text-ink-soft"}`}>{c.status}</span>
                       </div>
                       <div className="mt-4 flex flex-wrap items-center gap-1.5 rounded-xl border border-line/40 bg-canvas p-3">
-                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500 font-mono text-[10px] font-bold text-white" title="Start">S</span>
+                        <span className="flex h-5 w-5 items-center justify-center rounded-full bg-success font-mono text-[10px] font-bold text-on-solid" title="Start">S</span>
                         {dn.map((s, i) => (
                           <div key={i} className="flex items-center gap-1.5">
                             <div className="h-0.5 w-3 bg-line" />
-                            <div className="flex items-center gap-1 rounded border border-line bg-white px-2 py-1 font-mono text-[10px] font-medium">
-                              {s.kind === "condition" ? <><GitBranch className="h-3.5 w-3.5 text-amber-600" /><span>{s.on}?</span></> : s.kind === "exit" ? <><StopCircle className="h-3.5 w-3.5" /><span>exit</span></> : <>{channelIcon(s.channel)}<span>{s.channel}</span>{(s.waitDays ?? 0) > 0 && <span className="ml-0.5 font-bold text-indigo-600">+{s.waitDays}d</span>}</>}
+                            <div className="flex items-center gap-1 rounded border border-line bg-surface px-2 py-1 font-mono text-[10px] font-medium">
+                              {s.kind === "condition" ? <><GitBranch className="h-3.5 w-3.5 text-warning" /><span>{s.on}?</span></> : s.kind === "exit" ? <><StopCircle className="h-3.5 w-3.5" /><span>exit</span></> : <>{channelIcon(s.channel)}<span>{s.channel}</span>{(s.waitDays ?? 0) > 0 && <span className="ml-0.5 font-bold text-accent">+{s.waitDays}d</span>}</>}
                             </div>
                           </div>
                         ))}
@@ -406,13 +414,13 @@ export default function CampaignsPage() {
                     <div className="mt-6 flex items-center justify-between border-t border-line pt-4">
                       <span className="text-xs text-ink-soft">{c._count?.enrollments ?? 0} enrolled · {dn.length} node(s)</span>
                       <div className="flex items-center gap-2">
-                        <button onClick={() => startEdit(c)} className="flex items-center gap-1 rounded-xl border border-line bg-white px-3 py-2 text-xs font-semibold transition hover:bg-tint"><Pencil className="h-3.5 w-3.5" /> Edit</button>
+                        <button onClick={() => startEdit(c)} className="flex items-center gap-1 rounded-xl border border-line bg-surface px-3 py-2 text-xs font-semibold transition hover:bg-tint"><Pencil className="h-3.5 w-3.5" /> Edit</button>
                         {c.status === "done" ? (
-                          <button onClick={() => reactivateCampaign(c)} className="flex items-center gap-1 rounded-xl border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 transition hover:bg-emerald-100"><Rocket className="h-3.5 w-3.5" /> Reactivate</button>
+                          <button onClick={() => reactivateCampaign(c)} className="flex items-center gap-1 rounded-xl border border-success/30 bg-success-soft px-3 py-2 text-xs font-semibold text-success-strong transition hover:bg-success-soft"><Rocket className="h-3.5 w-3.5" /> Reactivate</button>
                         ) : (
                           <>
                             {c.status === "active" && (
-                              <button onClick={() => stopCampaign(c)} className="flex items-center gap-1 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-100"><Square className="h-3.5 w-3.5" /> Stop</button>
+                              <button onClick={() => stopCampaign(c)} className="flex items-center gap-1 rounded-xl border border-danger/20 bg-danger-soft px-3 py-2 text-xs font-semibold text-danger transition hover:bg-danger/15"><Square className="h-3.5 w-3.5" /> Stop</button>
                             )}
                             <button onClick={() => setLaunchFor(c)} className="btn btn-primary !py-2 !text-xs flex items-center gap-1"><Rocket className="h-3.5 w-3.5" /> Launch</button>
                           </>
@@ -428,20 +436,27 @@ export default function CampaignsPage() {
       </div>
 
       {/* ---- Launch / enroll modal ---- */}
-      {launchFor && (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/30 p-4" onClick={() => setLaunchFor(null)}>
-          <div className="w-full max-w-md rounded-2xl border border-line bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-            <h3 className="font-display text-lg font-bold">Launch “{launchFor.name}”</h3>
-            <p className="mt-1 text-sm text-ink-soft">Choose who to enroll into this sequence.</p>
-            <div className="mt-5 space-y-2">
+      <Dialog
+        open={!!launchFor}
+        onClose={() => setLaunchFor(null)}
+        title={launchFor ? `Launch “${launchFor.name}”` : ""}
+        description="Choose who to enroll into this sequence."
+        footer={
+          <button onClick={() => setLaunchFor(null)} className="w-full rounded-xl border border-line py-2.5 text-sm font-semibold transition hover:bg-tint">
+            Cancel
+          </button>
+        }
+      >
+        {launchFor && (
+          <div className="space-y-2">
               {/* Groups first — safer, explicit targeting */}
               {segments.length > 0 ? (
                 <>
                   <div className="font-mono text-xs uppercase text-ink-soft">Launch to a group</div>
                   {segments.map((s) => (
-                    <button key={s.id} onClick={() => launch({ segmentId: s.id })} className="flex w-full items-center justify-between rounded-xl border border-line px-4 py-3 text-left transition hover:border-indigo-400 hover:bg-indigo-50">
-                      <span className="flex items-center gap-2 text-sm font-medium"><Users className="h-4 w-4 text-indigo-500" />{s.name}</span>
-                      <span className="rounded-full bg-indigo-50 px-2.5 py-0.5 font-mono text-xs text-indigo-600">{s.count} leads</span>
+                    <button key={s.id} onClick={() => launch({ segmentId: s.id })} className="flex w-full items-center justify-between rounded-xl border border-line px-4 py-3 text-left transition hover:border-accent hover:bg-accent-soft">
+                      <span className="flex items-center gap-2 text-sm font-medium"><Users className="h-4 w-4 text-accent" />{s.name}</span>
+                      <span className="rounded-full bg-accent-soft px-2.5 py-0.5 font-mono text-xs text-accent">{s.count} leads</span>
                     </button>
                   ))}
                   <div className="pt-2 font-mono text-xs uppercase text-ink-soft">Or enroll everyone</div>
@@ -451,20 +466,24 @@ export default function CampaignsPage() {
               )}
               {/* All leads — demoted, requires confirmation to avoid accidents */}
               <button
-                onClick={() => {
-                  if (!confirm(`Enroll ALL leads into this campaign? This sends messages to every lead in your list.`)) return;
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: "Enroll every contact?",
+                    body: "This sends messages to everyone in your list, up to 500 contacts. There's no way to un-send them.",
+                    confirmLabel: "Enroll everyone",
+                    tone: "danger",
+                  });
+                  if (!ok) return;
                   launch({ allLeads: true });
                 }}
-                className="flex w-full items-center justify-between rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-left transition hover:border-amber-400 hover:bg-amber-100"
+                className="flex w-full items-center justify-between rounded-xl border border-warning/30 bg-warning-soft px-4 py-3 text-left transition hover:border-warning/40 hover:bg-warning-soft"
               >
-                <span className="flex items-center gap-2 text-sm font-medium text-amber-800"><Users className="h-4 w-4" /> All leads</span>
-                <span className="font-mono text-xs text-amber-600">up to 500 · confirm required</span>
+                <span className="flex items-center gap-2 text-sm font-medium text-warning-strong"><Users className="h-4 w-4" /> All leads</span>
+                <span className="font-mono text-xs text-warning-strong">up to 500 · confirm required</span>
               </button>
-            </div>
-            <button onClick={() => setLaunchFor(null)} className="mt-5 w-full rounded-xl border border-line py-2.5 text-sm font-semibold transition hover:bg-tint">Cancel</button>
           </div>
-        </div>
-      )}
+        )}
+      </Dialog>
     </>
   );
 }

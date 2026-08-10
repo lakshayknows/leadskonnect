@@ -2,43 +2,170 @@
 @import "tailwindcss";
 
 /* ==================================================================
-   LeadsKonnect — "Konnect" design system  (mirrors design_constraints.md)
-   Bright, human, techy-clean. Cobalt brand + coral action on warm white.
+   Followthroo design system.
+
+   Monochrome base, one accent hue (electric indigo). Buttons stay ink;
+   indigo is spent on the logo, active nav, focus, badges and the avatar.
+
+   Naming: --{role}[-{modifier}]
+     role     canvas surface ink line accent success warning danger info
+     modifier soft    (tinted background)
+              strong  (text sitting ON a -soft background)
+              contrast(text sitting ON the solid role color)
+              raised / sunken (elevation relative to surface)
+              faint   (tertiary text — still >=4.5:1, so it stays readable)
+
+   Themes redefine the RAW values below; the @theme inline block then exposes
+   them to Tailwind. The `inline` keyword is load-bearing: without it Tailwind
+   copies the value into each utility and a theme override can never reach it.
    ================================================================== */
+
+:root,
+[data-theme="light"] {
+  color-scheme: light;
+
+  --canvas: #ffffff;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-sunken: #f4f4f5;
+
+  --ink: #0a0a0a;
+  --ink-soft: #6b6b6b;
+  --ink-faint: #767676; /* 4.5:1 on white — safe for real text, not just decoration */
+  --ink-invert: #ffffff;
+
+  --line: #e5e5e5;
+  --line-strong: #d4d4d4;
+
+  --accent: #4b31e6;
+  --accent-strong: #3a20c4;
+  --accent-soft: #eeebfd;
+  --accent-contrast: #ffffff;
+
+  --success: #047857; /* not emerald-600 — that lands at 3.8:1 on white */
+  --success-soft: #ecfdf5;
+  --success-strong: #065f46;
+  --warning: #b45309;
+  --warning-soft: #fffbeb;
+  --warning-strong: #92400e;
+  --danger: #dc2626;
+  --danger-soft: #fef2f2;
+  --danger-strong: #991b1b;
+  --info: #0e7490;
+  --info-soft: #ecfeff;
+  --info-strong: #155e75;
+
+  /* Text sitting on a SOLID accent/status fill. Those fills are dark in the
+     light theme and pastel in the dark one, so the readable text flips too. */
+  --on-solid: #ffffff;
+
+  --scrim: rgba(10, 10, 10, 0.32);
+  --btn-shadow: rgba(10, 10, 10, 0.5);
+  --btn-shadow-hover: rgba(10, 10, 10, 0.6);
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+
+  --canvas: #0b0b0f;
+  --surface: #131318;
+  --surface-raised: #1a1a21;
+  --surface-sunken: #0f0f14;
+
+  --ink: #f4f4f5;
+  --ink-soft: #a1a1aa;
+  --ink-faint: #8b8b95;
+  --ink-invert: #0a0a0a;
+
+  --line: #26262e;
+  --line-strong: #3a3a45;
+
+  /* The light indigo is too dark to read on a dark surface — lift it rather
+     than reuse it, and swap which end of the ramp carries text. */
+  --accent: #8b7bff;
+  --accent-strong: #b7adff;
+  --accent-soft: #1e1a3d;
+  --accent-contrast: #0a0a0a;
+
+  --success: #34d399;
+  --success-soft: #052e22;
+  --success-strong: #6ee7b7;
+  --warning: #fbbf24;
+  --warning-soft: #2a1e05;
+  --warning-strong: #fcd34d;
+  --danger: #f87171;
+  --danger-soft: #2d1113;
+  --danger-strong: #fca5a5;
+  --info: #22d3ee;
+  --info-soft: #082f36;
+  --info-strong: #67e8f9;
+
+  --on-solid: #0a0a0a;
+
+  --scrim: rgba(0, 0, 0, 0.6);
+  --btn-shadow: rgba(0, 0, 0, 0.75);
+  --btn-shadow-hover: rgba(0, 0, 0, 0.9);
+}
+
+/* Tailwind's built-in `dark:` variant keys off prefers-color-scheme and there
+   is no config file to change it, so define our own against the attribute the
+   no-flash script stamps on <html>. */
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme inline {
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-sunken: var(--surface-sunken);
+  --color-tint: var(--surface-sunken); /* back-compat: keeps existing bg-tint working */
+
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
+  --color-ink-invert: var(--ink-invert);
+
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-contrast: var(--accent-contrast);
+  --color-brand: var(--accent); /* back-compat alias */
+  --color-brand-ink: var(--ink);
+  --color-action: var(--ink);
+
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --color-success-strong: var(--success-strong);
+  --color-warning: var(--warning);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-strong: var(--warning-strong);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-danger-strong: var(--danger-strong);
+  --color-info: var(--info);
+  --color-info-soft: var(--info-soft);
+  --color-info-strong: var(--info-strong);
+
+  --color-on-solid: var(--on-solid);
+  --color-scrim: var(--scrim);
+}
+
 @theme {
-  /* surfaces — MONOCHROME */
-  --color-canvas: #ffffff;
-  --color-surface: #ffffff;
-  --color-ink: #0a0a0a; /* near-black — text + dark panels */
-  --color-ink-soft: #6b6b6b; /* muted grey body */
-  --color-line: #e5e5e5; /* hairlines */
-
-  /* brand — followthroo electric indigo (the single accent hue over the mono base).
-     Buttons stay ink/black; indigo is spent on logo, active nav, focus, badges, avatar. */
-  --color-brand: #4b31e6;
-  --color-brand-ink: #0a0a0a;
-  --color-action: #0a0a0a;
-  --color-accent: #4b31e6; /* followthroo indigo */
-  --color-accent-strong: #3a20c4; /* text on soft indigo */
-  --color-accent-soft: #eeebfd; /* selected/hover indigo wash */
-  --color-tint: #f4f4f5; /* light grey surface */
-
-  /* "channel" tones — greys only (distinguished by icon + label, not hue) */
-  --color-ch-email: #171717;
-  --color-ch-linkedin: #404040;
-  --color-ch-whatsapp: #737373;
-  --color-ch-social: #a3a3a3;
-
   /* type roles */
   --font-display: "Bricolage Grotesque", system-ui, sans-serif;
   --font-body: "Inter", system-ui, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
 
-  --breakpoint-xs: 480px;
-}
+  /* Named distinctly from Tailwind's --radius-sm/md/lg/xl so adopting them is
+     deliberate — overriding the built-ins would restyle all 101 existing
+     rounded-* utilities in one go. */
+  --radius-field: 0.75rem;
+  --radius-panel: 1rem;
+  --radius-overlay: 1.25rem;
 
-:root {
-  color-scheme: light;
+  --breakpoint-xs: 480px;
 }
 
 html {
@@ -53,9 +180,15 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/* Browser surfaces the design still owns: selection, caret and scrollbars ship
+   with defaults that belong to no design system. */
 ::selection {
-  background: var(--color-brand);
-  color: #fff;
+  background: var(--accent);
+  color: var(--accent-contrast);
+}
+html {
+  caret-color: var(--accent);
+  scrollbar-color: var(--line-strong) transparent;
 }
 
 /* ---- type helpers ---- */
@@ -133,13 +266,13 @@ body {
   transition: transform 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
 }
 .btn-primary {
-  background: var(--color-ink); /* black */
-  color: #fff;
-  box-shadow: 0 10px 24px -12px rgba(10, 10, 10, 0.5);
+  background: var(--ink);
+  color: var(--ink-invert);
+  box-shadow: 0 10px 24px -12px var(--btn-shadow);
 }
 .btn-primary:hover {
   transform: translateY(-2px);
-  box-shadow: 0 16px 30px -14px rgba(10, 10, 10, 0.6);
+  box-shadow: 0 16px 30px -14px var(--btn-shadow-hover);
 }
 .btn-ghost {
   background: transparent;
@@ -149,6 +282,74 @@ body {
 .btn-ghost:hover {
   border-color: var(--color-ink);
   transform: translateY(-2px);
+}
+
+/* ---- overlays ----
+   Native <dialog> lives in the browser's top layer, so it needs no z-index and
+   cannot be clipped by an ancestor's transform/backdrop-filter. `allow-discrete`
+   + @starting-style animate it in and out without a JS animation runtime. */
+.ft-dialog {
+  margin: auto;
+  opacity: 0;
+  scale: 0.97;
+  transition: opacity 0.18s ease, scale 0.18s ease, display 0.18s allow-discrete, overlay 0.18s allow-discrete;
+}
+.ft-dialog[open] {
+  opacity: 1;
+  scale: 1;
+}
+@starting-style {
+  .ft-dialog[open] {
+    opacity: 0;
+    scale: 0.97;
+  }
+}
+.ft-dialog::backdrop {
+  background: var(--scrim);
+  opacity: 0;
+  transition: opacity 0.18s ease, display 0.18s allow-discrete, overlay 0.18s allow-discrete;
+}
+.ft-dialog[open]::backdrop {
+  opacity: 1;
+}
+@starting-style {
+  .ft-dialog[open]::backdrop {
+    opacity: 0;
+  }
+}
+
+/* ---- product tour ----
+   One element paints both the scrim and the ring, so every geometry property
+   animates together and the hole can never drift from its outline. 100vmax
+   rather than a fixed 9999px so it still covers ultrawide displays. */
+.ft-tour-ring {
+  position: fixed;
+  z-index: 60;
+  pointer-events: none;
+  box-shadow: 0 0 0 100vmax var(--scrim), 0 0 0 2px var(--accent);
+  transition: top 0.28s cubic-bezier(0.22, 0.61, 0.36, 1), left 0.28s cubic-bezier(0.22, 0.61, 0.36, 1),
+    width 0.28s cubic-bezier(0.22, 0.61, 0.36, 1), height 0.28s cubic-bezier(0.22, 0.61, 0.36, 1),
+    border-radius 0.28s ease, opacity 0.2s ease;
+}
+
+/* The dialog supplies the focus trap, Escape and document inerting; the scrim
+   is drawn by the ring above, so this backdrop stays transparent. */
+.ft-tour-dialog {
+  /* inset:0 rather than 100vw/100vh — 100vw counts the scrollbar gutter and
+     would force a horizontal scrollbar for the length of the tour. */
+  position: fixed;
+  inset: 0;
+  max-width: none;
+  max-height: none;
+  width: auto;
+  height: auto;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  overflow: visible;
+}
+.ft-tour-dialog::backdrop {
+  background: transparent;
 }
 
 /* Focus visibility (quality floor) */

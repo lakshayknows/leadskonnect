@@ -1,13 +1,13 @@
-import Sidebar from "@/components/dashboard/Sidebar";
-import { SWRProvider } from "@/components/dashboard/SWRProvider";
+import { DashboardShell } from "@/components/dashboard/DashboardShell";
+import { getServerTenant } from "@/lib/tenant";
+import { getOnboardingState } from "@/lib/queries";
 
-export default function DashboardLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="flex min-h-screen bg-canvas text-ink">
-      <Sidebar />
-      <div className="min-w-0 flex-1">
-        <SWRProvider>{children}</SWRProvider>
-      </div>
-    </div>
-  );
+// Onboarding state is read here, on the server, so the tour is either in the
+// first paint or absent entirely — never fetched client-side and flashed in.
+// `getServerTenant` is React-cache'd, so the page below re-uses this lookup.
+export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
+  const tenant = await getServerTenant();
+  const onboarding = tenant ? await getOnboardingState(tenant.userId).catch(() => null) : null;
+
+  return <DashboardShell onboarding={onboarding}>{children}</DashboardShell>;
 }

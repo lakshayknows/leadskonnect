@@ -3,7 +3,8 @@
 import { useState } from "react";
 import useSWR from "swr";
 import { api } from "@/lib/client";
-import { DashHeader, Panel, Banner, Input, Textarea, Select, Label } from "@/components/dashboard/ui";
+import { Banner, DashHeader, EmptyState, Input, Label, Panel, Select, Textarea } from "@/components/ui";
+import { FileText } from "lucide-react";
 
 type Template = { id: string; channel: string; name: string; subject: string | null; body: string };
 
@@ -73,7 +74,11 @@ export default function TemplatesPage() {
         <div className="space-y-4">
           {msg && <Banner kind={msg.kind}>{msg.text}</Banner>}
           {templates.length === 0 ? (
-            <Panel><p className="text-sm text-ink-soft">No templates yet.</p></Panel>
+            <EmptyState
+              icon={FileText}
+              title="No templates yet"
+              body="Templates are the reusable copy your campaigns send, with each contact's name and company merged in. Write one on the left to get started."
+            />
           ) : (
             templates.map((t) => (
               <Panel key={t.id}>

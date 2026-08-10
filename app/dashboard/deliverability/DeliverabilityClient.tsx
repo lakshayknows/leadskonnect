@@ -4,7 +4,7 @@ import { useState } from "react";
 import useSWR from "swr";
 import { ShieldCheck, Inbox, AlertTriangle, Flame, Play, LifeBuoy } from "lucide-react";
 import { api } from "@/lib/client";
-import { DashHeader, Panel, Banner } from "@/components/dashboard/ui";
+import { DashHeader, Panel, Banner } from "@/components/ui";
 
 type Mailbox = {
   id: string; name: string; email: string; provider: string;
@@ -19,9 +19,9 @@ type Data = {
 
 function scoreColor(s: number | null) {
   if (s === null) return "text-ink-soft";
-  if (s >= 90) return "text-emerald-600";
-  if (s >= 70) return "text-amber-600";
-  return "text-red-600";
+  if (s >= 90) return "text-success";
+  if (s >= 70) return "text-warning";
+  return "text-danger";
 }
 
 export default function DeliverabilityClient() {
@@ -101,14 +101,14 @@ export default function DeliverabilityClient() {
             <p className="text-sm text-ink-soft">No placement data yet. Enable warm-up on ≥2 mailboxes and let a poll cycle run.</p>
           ) : (
             <div className="flex h-4 overflow-hidden rounded-full">
-              <div className="bg-emerald-500" style={{ width: `${((o!.inbox) / placementTotal) * 100}%` }} title={`Inbox ${o!.inbox}`} />
-              <div className="bg-red-400" style={{ width: `${((o!.spam) / placementTotal) * 100}%` }} title={`Spam ${o!.spam}`} />
+              <div className="bg-success" style={{ width: `${((o!.inbox) / placementTotal) * 100}%` }} title={`Inbox ${o!.inbox}`} />
+              <div className="bg-danger" style={{ width: `${((o!.spam) / placementTotal) * 100}%` }} title={`Spam ${o!.spam}`} />
             </div>
           )}
           {placementTotal > 0 && (
             <div className="mt-2 flex gap-4 text-xs text-ink-soft">
-              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Inbox {Math.round((o!.inbox / placementTotal) * 100)}%</span>
-              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-red-400" /> Spam {Math.round((o!.spam / placementTotal) * 100)}%</span>
+              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-success" /> Inbox {Math.round((o!.inbox / placementTotal) * 100)}%</span>
+              <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-danger" /> Spam {Math.round((o!.spam / placementTotal) * 100)}%</span>
             </div>
           )}
         </Panel>
@@ -139,10 +139,10 @@ export default function DeliverabilityClient() {
                     <td className="px-3 py-3">
                       <button
                         onClick={() => toggleWarmup(m, !m.warmupEnabled)}
-                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition ${m.warmupEnabled ? "bg-emerald-500" : "bg-line"}`}
+                        className={`relative inline-flex h-5 w-9 items-center rounded-full transition ${m.warmupEnabled ? "bg-success" : "bg-line"}`}
                         aria-label="Toggle warm-up"
                       >
-                        <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${m.warmupEnabled ? "translate-x-4" : "translate-x-0.5"}`} />
+                        <span className={`inline-block h-4 w-4 transform rounded-full bg-surface transition ${m.warmupEnabled ? "translate-x-4" : "translate-x-0.5"}`} />
                       </button>
                     </td>
                     <td className="px-3 py-3">
@@ -155,7 +155,7 @@ export default function DeliverabilityClient() {
                     <td className={`px-3 py-3 font-display text-lg font-bold ${scoreColor(m.score)}`}>{m.score ?? "—"}</td>
                     <td className="px-3 py-3">{m.inbox}</td>
                     <td className="px-3 py-3">{m.spam}</td>
-                    <td className="px-3 py-3">{m.rescued > 0 ? <span className="flex items-center gap-1 text-emerald-600"><LifeBuoy className="h-3.5 w-3.5" />{m.rescued}</span> : "0"}</td>
+                    <td className="px-3 py-3">{m.rescued > 0 ? <span className="flex items-center gap-1 text-success"><LifeBuoy className="h-3.5 w-3.5" />{m.rescued}</span> : "0"}</td>
                   </tr>
                 ))}
               </tbody>

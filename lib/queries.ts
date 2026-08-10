@@ -127,3 +127,75 @@ export async function getLeadsPage(orgId: string, page = 1, pageSize = 50, q?: s
   ]);
   return { items, total, page, pageSize, totalPages: Math.max(Math.ceil(total / pageSize), 1) };
 }
+
+/* ------------------------------------------------------------------ */
+/* Onboarding + activation                                             */
+/* ------------------------------------------------------------------ */
+
+/** Bump to re-offer the tour to everyone after materially changing its steps. */
+export const TOUR_VERSION = 1;
+
+export type OnboardingState = {
+  completedAt: string | null;
+  skippedAt: string | null;
+  step: number;
+  tourVersion: number;
+  theme: string | null;
+  checklistDismissedAt: string | null;
+};
+
+export async function getOnboardingState(userId: string): Promise<OnboardingState> {
+  const u = await prisma.user.findUnique({
+    where: { id: userId },
+    // Select only the app-owned columns — never widen this to the whole user row.
+    select: {
+      onboardingCompletedAt: true,
+      onboardingSkippedAt: true,
+      onboardingStep: true,
+      tourVersion: true,
+      themePreference: true,
+      checklistState: true,
+    },
+  });
+  const checklist = (u?.checklistState ?? null) as { dismissedAt?: string | null } | null;
+  return {
+    completedAt: u?.onboardingCompletedAt?.toISOString() ?? null,
+    skippedAt: u?.onboardingSkippedAt?.toISOString() ?? null,
+    step: u?.onboardingStep ?? 0,
+    tourVersion: u?.tourVersion ?? 0,
+    theme: u?.themePreference ?? null,
+    checklistDismissedAt: checklist?.dismissedAt ?? null,
+  };
+}
+
+export type Activation = {
+  sendingAccount: boolean;
+  leads: boolean;
+  template: boolean;
+  campaign: boolean;
+  sent: boolean;
+};
+
+/**
+ * Activation is DERIVED from real data on every read, never stored. A stored
+ * "done" flag drifts the moment a user deletes the thing it was counting, and
+ * then the checklist quietly lies about the state of the workspace.
+ */
+export async function getActivation(orgId: string): Promise<Activation> {
+  return cached(`activation:${orgId}`, 30_000, async () => {
+    const [sendingAccount, leads, template, campaign, sent] = await Promise.all([
+      prisma.sendingAccount.count({ where: { organizationId: orgId }, take: 1 }),
+      prisma.lead.count({ where: { organizationId: orgId }, take: 1 }),
+      prisma.template.count({ where: { organizationId: orgId }, take: 1 }),
+      prisma.campaign.count({ where: { organizationId: orgId }, take: 1 }),
+      prisma.message.count({ where: { organizationId: orgId, status: "sent" }, take: 1 }),
+    ]);
+    return {
+      sendingAccount: sendingAccount > 0,
+      leads: leads > 0,
+      template: template > 0,
+      campaign: campaign > 0,
+      sent: sent > 0,
+    };
+  });
+}

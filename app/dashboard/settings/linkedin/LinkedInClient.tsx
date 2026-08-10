@@ -4,7 +4,7 @@ import { useState } from "react";
 import useSWR from "swr";
 import { Linkedin, Copy, Check, RefreshCw, Eye, EyeOff, Clock, Send, AlertTriangle, ListChecks } from "lucide-react";
 import { api } from "@/lib/client";
-import { DashHeader, Panel, Banner, Label, Input } from "@/components/dashboard/ui";
+import { Banner, DashHeader, Input, Label, Panel, useConfirm } from "@/components/ui";
 
 type Connect = {
   extToken: string;
@@ -33,9 +33,16 @@ export default function LinkedInClient() {
   const [maxD, setMaxD] = useState<number | "">("");
 
   const connected = data ? recentlySeen(data.lastSeenAt) : false;
+  const confirm = useConfirm();
 
   async function rotate() {
-    if (!confirm("Rotate the token? The old one stops working immediately — you'll need to paste the new one into the extension.")) return;
+    const ok = await confirm({
+      title: "Rotate the extension token?",
+      body: "The current token stops working immediately. You'll need to paste the new one into the Chrome extension before it can send again.",
+      confirmLabel: "Rotate token",
+      tone: "danger",
+    });
+    if (!ok) return;
     await api("/api/linkedin/connect", { body: { action: "rotate" } });
     setMsg({ kind: "success", text: "Token rotated. Paste the new one into the extension." });
     mutate();
@@ -79,7 +86,7 @@ export default function LinkedInClient() {
           <Panel className="!p-5 sm:col-span-1">
             <div className="flex items-center gap-2 text-ink-soft"><Linkedin className="h-4 w-4" /><span className="font-mono text-xs uppercase">Status</span></div>
             <div className="mt-2 flex items-center gap-2">
-              <span className={`h-2.5 w-2.5 rounded-full ${connected ? "bg-emerald-500" : "bg-zinc-300"}`} />
+              <span className={`h-2.5 w-2.5 rounded-full ${connected ? "bg-success" : "bg-line-strong"}`} />
               <span className="font-display text-lg font-bold">{connected ? "Connected" : "Waiting"}</span>
             </div>
             <div className="mt-0.5 text-xs text-ink-soft">{connected ? "extension is polling" : "start the extension"}</div>

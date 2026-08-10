@@ -7,7 +7,7 @@ import {
   BarChart, Bar, Legend,
 } from "recharts";
 import { Users, Send, MailOpen, MousePointerClick, Reply, TrendingUp } from "lucide-react";
-import { DashHeader, Panel } from "@/components/dashboard/ui";
+import { DashHeader, Panel, Skeleton } from "@/components/ui";
 
 type Report = {
   days: number;
@@ -18,7 +18,11 @@ type Report = {
   byCampaign: { id: string; name: string; enrolled: number; sent: number; opened: number; replied: number }[];
 };
 
-const COLORS = { sent: "#0a0a0a", opened: "#4f46e5", clicked: "#0891b2", replied: "#059669" };
+// Recharts writes these straight onto SVG paint attributes, which a class
+// swap can never reach — but SVG fill/stroke accept var(), so the values stay
+// theme-reactive without reading computed styles in an effect (that would
+// break SSR and flash on theme change).
+const COLORS = { sent: "var(--ink)", opened: "var(--accent)", clicked: "var(--info)", replied: "var(--success)" };
 const STAGE_ORDER = ["new", "contacted", "replied", "qualified", "won", "lost"];
 
 function Tile({ icon, label, value, sub }: { icon: React.ReactNode; label: string; value: string | number; sub?: string }) {
@@ -49,7 +53,7 @@ export default function ReportsClient() {
         action={
           <div className="flex gap-1 rounded-xl border border-line p-1">
             {[7, 30, 90].map((d) => (
-              <button key={d} onClick={() => setDays(d)} className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${days === d ? "bg-ink text-white" : "text-ink-soft hover:bg-tint"}`}>
+              <button key={d} onClick={() => setDays(d)} className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${days === d ? "bg-ink text-ink-invert" : "text-ink-soft hover:bg-tint"}`}>
                 {d}d
               </button>
             ))}
@@ -73,7 +77,7 @@ export default function ReportsClient() {
             <h2 className="font-display text-base font-bold">Engagement over time</h2>
           </div>
           {isLoading ? (
-            <div className="grid h-64 place-items-center text-sm text-ink-soft">Loading…</div>
+            <div className="h-64 p-2"><Skeleton className="h-full w-full" /></div>
           ) : (
             <ResponsiveContainer width="100%" height={280}>
               <AreaChart data={data?.series ?? []} margin={{ left: -20, right: 8, top: 8 }}>
@@ -85,10 +89,10 @@ export default function ReportsClient() {
                     </linearGradient>
                   ))}
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" vertical={false} />
-                <XAxis dataKey="date" tickFormatter={shortDate} tick={{ fontSize: 11, fill: "#6b6b6b" }} interval="preserveStartEnd" minTickGap={28} />
-                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#6b6b6b" }} width={40} />
-                <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #e5e5e5", fontSize: 12 }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" vertical={false} />
+                <XAxis dataKey="date" tickFormatter={shortDate} tick={{ fontSize: 11, fill: "var(--ink-soft)" }} interval="preserveStartEnd" minTickGap={28} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "var(--ink-soft)" }} width={40} />
+                <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid var(--line)", background: "var(--surface-raised)", color: "var(--ink)", fontSize: 12 }} />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
                 <Area type="monotone" dataKey="sent" stroke={COLORS.sent} fill="url(#g-sent)" strokeWidth={2} />
                 <Area type="monotone" dataKey="opened" stroke={COLORS.opened} fill="url(#g-opened)" strokeWidth={2} />
@@ -127,10 +131,10 @@ export default function ReportsClient() {
             ) : (
               <ResponsiveContainer width="100%" height={240}>
                 <BarChart data={(data?.byCampaign ?? []).slice(0, 6)} margin={{ left: -20, right: 8, top: 8 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "#6b6b6b" }} tickFormatter={(n: string) => (n.length > 10 ? n.slice(0, 10) + "…" : n)} />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "#6b6b6b" }} width={40} />
-                  <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid #e5e5e5", fontSize: 12 }} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--line)" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "var(--ink-soft)" }} tickFormatter={(n: string) => (n.length > 10 ? n.slice(0, 10) + "…" : n)} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 11, fill: "var(--ink-soft)" }} width={40} />
+                  <Tooltip contentStyle={{ borderRadius: 12, border: "1px solid var(--line)", background: "var(--surface-raised)", color: "var(--ink)", fontSize: 12 }} />
                   <Legend wrapperStyle={{ fontSize: 12 }} />
                   <Bar dataKey="sent" fill={COLORS.sent} radius={[4, 4, 0, 0]} />
                   <Bar dataKey="replied" fill={COLORS.replied} radius={[4, 4, 0, 0]} />
