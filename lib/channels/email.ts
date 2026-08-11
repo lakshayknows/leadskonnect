@@ -63,28 +63,59 @@ async function sendViaGmailApi(
   return j.id as string;
 }
 
-// Lazily-created transporter so importing this file never requires SMTP creds.
-let transporter: import("nodemailer").Transporter | null = null;
+const NO_ACCOUNT =
+  "No sending account connected. Connect a mailbox in Settings → Sending accounts before sending.";
 
-async function getTransporter() {
-  if (transporter) return transporter;
-  const nodemailer = await import("nodemailer");
-  transporter = nodemailer.createTransport({
-    host: env.smtp.host,
-    port: env.smtp.port,
-    secure: env.smtp.secure,
-    auth: { user: env.smtp.user!, pass: env.smtp.pass! },
-    ...(env.smtp.dkim.domainName && env.smtp.dkim.privateKey
-      ? {
-          dkim: {
-            domainName: env.smtp.dkim.domainName,
-            keySelector: env.smtp.dkim.keySelector,
-            privateKey: env.smtp.dkim.privateKey,
-          },
-        }
-      : {}),
+/**
+ * Internal mail: Followthroo notifying its OWN users (new-lead alerts, SLA escalations).
+ *
+ * This is the one legitimate use of the platform's SMTP credentials, and it is
+ * deliberately a separate function from `emailChannel.send` so the distinction can't
+ * blur: anything a *contact* receives must go out through a mailbox the workspace
+ * connected, under their own domain and reputation. Nothing here is ever addressed to
+ * a lead, so it bypasses suppression and the outbound rate limiter by design.
+ */
+export async function sendSystemEmail(to: string, subject: string, body: string): Promise<boolean> {
+  if (!configured.email) return false;
+  try {
+    const nodemailer = await import("nodemailer");
+    const t = nodemailer.createTransport({
+      host: env.smtp.host,
+      port: env.smtp.port,
+      secure: env.smtp.secure,
+      auth: { user: env.smtp.user!, pass: env.smtp.pass! },
+      ...(env.smtp.dkim.domainName && env.smtp.dkim.privateKey
+        ? {
+            dkim: {
+              domainName: env.smtp.dkim.domainName,
+              keySelector: env.smtp.dkim.keySelector,
+              privateKey: env.smtp.dkim.privateKey,
+            },
+          }
+        : {}),
+    });
+    await t.sendMail({ from: env.smtp.from, to, subject, html: formatEmailBody(body), text: body });
+    return true;
+  } catch (e) {
+    console.error("[email] system notification failed:", e);
+    return false;
+  }
+}
+
+/**
+ * The mailbox a workspace sends from when the caller didn't name one — its oldest
+ * active account. Returns null when the org has connected none, which is a hard stop:
+ * there is deliberately no platform-wide fallback mailbox (see the note on `send`).
+ */
+export async function defaultSendingAccountId(orgId: string): Promise<string | null> {
+  if (!orgId || orgId === "global") return null;
+  const { prisma } = await import("../db");
+  const acc = await prisma.sendingAccount.findFirst({
+    where: { organizationId: orgId, active: true },
+    orderBy: { createdAt: "asc" },
+    select: { id: true },
   });
-  return transporter;
+  return acc?.id ?? null;
 }
 
 export const emailChannel: Channel = {
@@ -92,70 +123,81 @@ export const emailChannel: Channel = {
   isConfigured: () => configured.email,
   capabilities: () => ({ send: true, receive: true, templates: false, requiresOptIn: false }),
 
-  async send(lead: Lead, rendered: RenderedMessage, account = "default"): Promise<SendResult> {
+  /**
+   * Every email goes out through a SendingAccount the workspace connected itself.
+   *
+   * There used to be a fallback to the platform's own SMTP creds (`env.smtp`) whenever
+   * no account was named. It was removed because it was wrong in four ways at once:
+   * mail left under Followthroo's From address rather than the customer's; the reply
+   * poller only walks SendingAccount rows, so replies to that mailbox were never
+   * captured and stop-on-reply silently never fired; deliverability reputation was
+   * shared across every tenant; and the rate limiter keys on (org, account), so each
+   * tenant got its own quota against one physical mailbox. A send with no connected
+   * account now fails loudly instead of quietly doing the wrong thing.
+   */
+  async send(lead: Lead, rendered: RenderedMessage, account?: string, orgId?: string): Promise<SendResult> {
     if (!lead.email) return { ok: false, skipped: true, reason: "lead has no email" };
+    if (!account || account === "default") return { ok: false, skipped: true, reason: NO_ACCOUNT };
+    // The account id is a bare uuid; without the owning org in the lookup, one tenant
+    // could send through another tenant's connected mailbox.
+    if (!orgId || orgId === "global") {
+      return { ok: false, skipped: true, reason: "send attempted without an organization scope" };
+    }
+
     // Plain-text template bodies → readable HTML paragraphs (idempotent for HTML bodies).
     const htmlBody = formatEmailBody(rendered.body);
     try {
-      let t: import("nodemailer").Transporter;
-      let fromAddress = env.smtp.from;
-
-      if (account && account !== "default") {
-        const { prisma } = await import("../db");
-        const sendingAccount = await prisma.sendingAccount.findUnique({
-          where: { id: account },
-        });
-        if (!sendingAccount) {
-          return { ok: false, skipped: true, reason: `Sending account ${account} not found` };
-        }
-        if (!sendingAccount.active) {
-          return { ok: false, skipped: true, reason: `Sending account ${account} is inactive` };
-        }
-        fromAddress = sendingAccount.from || `${sendingAccount.name} <${sendingAccount.email}>`;
-
-        // Gmail OAuth accounts send through the Gmail API (matches the gmail.send scope).
-        if (sendingAccount.provider === "gmail_oauth") {
-          if (!configured.google) {
-            return { ok: false, error: "Google OAuth not configured on server" };
-          }
-          if (!sendingAccount.refreshToken) {
-            return { ok: false, skipped: true, reason: `Gmail account ${account} needs re-connect (no refresh token)` };
-          }
-          const id = await sendViaGmailApi(
-            sendingAccount.refreshToken,
-            fromAddress,
-            lead.email,
-            rendered.subject ?? "",
-            htmlBody
-          );
-          return { ok: true, providerId: id };
-        }
-
-        // SMTP account.
-        if (!sendingAccount.host || !sendingAccount.user || !sendingAccount.pass) {
-          return { ok: false, error: `SMTP account ${account} is missing host/user/pass` };
-        }
-        const nodemailer = await import("nodemailer");
-        t = nodemailer.createTransport({
-          host: sendingAccount.host,
-          port: sendingAccount.port,
-          secure: sendingAccount.secure,
-          auth: { user: sendingAccount.user, pass: sendingAccount.pass },
-          // Per-account DKIM signing (improves deliverability) when configured.
-          ...(sendingAccount.dkimDomain && sendingAccount.dkimPrivateKey
-            ? {
-                dkim: {
-                  domainName: sendingAccount.dkimDomain,
-                  keySelector: sendingAccount.dkimSelector || "default",
-                  privateKey: sendingAccount.dkimPrivateKey,
-                },
-              }
-            : {}),
-        });
-      } else {
-        if (!configured.email) return { ok: false, skipped: true, reason: "email not configured" };
-        t = await getTransporter();
+      const { prisma } = await import("../db");
+      const sendingAccount = await prisma.sendingAccount.findFirst({
+        where: { id: account, organizationId: orgId },
+      });
+      if (!sendingAccount) {
+        return { ok: false, skipped: true, reason: `Sending account ${account} not found` };
       }
+      if (!sendingAccount.active) {
+        return { ok: false, skipped: true, reason: `Sending account ${account} is inactive` };
+      }
+      const fromAddress = sendingAccount.from || `${sendingAccount.name} <${sendingAccount.email}>`;
+
+      // Gmail OAuth accounts send through the Gmail API (matches the gmail.send scope).
+      if (sendingAccount.provider === "gmail_oauth") {
+        if (!configured.google) {
+          return { ok: false, error: "Google OAuth not configured on server" };
+        }
+        if (!sendingAccount.refreshToken) {
+          return { ok: false, skipped: true, reason: `Gmail account ${account} needs re-connect (no refresh token)` };
+        }
+        const id = await sendViaGmailApi(
+          sendingAccount.refreshToken,
+          fromAddress,
+          lead.email,
+          rendered.subject ?? "",
+          htmlBody
+        );
+        return { ok: true, providerId: id };
+      }
+
+      // SMTP account.
+      if (!sendingAccount.host || !sendingAccount.user || !sendingAccount.pass) {
+        return { ok: false, error: `SMTP account ${account} is missing host/user/pass` };
+      }
+      const nodemailer = await import("nodemailer");
+      const t = nodemailer.createTransport({
+        host: sendingAccount.host,
+        port: sendingAccount.port,
+        secure: sendingAccount.secure,
+        auth: { user: sendingAccount.user, pass: sendingAccount.pass },
+        // Per-account DKIM signing (improves deliverability) when configured.
+        ...(sendingAccount.dkimDomain && sendingAccount.dkimPrivateKey
+          ? {
+              dkim: {
+                domainName: sendingAccount.dkimDomain,
+                keySelector: sendingAccount.dkimSelector || "default",
+                privateKey: sendingAccount.dkimPrivateKey,
+              },
+            }
+          : {}),
+      });
 
       const info = await t.sendMail({
         from: fromAddress,

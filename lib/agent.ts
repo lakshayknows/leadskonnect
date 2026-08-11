@@ -28,6 +28,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { env, configured } from "./env";
 import { prisma } from "./db";
 import { safeSend } from "./channels";
+import { defaultSendingAccountId } from "./channels/email";
 import { renderMessage } from "./templates";
 import { logActivity } from "./crm";
 import { senderNameForUser, senderNameForCampaign, senderNameForAccount } from "./sender";
@@ -310,10 +311,16 @@ export async function runAgent(opts: {
   // stuck call into a clear, catchable error instead of an opaque 500.
   const client = new AnthropicSDK({ apiKey: env.anthropic.apiKey!, timeout: 60_000, maxRetries: 1 });
 
+  // Email availability is a per-workspace fact, not a platform one: mail goes out
+  // through a SendingAccount this org connected, so the env SMTP flag says nothing
+  // about whether THIS org can send. Checking the org's accounts is the difference
+  // between the agent using a connected Gmail and refusing to email at all.
+  const emailAccountId = opts.sendingAccountId ?? (await defaultSendingAccountId(opts.orgId));
+
   // social has no working adapter yet (lib/channels/social.ts is a stub — isConfigured()
   // always returns false), so it's deliberately never offered here.
   const availableChannels = [
-    configured.email && "email",
+    emailAccountId && "email",
     configured.whatsapp && "whatsapp",
     "linkedin (human-assisted — see rules)",
   ]
@@ -360,7 +367,7 @@ export async function runAgent(opts: {
       try {
         switch (use.name) {
           case "send_message":
-            out = await runSendTool(opts.orgId, input, opts.sendingAccountId, senderName);
+            out = await runSendTool(opts.orgId, input, emailAccountId ?? undefined, senderName);
             break;
           case "draft_message":
             out = await runDraftTool(opts.orgId, input, senderName);

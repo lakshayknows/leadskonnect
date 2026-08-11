@@ -1,6 +1,6 @@
 # channels.md — Per-Channel Features & Official Limits
 
-**Last updated:** 2026-07-03
+**Last updated:** 2026-08-11
 **Status:** draft
 
 > Every channel module implements a uniform `send(lead, rendered)` interface and goes
@@ -31,6 +31,35 @@ for high volume.
   per message; rolling 24h window.
 - Practical throttle: queue + pause (~40 emails/hour) to avoid blocks. Full strategy
   in [rate-limits.md](rate-limits.md).
+
+### Who a message goes out as (2026-08-11)
+
+**Every message a contact receives leaves through a `SendingAccount` the workspace
+connected itself.** There is no platform fallback mailbox, and re-adding one would
+reintroduce four problems at once:
+
+- mail left under Followthroo's `MAIL_FROM` rather than the customer's domain, while
+  the body was still signed with the rep's name;
+- the reply poller only walks `SendingAccount` rows, so replies to that mailbox were
+  **never captured** — stop-on-reply never fired, the Inbox stayed empty, and no
+  follow-up task was ever created;
+- deliverability reputation was shared across every tenant, and the Deliverability
+  page (keyed on `sendingAccountId`) could not score it;
+- the rate limiter keys on `(org, account)`, so each tenant got a *separate* quota
+  against one physical mailbox — N orgs × 40/hour through a single account.
+
+A send with no connected account now fails loudly with a reason the UI shows.
+
+`SMTP_*` / `MAIL_FROM` still exist, for exactly one purpose: `sendSystemEmail()` in
+`lib/channels/email.ts`, which is Followthroo mailing **its own users** (new-lead
+alerts, SLA escalations). It is a separate function from `emailChannel.send` so the
+line can't blur, and nothing it sends is ever addressed to a lead.
+
+**Tenant scoping:** an account id is a bare uuid, so every lookup is
+`findFirst({ id, organizationId })` and `orgId` is part of the adapter's `send()`
+signature. `/api/campaigns` (POST + PATCH) and `/api/agent` verify the submitted
+account belongs to the caller before attaching it. Guarded by
+`scripts/verify-sending.ts`.
 
 ---
 

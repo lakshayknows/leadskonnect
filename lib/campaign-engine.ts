@@ -192,7 +192,9 @@ export async function advanceEnrollment(enrollmentId: string): Promise<void> {
       leadId: enr.leadId,
       campaignId: enr.campaignId,
       templateId: node.templateId ?? undefined,
-      account: enr.campaign.sendingAccountId || "default",
+      // No fallback sender: a campaign with no mailbox fails visibly on the message
+      // record rather than going out under the platform's address.
+      account: enr.campaign.sendingAccountId ?? undefined,
     });
     nextId = node.next ?? null;
   } else if (node.type === "wait") {

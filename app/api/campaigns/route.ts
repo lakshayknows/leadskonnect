@@ -27,11 +27,23 @@ export async function GET(req: NextRequest) {
   return ok(campaigns);
 }
 
+/** A sending account may only be attached by the org that owns it. */
+async function ownsSendingAccount(orgId: string, accountId: string): Promise<boolean> {
+  const hit = await prisma.sendingAccount.findFirst({
+    where: { id: accountId, organizationId: orgId },
+    select: { id: true },
+  });
+  return !!hit;
+}
+
 export async function POST(req: NextRequest) {
   const ctx = await requireOrg(req);
   if (ctx instanceof Response) return ctx;
   const parsed = CreateCampaign.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "invalid body");
+  if (parsed.data.sendingAccountId && !(await ownsSendingAccount(ctx.orgId, parsed.data.sendingAccountId))) {
+    return fail("Sending account not found", 404);
+  }
   const campaign = await prisma.campaign.create({
     data: {
       organizationId: ctx.orgId,

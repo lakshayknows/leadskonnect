@@ -57,7 +57,8 @@ export async function POST(req: NextRequest, { params }: Ctx) {
   if (!thread) return fail("not found", 404);
   if (!thread.lead?.email) return fail("thread has no lead email to reply to", 400);
 
-  // Prefer the org's first active sending account, else the env default.
+  // The workspace's own mailbox. No platform fallback: replying from Followthroo's
+  // address would strand the contact's answer in an inbox nobody polls.
   const account = await prisma.sendingAccount.findFirst({
     where: { organizationId: ctx.orgId, active: true },
     orderBy: { createdAt: "asc" },
@@ -68,7 +69,7 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     "email",
     { id: thread.lead.id, email: thread.lead.email, firstName: thread.lead.firstName },
     { subject, body: parsed.data.body },
-    account?.id ?? "default",
+    account?.id,
     ctx.orgId
   );
 

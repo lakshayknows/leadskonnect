@@ -75,7 +75,12 @@ export interface Adapter {
   name: string;
   capabilities(): AdapterCapabilities;
   isConfigured(): boolean;
-  send?(lead: Lead, rendered: RenderedMessage, account?: string): Promise<SendResult>;
+  /**
+   * `orgId` is required for any adapter that loads per-tenant credentials: the account
+   * id alone is a bare uuid, so without the owning org in the lookup one tenant could
+   * send through another's connected mailbox or number.
+   */
+  send?(lead: Lead, rendered: RenderedMessage, account?: string, orgId?: string): Promise<SendResult>;
   /** Parse a provider payload into normalised events. */
   receive?(payload: unknown, headers?: Headers): Promise<InboundEvent[]>;
   /** Verify a webhook signature before anything is parsed or trusted. */
@@ -89,7 +94,7 @@ export interface Adapter {
 export interface Channel {
   name: "email" | "linkedin" | "whatsapp" | "social";
   isConfigured(): boolean;
-  send(lead: Lead, rendered: RenderedMessage, account?: string): Promise<SendResult>;
+  send(lead: Lead, rendered: RenderedMessage, account?: string, orgId?: string): Promise<SendResult>;
   capabilities?(): AdapterCapabilities;
   receive?(payload: unknown, headers?: Headers): Promise<InboundEvent[]>;
   verify?(rawBody: string, headers: Headers): boolean;

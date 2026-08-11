@@ -18,6 +18,7 @@ const ENTRIES = [
       "Home became a work queue instead of a scoreboard: what needs you, who replied, what's overdue",
       "Sidebar cut from 18 items to 11 — Deliverability, Ageing, Escalations and Control tower moved under Reports",
       "Contacts are called Leads everywhere, in the menu and on the page",
+      "Campaigns and the AI agent now ask which of your mailboxes to send from — outreach always goes out under your own domain, so replies come back to you and your sending reputation is yours alone",
     ],
   },
   {

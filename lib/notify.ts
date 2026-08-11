@@ -5,9 +5,10 @@
  * gated the same way, since a rep should know about a new lead right away regardless.
  */
 import { prisma } from "./db";
+import { defaultSendingAccountId } from "./channels/email";
 import { renderMessage } from "./templates";
 import { safeSend } from "./channels";
-import { emailChannel } from "./channels/email";
+import { sendSystemEmail } from "./channels/email";
 import { enqueueJob } from "./queue";
 
 type BusinessHours = { startHour: number; endHour: number; timezoneOffsetMinutes: number; days: number[] };
@@ -58,11 +59,15 @@ export async function sendCaptureAck(organizationId: string, leadId: string) {
   if (!channel) return;
 
   const rendered = renderMessage(ACK_TEMPLATE, lead);
+  // Email needs a mailbox the workspace actually connected — there is no platform
+  // fallback sender any more. WhatsApp still resolves its number at the adapter.
+  const accountId = channel === "email" ? await defaultSendingAccountId(organizationId) : null;
+  if (channel === "email" && !accountId) return;
   await safeSend(
     channel,
     { id: lead.id, email: lead.email, phone: lead.phone, linkedinUrl: lead.linkedinUrl, firstName: lead.firstName },
     rendered,
-    "default",
+    accountId ?? undefined,
     organizationId,
   );
 }
@@ -74,15 +79,13 @@ async function alertAssignedRep(organizationId: string, ownerId: string, lead: {
   if (!owner?.email) return;
 
   const name = [lead.firstName, lead.lastName].filter(Boolean).join(" ") || lead.email || lead.phone || "A new contact";
-  await emailChannel
-    .send(
-      { id: `staff-alert:${ownerId}`, email: owner.email, firstName: owner.name },
-      {
-        subject: `New lead: ${name}`,
-        body: `${name} was just captured and assigned to you.\n\nCompany: ${lead.company ?? "—"}\nEmail: ${lead.email ?? "—"}\nPhone: ${lead.phone ?? "—"}`,
-      },
-    )
-    .catch((e) => console.error("[notify] staff alert failed:", e));
+  // Internal mail to our own user, so it goes through the platform mailbox rather than
+  // burning a customer's sending reputation on a notification they never sent.
+  await sendSystemEmail(
+    owner.email,
+    `New lead: ${name}`,
+    `${name} was just captured and assigned to you.\n\nCompany: ${lead.company ?? "—"}\nEmail: ${lead.email ?? "—"}\nPhone: ${lead.phone ?? "—"}`,
+  );
 }
 
 /** Called right after a lead enters a pipeline. Queues (or sends) the contact ack per
