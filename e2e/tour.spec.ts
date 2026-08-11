@@ -8,7 +8,7 @@ const STEPS = [
   { target: "sidebar-campaigns", path: "/dashboard/leads" },
   { target: "campaigns-new", path: "/dashboard/campaigns" },
   { target: "sidebar-inbox", path: "/dashboard/campaigns" },
-  { target: "sidebar-accounts", path: "/dashboard/campaigns" },
+  { target: "sidebar-tasks", path: "/dashboard/campaigns" },
 ];
 
 test.describe("first-run product tour", () => {
@@ -17,7 +17,7 @@ test.describe("first-run product tour", () => {
     await page.goto("/dashboard");
 
     await expect(callout(page)).toBeVisible();
-    await expect(stepHeading(page)).toHaveText(STEPS[0] === undefined ? "" : "Your outreach at a glance");
+    await expect(stepHeading(page)).toHaveText(STEPS[0] === undefined ? "" : "What needs you today");
 
     // The ring must actually sit over the element the step names.
     await expect.poll(async () => (await ringMatchesTarget(page, "overview-stats")).ok, {
@@ -78,7 +78,7 @@ test.describe("first-run product tour", () => {
 
     // Back crosses /dashboard/leads -> /dashboard.
     await callout(page).getByRole("button", { name: "Back" }).click();
-    await expect(stepHeading(page)).toHaveText("Start with your contacts", { timeout: 20_000 });
+    await expect(stepHeading(page)).toHaveText("Start with your leads", { timeout: 20_000 });
     await expect(page).toHaveURL(/\/dashboard(\?|$)/);
     await expect.poll(async () => (await ringMatchesTarget(page, "sidebar-contacts")).ok, { timeout: 15_000 }).toBe(true);
   });
@@ -161,10 +161,10 @@ test.describe("tour keyboard and focus", () => {
     await expect(callout(page)).toBeVisible();
 
     await page.keyboard.press("ArrowRight");
-    await expect(stepHeading(page)).toHaveText("Start with your contacts", { timeout: 20_000 });
+    await expect(stepHeading(page)).toHaveText("Start with your leads", { timeout: 20_000 });
 
     await page.keyboard.press("ArrowLeft");
-    await expect(stepHeading(page)).toHaveText("Your outreach at a glance", { timeout: 20_000 });
+    await expect(stepHeading(page)).toHaveText("What needs you today", { timeout: 20_000 });
 
     await page.keyboard.press("Escape");
     await expect(callout(page)).toBeHidden();
@@ -200,7 +200,7 @@ test.describe("tour replay", () => {
 
     await page.goto("/dashboard?tour=product");
     await expect(callout(page)).toBeVisible({ timeout: 20_000 });
-    await expect(stepHeading(page)).toHaveText("Your outreach at a glance");
+    await expect(stepHeading(page)).toHaveText("What needs you today");
     await expect(page).not.toHaveURL(/tour=product/);
   });
 

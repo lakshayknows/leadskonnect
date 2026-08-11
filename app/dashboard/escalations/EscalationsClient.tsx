@@ -82,7 +82,7 @@ export default function EscalationsClient() {
             <table className="w-full min-w-[52rem] text-sm">
               <thead>
                 <tr className="border-b border-line text-left font-mono text-xs uppercase tracking-wide text-ink-soft">
-                  <th className="px-4 py-3 font-medium">Contact</th>
+                  <th className="px-4 py-3 font-medium">Lead</th>
                   <th className="px-4 py-3 font-medium">Pipeline / stage</th>
                   <th className="px-4 py-3 font-medium">Escalated to</th>
                   <th className="px-4 py-3 font-medium">Delivery</th>

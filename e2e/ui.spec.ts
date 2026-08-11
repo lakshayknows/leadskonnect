@@ -94,7 +94,7 @@ test.describe("overlays replace native dialogs", () => {
 
     const dialog = page.locator("dialog.ft-dialog[open]");
     await expect(dialog).toBeVisible();
-    await expect(dialog).toContainText("Delete this contact?");
+    await expect(dialog).toContainText("Delete this lead?");
     await expect(dialog).toContainText("suppression list");
     expect(nativeDialogFired, "must not use window.confirm").toBe(false);
 
@@ -129,7 +129,7 @@ test.describe("empty states and loading", () => {
     await page.goto("/dashboard/leads");
     await expect(page, "the tour must not hijack a deep link").toHaveURL(/\/dashboard\/leads/);
 
-    await expect(page.getByText("No contacts yet")).toBeVisible();
+    await expect(page.getByText("No leads yet")).toBeVisible();
     await expect(page.getByText(/Import a CSV/i)).toBeVisible();
   });
 

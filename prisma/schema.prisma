@@ -83,6 +83,8 @@ model Lead {
   enrollments        Enrollment[]
   inboxThreads       InboxThread[]
   contactIdentities  ContactIdentity[]
+  tasks              Task[]
+  notes              Note[]
   leadSource         LeadSource?         @relation(fields: [leadSourceId], references: [id])
   leadSourceId       String?
   pipelineItems      PipelineItem[]
@@ -775,4 +777,68 @@ model ConversationEvent {
 
   @@unique([organizationId, channel, externalId])
   @@index([organizationId, leadId, occurredAt])
+}
+
+/// ---- Next action ----------------------------------------------------------
+/// The product's central promise — "I'll remember what you need to do next" —
+/// needs somewhere to remember it. A Task is one owed action against one contact.
+/// Deliberately not a project-management object: no subtasks, no dependencies,
+/// no projects. It exists so a lead cannot fall through the cracks.
+enum TaskKind {
+  follow_up
+  call
+  email
+  whatsapp
+  linkedin
+  meeting
+  other
+}
+
+enum TaskStatus {
+  open
+  done
+  cancelled
+}
+
+model Task {
+  id             String     @id @default(cuid())
+  organizationId String
+  /// Nullable so a standalone reminder is possible, but in practice every task
+  /// created by the product hangs off a contact.
+  leadId         String?
+  lead           Lead?      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  pipelineItemId String?
+  title          String
+  kind           TaskKind   @default(follow_up)
+  status         TaskStatus @default(open)
+  dueAt          DateTime?
+  /// Assigned rep. Raw userId — memberships are per-org and may change.
+  ownerId        String?
+  createdBy      String?
+  /// user | ai | system — so "we created this follow-up for you" stays visible
+  /// rather than looking like something the rep forgot they typed.
+  createdKind    String     @default("user")
+  completedAt    DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  // Drives the Today/Overdue/Upcoming buckets without a table scan.
+  @@index([organizationId, status, dueAt])
+  @@index([organizationId, ownerId, status])
+  @@index([leadId])
+}
+
+/// A human's own words on a contact. Separate from ConversationEvent, which is
+/// reserved for things that actually happened on a channel — a note is internal
+/// and was never sent to anyone.
+model Note {
+  id             String   @id @default(cuid())
+  organizationId String
+  leadId         String
+  lead           Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  authorId       String?
+  body           String
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, leadId, createdAt])
 }

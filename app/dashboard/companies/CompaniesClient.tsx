@@ -20,7 +20,7 @@ export default function CompaniesClient() {
 
   return (
     <>
-      <DashHeader title="Companies" subtitle={`${data.length.toLocaleString()} companies · ${totalContacts.toLocaleString()} contacts`} />
+      <DashHeader title="Companies" subtitle={`${data.length.toLocaleString()} companies · ${totalContacts.toLocaleString()} leads`} />
 
       <div className="space-y-4 p-8">
         <div className="relative max-w-md">
@@ -41,7 +41,7 @@ export default function CompaniesClient() {
           <EmptyState
             icon={Building2}
             title="No companies yet"
-            body="Companies are grouped from your contacts. Add contacts with a company name and they appear here, ready to enroll together."
+            body="Companies are grouped from your leads. Add leads with a company name and they appear here, ready to enroll together."
           />
         ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -56,7 +56,7 @@ export default function CompaniesClient() {
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-semibold">{c.company}</div>
-                  <div className="text-xs text-ink-soft">{c.count} contact{c.count === 1 ? "" : "s"}</div>
+                  <div className="text-xs text-ink-soft">{c.count} lead{c.count === 1 ? "" : "s"}</div>
                 </div>
                 <ArrowRight className="h-4 w-4 shrink-0 text-ink-soft/0 transition group-hover:text-accent" />
               </Link>

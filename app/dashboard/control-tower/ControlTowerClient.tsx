@@ -34,7 +34,7 @@ export default function ControlTowerClient() {
     <>
       <DashHeader
         title="Control tower"
-        subtitle="Every open conversation across channels, contacts waiting on a reply surfaced first."
+        subtitle="Every open conversation across channels, leads waiting on a reply surfaced first."
       />
 
       <div className="space-y-6 p-8">
@@ -84,7 +84,7 @@ export default function ControlTowerClient() {
             <table className="w-full min-w-[56rem] text-sm">
               <thead>
                 <tr className="border-b border-line text-left font-mono text-xs uppercase tracking-wide text-ink-soft">
-                  <th className="px-4 py-3 font-medium">Contact</th>
+                  <th className="px-4 py-3 font-medium">Lead</th>
                   <th className="px-4 py-3 font-medium">Pipeline / stage</th>
                   <th className="px-4 py-3 font-medium">Owner</th>
                   <th className="px-4 py-3 font-medium">Last activity</th>
@@ -99,7 +99,7 @@ export default function ControlTowerClient() {
                   return (
                     <tr key={r.pipelineItemId} className={r.awaitingReply ? "bg-warning-soft/30" : undefined}>
                       <td className="px-4 py-3">
-                        <Link href="/dashboard/leads" className="font-medium hover:text-accent">
+                        <Link href={`/dashboard/leads/${r.lead.id}`} className="font-medium hover:text-accent hover:underline">
                           {name}
                         </Link>
                         {r.lead.company && <div className="text-xs text-ink-soft">{r.lead.company}</div>}

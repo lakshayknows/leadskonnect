@@ -26,7 +26,7 @@ export default function CompanyDetailClient({ company }: { company: string }) {
   async function enrollAll(campaignId: string) {
     if (!campaignId || ids.length === 0) return;
     const ok = await confirm({
-      title: `Enroll ${ids.length} contact${ids.length === 1 ? "" : "s"} at ${company}?`,
+      title: `Enroll ${ids.length} lead${ids.length === 1 ? "" : "s"} at ${company}?`,
       body: "Everyone at this company starts receiving the campaign's sequence.",
       confirmLabel: "Enroll",
     });
@@ -41,14 +41,14 @@ export default function CompanyDetailClient({ company }: { company: string }) {
   async function addAllToGroup(segmentId: string) {
     if (!segmentId || ids.length === 0) return;
     await api("/api/leads/bulk", { body: { leadIds: ids, segmentId } });
-    setMsg({ kind: "success", text: `Added ${ids.length} contact(s) to the group.` });
+    setMsg({ kind: "success", text: `Added ${ids.length} lead(s) to the group.` });
   }
 
   return (
     <>
       <DashHeader
         title={company}
-        subtitle={`${leads.length} contact${leads.length === 1 ? "" : "s"} at this company`}
+        subtitle={`${leads.length} lead${leads.length === 1 ? "" : "s"} at this company`}
         action={
           <Link href="/dashboard/companies" className="btn btn-ghost !py-2 !text-sm">
             <ArrowLeft className="h-4 w-4" /> All companies
@@ -90,11 +90,15 @@ export default function CompanyDetailClient({ company }: { company: string }) {
               {isLoading ? (
                 <>{Array.from({ length: 6 }).map((_, i) => (<tr key={i}>{Array.from({ length: 4 }).map((__, c) => (<td key={c} className="px-4 py-3"><Skeleton className="h-3.5 w-24" /></td>))}</tr>))}</>
               ) : leads.length === 0 ? (
-                <tr><td colSpan={4} className="px-4 py-8 text-center text-ink-soft">No contacts at this company.</td></tr>
+                <tr><td colSpan={4} className="px-4 py-8 text-center text-ink-soft">No leads at this company.</td></tr>
               ) : (
                 leads.map((l) => (
                   <tr key={l.id}>
-                    <td className="px-4 py-3 font-medium">{[l.firstName, l.lastName].filter(Boolean).join(" ") || "—"}</td>
+                    <td className="px-4 py-3 font-medium">
+                      <Link href={`/dashboard/leads/${l.id}`} className="hover:text-accent hover:underline">
+                        {[l.firstName, l.lastName].filter(Boolean).join(" ") || l.email || "Unnamed lead"}
+                      </Link>
+                    </td>
                     <td className="px-4 py-3">{l.email ?? "—"}</td>
                     <td className="px-4 py-3">
                       {l.linkedinUrl ? (

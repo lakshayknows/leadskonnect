@@ -468,8 +468,8 @@ export default function CampaignsPage() {
               <button
                 onClick={async () => {
                   const ok = await confirm({
-                    title: "Enroll every contact?",
-                    body: "This sends messages to everyone in your list, up to 500 contacts. There's no way to un-send them.",
+                    title: "Enroll every lead?",
+                    body: "This sends messages to everyone in your list, up to 500 leads. There's no way to un-send them.",
                     confirmLabel: "Enroll everyone",
                     tone: "danger",
                   });

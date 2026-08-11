@@ -11,10 +11,12 @@
  * Playwright uses the same selector, so the tests and the tour agree on names.
  */
 export const TOUR_TARGETS = [
+  // Kept as `sidebar-contacts` though the row now reads "Leads" — renaming the id
+  // would churn every step and spec for nothing. The id names the destination.
   "sidebar-contacts",
   "sidebar-campaigns",
   "sidebar-inbox",
-  "sidebar-accounts",
+  "sidebar-tasks",
   "overview-stats",
   "overview-checklist",
   "leads-import",

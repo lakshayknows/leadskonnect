@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import useSWR from "swr";
 import { GitBranch, Clock, AlertTriangle, Building2 } from "lucide-react";
 import { api } from "@/lib/client";
@@ -177,7 +178,15 @@ export default function PipelineClient() {
                         dragId === item.id && "opacity-50",
                       )}
                     >
-                      <div className="truncate text-sm font-semibold">{item.name}</div>
+                      {/* Only the title is a link — the card itself has to stay
+                          draggable, and a full-card anchor swallows the drag. */}
+                      <Link
+                        href={`/dashboard/leads/${item.leadId}`}
+                        draggable={false}
+                        className="block truncate text-sm font-semibold hover:text-accent hover:underline"
+                      >
+                        {item.name}
+                      </Link>
                       {item.company && (
                         <div className="mt-0.5 flex items-center gap-1 truncate text-xs text-ink-soft">
                           <Building2 className="h-3 w-3 shrink-0" /> {item.company}

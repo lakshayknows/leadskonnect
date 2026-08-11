@@ -59,7 +59,7 @@ export default function AgentPage() {
     const leadIds = [...selected];
     if (leadIds.length === 0) return setMsg("Select at least one lead.");
     const ok = await confirm({
-      title: `Run the agent on ${leadIds.length} contact${leadIds.length === 1 ? "" : "s"}?`,
+      title: `Run the agent on ${leadIds.length} lead${leadIds.length === 1 ? "" : "s"}?`,
       body: "The agent sends real messages on your connected channels. This can't be undone.",
       confirmLabel: "Run agent",
       tone: "danger",
@@ -177,7 +177,7 @@ export default function AgentPage() {
                     <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0">
                         <div className="truncate text-sm font-semibold">
-                          {[d.lead.firstName, d.lead.lastName].filter(Boolean).join(" ") || d.lead.email || "Unnamed contact"}
+                          {[d.lead.firstName, d.lead.lastName].filter(Boolean).join(" ") || d.lead.email || "Unnamed lead"}
                         </div>
                         <div className="text-xs uppercase tracking-wide text-ink-soft">{d.channel}</div>
                       </div>

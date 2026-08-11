@@ -1,12 +1,18 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import useSWR from "swr";
-import { Trash2, Upload, Plus, Tag, FolderPlus, Rocket, X, Pencil, Check, Users, Linkedin } from "lucide-react";
+import {
+  Trash2, Upload, Plus, Tag, FolderPlus, X, Pencil, Check, Users, Linkedin,
+  AlertTriangle, CircleDot, Search, Sparkles, ArrowRight,
+} from "lucide-react";
 import { api } from "@/lib/client";
-import { Banner, DashHeader, Dialog, EmptyState, Input, Label, NoResults, Panel, Select, Skeleton, useConfirm, usePrompt } from "@/components/ui";
+import { cn } from "@/lib/cn";
+import { Badge, Banner, DashHeader, Dialog, EmptyState, Input, Label, NoResults, Panel, Select, Skeleton, useConfirm, usePrompt } from "@/components/ui";
 import { tourTarget } from "@/components/dashboard/tour/target";
 
+type NextAction = { taskId: string | null; label: string; kind: string; dueAt: string | null; urgent: boolean; source: string };
 type Lead = {
   id: string;
   firstName: string | null;
@@ -17,6 +23,10 @@ type Lead = {
   stage: string;
   tags: string[];
   score: number | null;
+  source: string | null;
+  ownerName: string | null;
+  lastActivityAt: string | null;
+  nextAction: NextAction | null;
 };
 
 type LeadsResponse = { items: Lead[]; total: number; page: number; pageSize: number; totalPages: number };
@@ -25,19 +35,33 @@ type Campaign = { id: string; name: string };
 
 const PAGE_SIZE = 50;
 
+const displayName = (l: Lead) => [l.firstName, l.lastName].filter(Boolean).join(" ") || l.email || "Unnamed lead";
+
+function ago(iso: string | null) {
+  if (!iso) return "—";
+  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d`;
+  return new Date(iso).toLocaleDateString();
+}
+
 export default function LeadsPage() {
   const [page, setPage] = useState(1);
-  const [book, setBook] = useState<"" | "linkedin">(""); // "" = all contacts, "linkedin" = has a profile URL
+  const [book, setBook] = useState<"" | "linkedin">(""); // "" = all leads, "linkedin" = has a profile URL
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [groupFilter, setGroupFilter] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [msg, setMsg] = useState<{ kind: "error" | "success" | "info"; text: string } | null>(null);
+  const [addOpen, setAddOpen] = useState(false);
+  const [groupsOpen, setGroupsOpen] = useState(false);
   const [form, setForm] = useState({ firstName: "", email: "", company: "", tags: "", linkedinUrl: "" });
   const [busy, setBusy] = useState(false);
-  const [newGroup, setNewGroup] = useState("");
-  const [editingGroup, setEditingGroup] = useState<{ id: string; name: string } | null>(null);
   const [managingGroup, setManagingGroup] = useState<Segment | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -62,7 +86,7 @@ export default function LeadsPage() {
 
   const leads = data?.items ?? [];
   const total = data?.total ?? 0;
-  // Distinguishes "you have no contacts" from "your filters match nothing" —
+  // Distinguishes "you have no leads" from "your filters match nothing" —
   // they need different copy and a different action.
   const hasFilters = !!(debouncedSearch.trim() || tagFilter.length || groupFilter || book);
   const totalPages = data?.totalPages ?? 1;
@@ -114,7 +138,8 @@ export default function LeadsPage() {
         },
       });
       setForm({ firstName: "", email: "", company: "", tags: "", linkedinUrl: "" });
-      setMsg({ kind: "success", text: "Contact added." });
+      setAddOpen(false);
+      setMsg({ kind: "success", text: "Lead added." });
       mutate();
     } catch (e) {
       setMsg({ kind: "error", text: (e as Error).message });
@@ -126,6 +151,7 @@ export default function LeadsPage() {
   async function importCsv(file: File) {
     setBusy(true);
     setMsg(null);
+    setAddOpen(false);
     try {
       const text = await file.text();
       const res = await api<{ imported: number; skipped: number }>("/api/leads/import", { raw: text, contentType: "text/csv" });
@@ -141,9 +167,9 @@ export default function LeadsPage() {
 
   async function del(id: string) {
     const ok = await confirm({
-      title: "Delete this contact?",
+      title: "Delete this lead?",
       body: "They'll be added to the suppression list, so no campaign can reach them again.",
-      confirmLabel: "Delete contact",
+      confirmLabel: "Delete lead",
       tone: "danger",
     });
     if (!ok) return;
@@ -155,33 +181,12 @@ export default function LeadsPage() {
     }
   }
 
-  // Inline add/edit a contact's LinkedIn URL (what the extension acts on).
-  async function setLinkedin(id: string, current: string | null) {
-    const url = await prompt({
-      title: "LinkedIn profile",
-      body: "The extension acts on this URL when it sends invites and messages.",
-      label: "Profile URL",
-      placeholder: "https://www.linkedin.com/in/…",
-      defaultValue: current ?? "",
-      confirmLabel: "Save URL",
-      // Blank is meaningful here — it clears the URL — so accept it.
-      validate: (v) => (!v || /^https?:\/\/(www\.)?linkedin\.com\//i.test(v) ? null : "Enter a linkedin.com profile URL."),
-    });
-    if (url === null) return;
-    try {
-      await api(`/api/leads/${id}`, { method: "PATCH", body: { linkedinUrl: url || null } });
-      mutate();
-    } catch (e) {
-      setMsg({ kind: "error", text: (e as Error).message });
-    }
-  }
-
   // ---- Bulk actions on the current selection ----
   const selectedIds = () => Array.from(selected);
 
   async function bulkAddTag() {
     const tag = await prompt({
-      title: `Tag ${selected.size} contact${selected.size === 1 ? "" : "s"}`,
+      title: `Tag ${selected.size} lead${selected.size === 1 ? "" : "s"}`,
       label: "Tag",
       placeholder: "warm-lead",
       confirmLabel: "Add tag",
@@ -202,7 +207,7 @@ export default function LeadsPage() {
   async function bulkEnroll(campaignId: string) {
     if (!campaignId) return;
     const ok = await confirm({
-      title: `Enroll ${selected.size} contact${selected.size === 1 ? "" : "s"}?`,
+      title: `Enroll ${selected.size} lead${selected.size === 1 ? "" : "s"}?`,
       body: "They'll start receiving this campaign's sequence on its normal schedule.",
       confirmLabel: "Enroll",
     });
@@ -216,40 +221,6 @@ export default function LeadsPage() {
     } catch (e) {
       setMsg({ kind: "error", text: (e as Error).message });
     }
-  }
-
-  async function createGroupFromSelection() {
-    if (!newGroup.trim()) return;
-    const groupName = newGroup.trim();
-    const count = selected.size;
-    await api("/api/segments", { body: { name: groupName, kind: "static", leadIds: selectedIds() } });
-    setNewGroup("");
-    setMsg({
-      kind: "success",
-      text: count > 0
-        ? `Group "${groupName}" created with ${count} lead(s).`
-        : `Group "${groupName}" created. Select leads and use "Add to group" to populate it.`,
-    });
-    mutateSegments();
-  }
-
-  async function deleteGroup(id: string) {
-    const ok = await confirm({
-      title: "Delete this group?",
-      body: "The contacts in it are kept — only the group is removed.",
-      confirmLabel: "Delete group",
-      tone: "danger",
-    });
-    if (!ok) return;
-    await api(`/api/segments?id=${id}`, { method: "DELETE" });
-    mutateSegments();
-  }
-
-  async function renameGroup(id: string, name: string) {
-    if (!name.trim()) return;
-    await api("/api/segments", { method: "PATCH", body: { id, name: name.trim() } });
-    setEditingGroup(null);
-    mutateSegments();
   }
 
   async function createGroupFromTag(tag: string) {
@@ -266,301 +237,234 @@ export default function LeadsPage() {
         title="Leads"
         subtitle={`${total.toLocaleString()} in your list`}
         action={
-          <label {...tourTarget("leads-import")} className="btn btn-ghost !py-2 !text-sm cursor-pointer">
-            <Upload className="h-4 w-4" /> Import CSV
-            <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => e.target.files?.[0] && importCsv(e.target.files[0])} />
-          </label>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setGroupsOpen(true)} className="btn btn-ghost !py-2 !text-sm">
+              <FolderPlus className="h-4 w-4" /> Groups
+            </button>
+            <button {...tourTarget("leads-import")} onClick={() => setAddOpen(true)} className="btn btn-primary !py-2 !text-sm">
+              <Plus className="h-4 w-4" /> Add Lead
+            </button>
+          </div>
         }
       />
 
-      <div className="grid gap-6 p-8 lg:grid-cols-[320px_1fr]">
-        {/* Left column */}
-        <div className="space-y-6">
-          <Panel className="h-fit">
-            <h2 className="font-display text-lg font-bold">Add a contact</h2>
-            <p className="mt-1 text-xs text-ink-soft">An email or a LinkedIn URL is required.</p>
-            <form onSubmit={addLead} className="mt-4 space-y-3">
-              <div>
-                <Label>First name</Label>
-                <Input value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} placeholder="Jane" />
-              </div>
-              <div>
-                <Label>Email</Label>
-                <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="jane@acme.com" />
-              </div>
-              <div>
-                <Label>LinkedIn URL</Label>
-                <Input type="url" value={form.linkedinUrl} onChange={(e) => setForm({ ...form, linkedinUrl: e.target.value })} placeholder="https://linkedin.com/in/jane" />
-              </div>
-              <div>
-                <Label>Company</Label>
-                <Input value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} placeholder="Acme" />
-              </div>
-              <div>
-                <Label>Tags (comma-separated)</Label>
-                <Input value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} placeholder="vip, warm" />
-              </div>
-              <button disabled={busy} className="btn btn-primary w-full justify-center disabled:opacity-50">
-                <Plus className="h-4 w-4" /> Add contact
-              </button>
-            </form>
-          </Panel>
+      {/* The CSV picker lives outside the dialog so closing the dialog on click
+          doesn't unmount the input mid-selection. */}
+      <input ref={fileRef} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => e.target.files?.[0] && importCsv(e.target.files[0])} />
 
-          <Panel className="h-fit">
-            <h2 className="flex items-center gap-2 font-display text-lg font-bold">
-              <FolderPlus className="h-4 w-4" /> Groups
-              <span className="ml-auto font-mono text-[10px] font-normal uppercase tracking-wider text-ink-soft">= Tags</span>
-            </h2>
-            <p className="mt-1 text-xs text-ink-soft">Static lists — same as tags. Target with a campaign launch.</p>
-            <div className="mt-3 space-y-2">
-              {(segments ?? []).length === 0 && <p className="text-sm text-ink-soft">No groups yet.</p>}
-              {(segments ?? []).map((s) => (
-                <div key={s.id} className="rounded-xl border border-line text-sm">
-                  {editingGroup?.id === s.id ? (
-                    <div className="flex items-center gap-2 px-3 py-2">
-                      <Input
-                        autoFocus
-                        value={editingGroup.name}
-                        onChange={(e) => setEditingGroup({ ...editingGroup, name: e.target.value })}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") renameGroup(s.id, editingGroup.name);
-                          if (e.key === "Escape") setEditingGroup(null);
-                        }}
-                        className="!py-1 !text-sm"
-                      />
-                      <button onClick={() => renameGroup(s.id, editingGroup.name)} className="shrink-0 text-success hover:text-success-strong" title="Save">
-                        <Check className="h-4 w-4" />
-                      </button>
-                      <button onClick={() => setEditingGroup(null)} className="shrink-0 text-ink-soft hover:text-ink" title="Cancel">
-                        <X className="h-4 w-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-between gap-2 px-3 py-2">
-                      <span className="truncate font-medium">{s.name}</span>
-                      <span className="flex items-center gap-1.5 shrink-0">
-                        <span className="rounded-full bg-tint px-2 py-0.5 font-mono text-xs">{s.count}</span>
-                        <button onClick={() => setManagingGroup(s)} className="text-ink-soft hover:text-accent" aria-label="Edit members" title="Edit members">
-                          <Users className="h-3.5 w-3.5" />
-                        </button>
-                        <button onClick={() => setEditingGroup({ id: s.id, name: s.name })} className="text-ink-soft hover:text-ink" aria-label="Rename group">
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                        <button onClick={() => deleteGroup(s.id)} className="text-ink-soft hover:text-danger" aria-label="Delete group">
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </span>
-                    </div>
+      <div className="space-y-4 p-8">
+        {msg ? <Banner kind={msg.kind}>{msg.text}</Banner> : error ? <Banner kind="error">{(error as Error).message}</Banner> : null}
+
+        {/* Filters */}
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex rounded-xl border border-line p-1">
+            <button
+              onClick={() => { setBook(""); setPage(1); setSelected(new Set()); }}
+              className={cn("rounded-lg px-3 py-1.5 text-xs font-semibold transition", book === "" ? "bg-ink text-ink-invert" : "text-ink-soft hover:bg-tint")}
+            >
+              All leads
+            </button>
+            <button
+              onClick={() => { setBook("linkedin"); setPage(1); setSelected(new Set()); }}
+              className={cn("flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition", book === "linkedin" ? "bg-ink text-ink-invert" : "text-ink-soft hover:bg-tint")}
+            >
+              <Linkedin className="h-3.5 w-3.5" /> LinkedIn only
+            </button>
+          </div>
+          <Select value={groupFilter} onChange={(e) => { setGroupFilter(e.target.value); setPage(1); }} className="!w-52 !py-2 text-sm">
+            <option value="">All groups</option>
+            {(segments ?? []).map((s) => <option key={s.id} value={s.id}>{s.name} ({s.count})</option>)}
+          </Select>
+          <div className="relative min-w-[240px] flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-faint" />
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, email, or company…" className="!pl-9" />
+          </div>
+        </div>
+
+        {/* Tag filter chips */}
+        {pageTags.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-xs uppercase text-ink-soft">Tags:</span>
+            {pageTags.map((t) => {
+              const on = tagFilter.includes(t);
+              const alreadyGroup = (segments ?? []).some((s) => s.name === t);
+              return (
+                <div key={t} className="flex items-center gap-0.5">
+                  <button
+                    onClick={() => { setPage(1); setTagFilter((f) => (on ? f.filter((x) => x !== t) : [...f, t])); }}
+                    className={cn("flex items-center gap-1 rounded-l-full px-2.5 py-1 text-xs transition", on ? "bg-ink text-ink-invert" : "bg-tint text-ink-soft hover:text-ink")}
+                  >
+                    <Tag className="h-3 w-3" /> {t} {on && <X className="h-3 w-3" />}
+                  </button>
+                  {!alreadyGroup && (
+                    <button
+                      onClick={() => createGroupFromTag(t)}
+                      title={`Create group "${t}"`}
+                      className="rounded-r-full bg-tint px-1.5 py-1 text-xs text-ink-soft transition hover:bg-accent-soft hover:text-accent"
+                    >
+                      <FolderPlus className="h-3 w-3" />
+                    </button>
                   )}
                 </div>
-              ))}
-            </div>
-
-            {/* Create group */}
-            <div className="mt-4 space-y-2">
-              <Input
-                value={newGroup}
-                onChange={(e) => setNewGroup(e.target.value)}
-                placeholder="Group name…"
-                onKeyDown={(e) => e.key === "Enter" && createGroupFromSelection()}
-              />
-              <button
-                onClick={createGroupFromSelection}
-                disabled={!newGroup.trim()}
-                className="btn btn-primary w-full justify-center !py-2 !text-sm disabled:opacity-40"
-              >
-                <FolderPlus className="h-4 w-4" />
-                {selected.size > 0 ? `Create group with ${selected.size} lead(s)` : "Create group"}
-              </button>
-              {selected.size === 0 && (
-                <p className="text-center text-xs text-ink-soft">
-                  Select leads from the table to add them to the new group,<br />or create an empty group and add leads later.
-                </p>
-              )}
-            </div>
-          </Panel>
-        </div>
-
-        {/* List */}
-        <div className="space-y-4">
-          {msg ? <Banner kind={msg.kind}>{msg.text}</Banner> : error ? <Banner kind="error">{(error as Error).message}</Banner> : null}
-
-          {/* LinkedIn filter + group filter (one contacts table — these just narrow the rows) */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex rounded-xl border border-line p-1">
-              <button
-                onClick={() => { setBook(""); setPage(1); setSelected(new Set()); }}
-                className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${book === "" ? "bg-ink text-ink-invert" : "text-ink-soft hover:bg-tint"}`}
-              >
-                All contacts
-              </button>
-              <button
-                onClick={() => { setBook("linkedin"); setPage(1); setSelected(new Set()); }}
-                className={`flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition ${book === "linkedin" ? "bg-ink text-ink-invert" : "text-ink-soft hover:bg-tint"}`}
-              >
-                <Linkedin className="h-3.5 w-3.5" /> LinkedIn only
-              </button>
-            </div>
-            <Select value={groupFilter} onChange={(e) => { setGroupFilter(e.target.value); setPage(1); }} className="!w-52 !py-2 text-sm">
-              <option value="">All groups</option>
-              {(segments ?? []).map((s) => <option key={s.id} value={s.id}>{s.name} ({s.count})</option>)}
-            </Select>
-            {book === "linkedin" && <span className="text-xs text-ink-soft">Contacts with a profile URL — the extension only acts on these.</span>}
+              );
+            })}
           </div>
+        )}
 
-          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, email, or company…" />
+        {/* Bulk action bar */}
+        {selected.size > 0 && (
+          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-ink bg-ink px-4 py-2.5 text-sm text-ink-invert">
+            <span className="font-medium">{selected.size} selected</span>
+            <button onClick={bulkAddTag} className="flex items-center gap-1 rounded-lg bg-ink-invert/15 px-2.5 py-1 hover:bg-ink-invert/25">
+              <Tag className="h-3.5 w-3.5" /> Add tag
+            </button>
+            <Select onChange={(e) => { bulkAddToGroup(e.target.value); e.target.value = ""; }} className="!w-40 !bg-ink-invert/15 !text-ink-invert !border-ink-invert/20 !py-1 text-xs" defaultValue="">
+              <option value="" className="text-ink">Add to group…</option>
+              {(segments ?? []).map((s) => <option key={s.id} value={s.id} className="text-ink">{s.name}</option>)}
+            </Select>
+            <Select onChange={(e) => { bulkEnroll(e.target.value); e.target.value = ""; }} className="!w-44 !bg-ink-invert/15 !text-ink-invert !border-ink-invert/20 !py-1 text-xs" defaultValue="">
+              <option value="" className="text-ink">Enroll in campaign…</option>
+              {(campaigns ?? []).map((c) => <option key={c.id} value={c.id} className="text-ink">{c.name}</option>)}
+            </Select>
+            <button onClick={() => setSelected(new Set())} className="ml-auto text-ink-invert/70 hover:text-ink-invert">Clear</button>
+          </div>
+        )}
 
-          {/* Tag filter chips — click to filter, long-press hint to create group */}
-          {pageTags.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-mono text-xs uppercase text-ink-soft">Filter / Tags:</span>
-              {pageTags.map((t) => {
-                const on = tagFilter.includes(t);
-                const alreadyGroup = (segments ?? []).some((s) => s.name === t);
-                return (
-                  <div key={t} className="flex items-center gap-0.5">
-                    <button
-                      onClick={() => { setPage(1); setTagFilter((f) => (on ? f.filter((x) => x !== t) : [...f, t])); }}
-                      className={`flex items-center gap-1 rounded-l-full px-2.5 py-1 text-xs transition ${on ? "bg-ink text-ink-invert" : "bg-tint text-ink-soft hover:text-ink"}`}
-                    >
-                      <Tag className="h-3 w-3" /> {t} {on && <X className="h-3 w-3" />}
-                    </button>
-                    {!alreadyGroup && (
-                      <button
-                        onClick={() => createGroupFromTag(t)}
-                        title={`Create group "${t}"`}
-                        className="rounded-r-full bg-tint px-1.5 py-1 text-xs text-ink-soft transition hover:bg-accent-soft hover:text-accent"
-                      >
-                        <FolderPlus className="h-3 w-3" />
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          {/* Bulk action bar */}
-          {selected.size > 0 && (
-            <div className="flex flex-wrap items-center gap-3 rounded-xl border border-ink bg-ink px-4 py-2.5 text-sm text-ink-invert">
-              <span className="font-medium">{selected.size} selected</span>
-              <button onClick={bulkAddTag} className="flex items-center gap-1 rounded-lg bg-ink-invert/15 px-2.5 py-1 hover:bg-ink-invert/25">
-                <Tag className="h-3.5 w-3.5" /> Add tag
-              </button>
-              <Select onChange={(e) => { bulkAddToGroup(e.target.value); e.target.value = ""; }} className="!w-40 !bg-ink-invert/15 !text-ink-invert !border-ink-invert/20 !py-1 text-xs" defaultValue="">
-                <option value="" className="text-ink">Add to group…</option>
-                {(segments ?? []).map((s) => <option key={s.id} value={s.id} className="text-ink">{s.name}</option>)}
-              </Select>
-              <Select onChange={(e) => { bulkEnroll(e.target.value); e.target.value = ""; }} className="!w-44 !bg-ink-invert/15 !text-ink-invert !border-ink-invert/20 !py-1 text-xs" defaultValue="">
-                <option value="" className="text-ink">Enroll in campaign…</option>
-                {(campaigns ?? []).map((c) => <option key={c.id} value={c.id} className="text-ink">{c.name}</option>)}
-              </Select>
-              <button onClick={() => setSelected(new Set())} className="ml-auto text-ink-invert/70 hover:text-ink-invert">Clear</button>
-            </div>
-          )}
-
-          <div className="overflow-hidden rounded-2xl border border-line bg-surface">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-tint font-mono text-xs uppercase tracking-wide text-ink-soft">
+        <div className="overflow-x-auto rounded-2xl border border-line bg-surface">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-tint font-mono text-xs uppercase tracking-wide text-ink-soft">
+              <tr>
+                <th className="w-10 px-4 py-3">
+                  <input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="Select all" />
+                </th>
+                <th className="px-4 py-3">Lead</th>
+                <th className="px-4 py-3">Company</th>
+                <th className="px-4 py-3">Source</th>
+                <th className="px-4 py-3">Stage</th>
+                <th className="px-4 py-3">Owner</th>
+                <th className="px-4 py-3">Last activity</th>
+                <th className="px-4 py-3">Next action</th>
+                <th className="px-4 py-3"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-line">
+              {isLoading ? (
+                // Skeleton rows rather than a "Loading…" string: the table keeps
+                // its height, so nothing below it jumps when the data lands.
+                Array.from({ length: 8 }).map((_, i) => (
+                  <tr key={`sk-${i}`}>
+                    <td className="px-4 py-3"><Skeleton className="h-4 w-4" /></td>
+                    {Array.from({ length: 8 }).map((__, c) => (
+                      <td key={c} className="px-4 py-3"><Skeleton className={`h-3.5 ${c === 0 ? "w-32" : "w-20"}`} /></td>
+                    ))}
+                  </tr>
+                ))
+              ) : leads.length === 0 ? (
                 <tr>
-                  <th className="w-10 px-4 py-3">
-                    <input type="checkbox" checked={allSelected} onChange={toggleAll} aria-label="Select all" />
-                  </th>
-                  <th className="px-4 py-3">Name</th>
-                  <th className="px-4 py-3">Email</th>
-                  <th className="px-4 py-3">LinkedIn</th>
-                  <th className="px-4 py-3">Tags</th>
-                  <th className="px-4 py-3">Stage</th>
-                  <th className="px-4 py-3">Score</th>
-                  <th className="px-4 py-3"></th>
+                  <td colSpan={9} className="px-4 py-10">
+                    {hasFilters ? (
+                      <NoResults
+                        query={debouncedSearch.trim() || undefined}
+                        onClear={() => { setSearch(""); setTagFilter([]); setGroupFilter(""); setBook(""); setPage(1); }}
+                      />
+                    ) : (
+                      <EmptyState
+                        icon={Users}
+                        title="No leads yet"
+                        body="Leads are everyone you're trying to reach. Import a CSV, add one by hand, or connect a lead source and they'll arrive on their own."
+                        action={<button onClick={() => setAddOpen(true)} className="btn btn-primary"><Plus className="h-4 w-4" /> Add Lead</button>}
+                        className="border-0 bg-transparent py-0"
+                      />
+                    )}
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-line">
-                {isLoading ? (
-                  // Skeleton rows rather than a "Loading…" string: the table keeps
-                  // its height, so nothing below it jumps when the data lands.
-                  Array.from({ length: 8 }).map((_, i) => (
-                    <tr key={`sk-${i}`}>
-                      <td className="px-4 py-3"><Skeleton className="h-4 w-4" /></td>
-                      {Array.from({ length: 7 }).map((__, c) => (
-                        <td key={c} className="px-4 py-3"><Skeleton className={`h-3.5 ${c === 0 ? "w-32" : "w-20"}`} /></td>
-                      ))}
-                    </tr>
-                  ))
-                ) : leads.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} className="px-4 py-10">
-                      {hasFilters ? (
-                        <NoResults
-                          query={debouncedSearch.trim() || undefined}
-                          onClear={() => { setSearch(""); setTagFilter([]); setGroupFilter(""); setBook(""); setPage(1); }}
-                        />
+              ) : (
+                leads.map((l) => (
+                  <tr key={l.id} className={cn("transition-colors hover:bg-tint/40", selected.has(l.id) && "bg-tint/50")}>
+                    <td className="px-4 py-3">
+                      <input type="checkbox" checked={selected.has(l.id)} onChange={() => toggle(l.id)} aria-label={`Select ${displayName(l)}`} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <Link href={`/dashboard/leads/${l.id}`} className="font-medium hover:text-accent hover:underline">
+                        {displayName(l)}
+                      </Link>
+                      {l.email && <div className="truncate text-xs text-ink-soft">{l.email}</div>}
+                    </td>
+                    <td className="px-4 py-3 text-ink-soft">{l.company ?? "—"}</td>
+                    <td className="px-4 py-3">
+                      {l.source ? <Badge tone="neutral">{l.source}</Badge> : <span className="text-ink-faint">—</span>}
+                    </td>
+                    <td className="px-4 py-3"><span className="rounded-full bg-tint px-2 py-0.5 font-mono text-xs">{l.stage}</span></td>
+                    <td className="px-4 py-3 text-ink-soft">{l.ownerName ?? "—"}</td>
+                    <td suppressHydrationWarning className="px-4 py-3 font-mono text-xs text-ink-soft">{ago(l.lastActivityAt)}</td>
+                    {/* The column the whole product hangs off — loud on purpose. */}
+                    <td className="px-4 py-3">
+                      {l.nextAction ? (
+                        <Link
+                          href={`/dashboard/leads/${l.id}`}
+                          className={cn(
+                            "inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-semibold transition-colors",
+                            l.nextAction.urgent
+                              ? "bg-danger-soft text-danger-strong hover:bg-danger-soft/70"
+                              : "bg-accent-soft text-accent-strong hover:bg-accent-soft/70",
+                          )}
+                        >
+                          {l.nextAction.urgent ? <AlertTriangle className="h-3 w-3 shrink-0" /> : <CircleDot className="h-3 w-3 shrink-0" />}
+                          {l.nextAction.label}
+                          <ArrowRight className="h-3 w-3 shrink-0" />
+                        </Link>
                       ) : (
-                        <EmptyState
-                          icon={Users}
-                          title="No contacts yet"
-                          body="Contacts are who your campaigns reach. Import a CSV to bring a list in, or add someone using the form on the left."
-                          className="border-0 bg-transparent py-0"
-                        />
+                        <span className="text-xs text-ink-faint">Waiting</span>
                       )}
                     </td>
+                    <td className="px-4 py-3 text-right">
+                      <button onClick={() => del(l.id)} className="text-ink-soft transition-colors hover:text-danger" aria-label="Delete">
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </td>
                   </tr>
-                ) : (
-                  leads.map((l) => (
-                    <tr key={l.id} className={selected.has(l.id) ? "bg-tint/50" : ""}>
-                      <td className="px-4 py-3">
-                        <input type="checkbox" checked={selected.has(l.id)} onChange={() => toggle(l.id)} aria-label={`Select ${l.email ?? l.linkedinUrl ?? l.id}`} />
-                      </td>
-                      <td className="px-4 py-3 font-medium">{[l.firstName, l.lastName].filter(Boolean).join(" ") || "—"}</td>
-                      <td className="px-4 py-3">{l.email ?? "—"}</td>
-                      <td className="px-4 py-3">
-                        {l.linkedinUrl
-                          ? <a href={l.linkedinUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-accent hover:underline"><Linkedin className="h-3.5 w-3.5" /> Profile</a>
-                          : <button onClick={() => setLinkedin(l.id, l.linkedinUrl)} className="text-xs text-ink-soft hover:text-accent">+ Add</button>}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-1">
-                          {(l.tags ?? []).map((t) => <span key={t} className="rounded-full bg-tint px-2 py-0.5 text-xs">{t}</span>)}
-                        </div>
-                      </td>
-                      <td className="px-4 py-3"><span className="rounded-full bg-tint px-2 py-0.5 font-mono text-xs">{l.stage}</span></td>
-                      <td className="px-4 py-3">
-                        {l.score != null ? (
-                          <span className={`rounded-full px-2 py-0.5 font-mono text-xs ${l.score >= 60 ? "bg-success-soft text-success-strong" : "bg-tint text-ink-soft"}`}>
-                            {l.score}
-                          </span>
-                        ) : (
-                          <span className="text-ink-faint">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <button onClick={() => del(l.id)} className="text-ink-soft transition-colors hover:text-danger" aria-label="Delete">
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {total > 0 && (
-            <div className="flex items-center justify-between text-sm text-ink-soft">
-              <span className="font-mono text-xs">
-                {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total.toLocaleString()}
-              </span>
-              <div className="flex items-center gap-2">
-                <button onClick={() => setPage((p) => Math.max(p - 1, 1))} disabled={isLoading || page <= 1} className="rounded-lg border border-line px-3 py-1.5 transition hover:bg-tint disabled:opacity-40">Prev</button>
-                <span className="font-mono text-xs">Page {page} / {totalPages}</span>
-                <button onClick={() => setPage((p) => Math.min(p + 1, totalPages))} disabled={isLoading || page >= totalPages} className="rounded-lg border border-line px-3 py-1.5 transition hover:bg-tint disabled:opacity-40">Next</button>
-              </div>
-            </div>
-          )}
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
+
+        {total > 0 && (
+          <div className="flex items-center justify-between text-sm text-ink-soft">
+            <span className="font-mono text-xs">
+              {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total.toLocaleString()}
+            </span>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setPage((p) => Math.max(p - 1, 1))} disabled={isLoading || page <= 1} className="rounded-lg border border-line px-3 py-1.5 transition hover:bg-tint disabled:opacity-40">Prev</button>
+              <span className="font-mono text-xs">Page {page} / {totalPages}</span>
+              <button onClick={() => setPage((p) => Math.min(p + 1, totalPages))} disabled={isLoading || page >= totalPages} className="rounded-lg border border-line px-3 py-1.5 transition hover:bg-tint disabled:opacity-40">Next</button>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* ---- Group members modal ---- */}
+      {/* ---- Add lead ---- */}
+      <AddLeadDialog
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+        form={form}
+        setForm={setForm}
+        busy={busy}
+        onSubmit={addLead}
+        onImport={() => fileRef.current?.click()}
+      />
+
+      {/* ---- Groups ---- */}
+      {groupsOpen && (
+        <GroupsDialog
+          segments={segments ?? []}
+          selectedIds={Array.from(selected)}
+          onClose={() => setGroupsOpen(false)}
+          onChanged={mutateSegments}
+          onManage={(s) => { setGroupsOpen(false); setManagingGroup(s); }}
+        />
+      )}
+
       {managingGroup && (
         <GroupMembersModal
           segment={managingGroup}
@@ -570,6 +474,175 @@ export default function LeadsPage() {
         />
       )}
     </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Add lead — three ways in, one short form                            */
+/* ------------------------------------------------------------------ */
+
+function AddLeadDialog({
+  open, onClose, form, setForm, busy, onSubmit, onImport,
+}: {
+  open: boolean;
+  onClose: () => void;
+  form: { firstName: string; email: string; company: string; tags: string; linkedinUrl: string };
+  setForm: (f: { firstName: string; email: string; company: string; tags: string; linkedinUrl: string }) => void;
+  busy: boolean;
+  onSubmit: (e: React.FormEvent) => void;
+  onImport: () => void;
+}) {
+  if (!open) return null;
+  return (
+    <Dialog open onClose={onClose} title="Add Lead" size="md">
+      <div className="grid gap-2 sm:grid-cols-3">
+        <div className="rounded-xl border border-ink bg-tint px-3 py-2 text-center text-xs font-semibold">Add manually</div>
+        <button onClick={onImport} className="rounded-xl border border-line px-3 py-2 text-center text-xs font-semibold transition hover:bg-tint">
+          <Upload className="mx-auto mb-1 h-3.5 w-3.5" /> Import CSV
+        </button>
+        <div
+          title="Prospect search is coming soon."
+          className="cursor-not-allowed rounded-xl border border-line px-3 py-2 text-center text-xs font-semibold text-ink-faint"
+        >
+          <Sparkles className="mx-auto mb-1 h-3.5 w-3.5" /> Find leads
+        </div>
+      </div>
+
+      <form onSubmit={onSubmit} className="mt-5 space-y-3">
+        <div>
+          <Label>First name</Label>
+          <Input autoFocus value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} placeholder="Jane" />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <Label>Email</Label>
+            <Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} placeholder="jane@acme.com" />
+          </div>
+          <div>
+            <Label>Company</Label>
+            <Input value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })} placeholder="Acme" />
+          </div>
+        </div>
+        <div>
+          <Label>LinkedIn URL</Label>
+          <Input type="url" value={form.linkedinUrl} onChange={(e) => setForm({ ...form, linkedinUrl: e.target.value })} placeholder="https://linkedin.com/in/jane" />
+        </div>
+        <div>
+          <Label>Tags (comma-separated)</Label>
+          <Input value={form.tags} onChange={(e) => setForm({ ...form, tags: e.target.value })} placeholder="vip, warm" />
+        </div>
+        <p className="text-xs text-ink-soft">An email or a LinkedIn URL is required — everything else can wait.</p>
+        <div className="flex justify-end gap-2 pt-1">
+          <button type="button" onClick={onClose} className="btn btn-ghost !py-2 !text-sm">Cancel</button>
+          <button disabled={busy} className="btn btn-primary !py-2 !text-sm disabled:opacity-50">
+            <Plus className="h-4 w-4" /> Add Lead
+          </button>
+        </div>
+      </form>
+    </Dialog>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Groups — same static-list semantics, off the main surface           */
+/* ------------------------------------------------------------------ */
+
+function GroupsDialog({
+  segments, selectedIds, onClose, onChanged, onManage,
+}: {
+  segments: Segment[];
+  selectedIds: string[];
+  onClose: () => void;
+  onChanged: () => void;
+  onManage: (s: Segment) => void;
+}) {
+  const [newGroup, setNewGroup] = useState("");
+  const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
+  const confirm = useConfirm();
+
+  async function create() {
+    if (!newGroup.trim()) return;
+    await api("/api/segments", { body: { name: newGroup.trim(), kind: "static", leadIds: selectedIds } });
+    setNewGroup("");
+    onChanged();
+  }
+  async function rename(id: string, name: string) {
+    if (!name.trim()) return;
+    await api("/api/segments", { method: "PATCH", body: { id, name: name.trim() } });
+    setEditing(null);
+    onChanged();
+  }
+  async function remove(id: string) {
+    const ok = await confirm({
+      title: "Delete this group?",
+      body: "The leads in it are kept — only the group is removed.",
+      confirmLabel: "Delete group",
+      tone: "danger",
+    });
+    if (!ok) return;
+    await api(`/api/segments?id=${id}`, { method: "DELETE" });
+    onChanged();
+  }
+
+  return (
+    <Dialog open onClose={onClose} title="Groups" size="md">
+      <p className="text-xs text-ink-soft">Static lists — the same thing as tags. Target one when you launch a campaign.</p>
+
+      <div className="mt-4 space-y-2">
+        {segments.length === 0 && <p className="text-sm text-ink-soft">No groups yet.</p>}
+        {segments.map((s) => (
+          <div key={s.id} className="rounded-xl border border-line text-sm">
+            {editing?.id === s.id ? (
+              <div className="flex items-center gap-2 px-3 py-2">
+                <Input
+                  autoFocus
+                  value={editing.name}
+                  onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") rename(s.id, editing.name);
+                    if (e.key === "Escape") setEditing(null);
+                  }}
+                  className="!py-1 !text-sm"
+                />
+                <button onClick={() => rename(s.id, editing.name)} className="shrink-0 text-success hover:text-success-strong" title="Save">
+                  <Check className="h-4 w-4" />
+                </button>
+                <button onClick={() => setEditing(null)} className="shrink-0 text-ink-soft hover:text-ink" title="Cancel">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-2 px-3 py-2">
+                <span className="truncate font-medium">{s.name}</span>
+                <span className="flex shrink-0 items-center gap-1.5">
+                  <span className="rounded-full bg-tint px-2 py-0.5 font-mono text-xs">{s.count}</span>
+                  <button onClick={() => onManage(s)} className="text-ink-soft hover:text-accent" aria-label="Edit members" title="Edit members">
+                    <Users className="h-3.5 w-3.5" />
+                  </button>
+                  <button onClick={() => setEditing({ id: s.id, name: s.name })} className="text-ink-soft hover:text-ink" aria-label="Rename group">
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button onClick={() => remove(s.id)} className="text-ink-soft hover:text-danger" aria-label="Delete group">
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </span>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <div className="mt-4 space-y-2 border-t border-line pt-4">
+        <Input value={newGroup} onChange={(e) => setNewGroup(e.target.value)} placeholder="Group name…" onKeyDown={(e) => e.key === "Enter" && create()} />
+        <button onClick={create} disabled={!newGroup.trim()} className="btn btn-primary w-full justify-center !py-2 !text-sm disabled:opacity-40">
+          <FolderPlus className="h-4 w-4" />
+          {selectedIds.length > 0 ? `Create group with ${selectedIds.length} lead(s)` : "Create group"}
+        </button>
+        {selectedIds.length === 0 && (
+          <p className="text-center text-xs text-ink-soft">Select leads in the table first to start the group with them.</p>
+        )}
+      </div>
+    </Dialog>
   );
 }
 
@@ -674,7 +747,7 @@ function GroupMembersModal({ segment, selectedLeadIds, onClose, onSaved }: Group
         </div>
 
         {/* Members list */}
-        <div className="flex-1 overflow-y-auto px-5 py-3 space-y-1.5">
+        <div className="flex-1 space-y-1.5 overflow-y-auto px-5 py-3">
           {isLoading && <div className="space-y-1.5">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 w-full rounded-xl" />)}</div>}
           {!isLoading && filtered.length === 0 && (
             <p className="py-6 text-center text-sm text-ink-soft">
@@ -684,7 +757,7 @@ function GroupMembersModal({ segment, selectedLeadIds, onClose, onSaved }: Group
           {filtered.map((l) => (
             <div key={l.id} className="flex items-center justify-between gap-3 rounded-xl border border-line px-3 py-2.5 text-sm">
               <div className="min-w-0">
-                <p className="truncate font-medium">{[l.firstName, l.lastName].filter(Boolean).join(" ") || l.email}</p>
+                <p className="truncate font-medium">{displayName(l)}</p>
                 <p className="truncate text-xs text-ink-soft">{l.email}{l.company ? ` · ${l.company}` : ""}</p>
               </div>
               <button
