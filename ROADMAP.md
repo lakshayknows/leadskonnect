@@ -3,7 +3,7 @@
 > Build order and status. Update the status column as phases complete. Each phase
 > ships with its matching doc updated in the same change.
 
-**Last updated:** 2026-08-11
+**Last updated:** 2026-08-19
 **Status:** foundation built; V3 product surface underway
 
 ---
@@ -40,6 +40,16 @@ lead sources) was already built; V3 is mostly product surface.
 > Build notes: full env-var list + manual steps in `SETUP.md`. Every integration
 > degrades gracefully when its creds are absent (`GET /api/status` shows the map).
 > Rate limits + suppression are enforced centrally in `lib/channels/safeSend`.
+
+## Reliability fixes
+- **Sequence follow-ups could stall silently** (fixed 2026-08-19). A campaign advanced
+  via a single in-flight queue message per lead, so one dropped/rejected QStash publish
+  ended that lead's sequence with nothing surfaced. Added `maxDuration` to
+  `/api/qstash/process`, an enrollment recovery sweep on `nextRunAt`
+  (`/api/cron/enrollment-sweep`, every 10 min), an atomic per-enrollment claim, a
+  campaign-status guard so paused/done campaigns are never resumed, and
+  `scripts/verify-sequence.ts` to inspect where enrollments are parked.
+  [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
 ## Cross-cutting (land alongside relevant phases)
 - **Rate limiting** (token buckets, jitter, warm-up) — begins in Phase 2, reused everywhere. [docs/rate-limits.md](docs/rate-limits.md)

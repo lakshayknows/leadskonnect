@@ -1,6 +1,6 @@
 # ARCHITECTURE.md — System Design
 
-**Last updated:** 2026-07-03
+**Last updated:** 2026-08-19
 **Status:** draft
 
 ---
@@ -44,11 +44,32 @@ services.
 upsert into `leads`. Custom columns become template variables. See
 [crm-data-model.md](crm-data-model.md).
 
-**2. Campaign execution.** A campaign is an ordered **sequence** (email → wait →
-LinkedIn → wait → WhatsApp). The scheduler enqueues each step per lead into **BullMQ**
-with a delay + jitter. Workers respect per-channel token buckets
-([rate-limits.md](rate-limits.md)) and only fire when quota is available; otherwise the
-job is re-queued for the next window.
+**2. Campaign execution.** A campaign is a **node graph** (send / wait / condition /
+exit) and each lead is an `Enrollment` that walks it one node at a time
+(`lib/campaign-engine.ts`). Steps are *not* enqueued up-front: a single `advance` job
+performs the current node's send inline and then schedules the next hop, so branches,
+waits and reply-driven stops are all decided at run time. Delays carry jitter and
+workers respect per-channel token buckets ([rate-limits.md](rate-limits.md)).
+
+Transport is QStash in production, BullMQ/Redis otherwise (`lib/queue.ts`).
+
+**`Enrollment.nextRunAt` — not the queue — is the source of truth for what is due.**
+Because a sequence lives as exactly one in-flight queue message per lead, a single
+dropped or rejected publish would otherwise end that lead's sequence silently and
+permanently. Two mechanisms close that gap:
+
+- `sweepDueEnrollments()` re-runs any enrollment overdue by >10 min, driven by
+  `GET/POST /api/cron/enrollment-sweep` on a 10-minute QStash schedule
+  (`scripts/setup-qstash-schedules.ts`). It reads the `@@index([status, nextRunAt])`
+  on `Enrollment`, and only considers enrollments whose **campaign is still active**,
+  so pausing or finishing a campaign is never undone by a sweep.
+- Every run first takes an atomic lease on `nextRunAt` (`claimEnrollment`), so a late
+  queue callback and the sweep can never double-send the same node.
+
+A failed enqueue rolls `nextRunAt` back into the past and logs an
+`enrollment_enqueue_failed` activity, making the sweep pick it up. Use
+`npx tsx scripts/verify-sequence.ts` to see where every enrollment is parked, and
+`--sweep` to recover stalled ones by hand.
 
 **3. Sending.** Each channel module exposes a uniform interface
 (`send(lead, rendered)`), renders the template ([templates-and-variables.md](
@@ -75,7 +96,9 @@ rate-limit layer.
 
 ## Non-functional
 - **Idempotency:** every enqueued send carries a unique key; workers no-op on
-  duplicates (protects against retries double-sending).
+  duplicates (protects against retries double-sending). Campaign hops add a second
+  layer — an atomic `nextRunAt` lease per enrollment, so the queue and the recovery
+  sweep cannot both run one node.
 - **Graceful degradation:** on provider throttle/error, back off + re-queue, never
   hammer.
 - **Observability:** structured audit log for every action; alerts on bounce/spam
