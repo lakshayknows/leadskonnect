@@ -1,11 +1,15 @@
 /**
  * Job queue for throttled, scheduled work (see docs/ARCHITECTURE.md).
  *
- * Two job kinds flow through the same queue:
+ * Job kinds flowing through the same queue:
  *  - "send"    — deliver one message (used by ad-hoc sends).
  *  - "advance" — advance a campaign enrollment by one node (the conditional-node engine,
  *                see lib/campaign-engine.ts). The advance job performs the node's send
  *                inline and schedules the next advance.
+ *  - "lead-ack" — a capture acknowledgment held until business hours reopen.
+ *  - "domain-verify-dns" — re-check a sending domain's records against public DNS
+ *                (lib/domains/provision.ts). Safe to retry: it only reads DNS and
+ *                records what it saw.
  *
  * Transport priority: Upstash QStash (prod) → BullMQ/Redis → inline setTimeout (dev only).
  */
@@ -35,7 +39,13 @@ export interface AckJob {
   leadId: string;
 }
 
-export type QueueJob = SendJob | AdvanceJob | AckJob;
+/** Re-check a sending domain's records against public DNS, with backoff. */
+export interface DomainVerifyDnsJob {
+  kind: "domain-verify-dns";
+  domainId: string;
+}
+
+export type QueueJob = SendJob | AdvanceJob | AckJob | DomainVerifyDnsJob;
 
 export const SEND_QUEUE = "followthroo-sends";
 

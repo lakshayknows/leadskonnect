@@ -28,6 +28,30 @@ export default function AboutPage() {
           Safety is the default, not a setting. Every send passes a rate-limit and consent check first.
           When patterns stay predictable, trust builds — for your prospects and your sending accounts alike.
         </p>
+        <h2>Who builds Followthroo</h2>
+        <p>
+          Followthroo is the in-house product of{" "}
+          <a href="https://brandstac.com" target="_blank" rel="noopener noreferrer">
+            brandstac
+          </a>
+          , a creative technology studio in New Delhi. brandstac works across six disciplines — custom
+          software, AI solutions, performance marketing, AI ad creative, social media, and ecommerce and
+          CMS development — under one standard, with the same person accountable from the first product
+          decision to the last line of backend code.
+        </p>
+        <p>
+          That shape is why Followthroo looks the way it does. There is no hand-off between the people
+          who decide what outreach should feel like and the people who build the sending engine
+          underneath it. You can read more{" "}
+          <a href="https://brandstac.com/about" target="_blank" rel="noopener noreferrer">
+            about the studio
+          </a>{" "}
+          or see{" "}
+          <a href="https://brandstac.com/services" target="_blank" rel="noopener noreferrer">
+            what it does
+          </a>
+          .
+        </p>
       </Prose>
       <CTABand />
     </SiteShell>

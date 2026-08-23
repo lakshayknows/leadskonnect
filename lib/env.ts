@@ -121,6 +121,15 @@ export const env = {
   indiamartPull: {
     apiKey: get("INDIAMART_PULL_API_KEY"),
   },
+
+  // Reseller storefront (Wild West Domains, white-labelled). Not a secret: the
+  // private-label id travels in a public URL and is what credits the sale to us,
+  // so it is safe in a client bundle and defaults to the live storefront rather
+  // than disabling the feature when unset.
+  storefront: {
+    plid: get("RESELLER_PLID") ?? "601578",
+    baseUrl: get("RESELLER_STOREFRONT_URL") ?? "https://www.secureserver.net",
+  },
 };
 
 export const configured = {
@@ -135,4 +144,6 @@ export const configured = {
   google: !!(env.google.clientId && env.google.clientSecret),
   meta: !!(env.meta.verifyToken && env.meta.appSecret && env.meta.pageAccessToken),
   googleAds: !!env.googleAds.webhookKey,
+  // The storefront needs no credentials, so the feature is on by default.
+  storefront: !!env.storefront.plid,
 };

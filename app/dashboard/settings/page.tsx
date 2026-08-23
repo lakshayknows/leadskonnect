@@ -10,7 +10,7 @@ const CARDS = [
   { href: "/dashboard/settings/team", icon: Users2, title: "Team", desc: "Invite teammates, roles and department hierarchy." },
   { href: "/dashboard/settings/pipelines", icon: Workflow, title: "Pipelines", desc: "Stages and SLA timers, per department." },
   { href: "/dashboard/settings/sources", icon: Webhook, title: "Lead sources", desc: "Webhook URLs for Meta, IndiaMART, JustDial & web forms." },
-  { href: "/dashboard/accounts", icon: Mail, title: "Sending accounts", desc: "Connect the mailboxes you send from." },
+  { href: "/dashboard/accounts", icon: Mail, title: "Mailboxes & domains", desc: "Buy a sending domain, or connect a mailbox you already have." },
   { href: "/dashboard/settings/linkedin", icon: Linkedin, title: "LinkedIn", desc: "Automate invites & messages via the extension." },
   { href: "/dashboard/settings/channels", icon: MessageCircle, title: "Business channels", desc: "WhatsApp connection status; SMS setup requirements." },
   { href: "/dashboard/settings/compliance", icon: ShieldCheck, title: "Compliance ledger", desc: "Hash-chained audit trail of every consent/suppression event." },

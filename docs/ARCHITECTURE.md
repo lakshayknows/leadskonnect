@@ -90,6 +90,7 @@ rate-limit layer.
 |---|---|---|
 | `lib/crm` | Lead + campaign + log persistence | Postgres / HubSpot API |
 | `lib/channels/*` | One send interface per channel | Provider SDKs, `ratelimit` |
+| `lib/domains` | Sending-domain suggestions + DNS verification | Public DoH resolvers |
 | `lib/templates` | Render `{{vars}}` + fallbacks | CRM (lead data) |
 | `lib/ratelimit` | Token buckets, jitter, ramp, warm-up | Redis |
 | `lib/agent` | Claude tool loop + safety stops | channel modules, CRM |

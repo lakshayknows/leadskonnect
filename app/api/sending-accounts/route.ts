@@ -21,6 +21,10 @@ const AccountSchema = z.object({
   dkimDomain: z.string().optional().nullable(),
   dkimSelector: z.string().optional().nullable(),
   dkimPrivateKey: z.string().optional().nullable(),
+  // Set when the mailbox was bought on a sending domain we track, so the domain
+  // page can list it and warm-up can start without a second trip.
+  domainId: z.string().optional().nullable(),
+  startWarmup: z.boolean().optional(),
 });
 
 export async function GET(req: NextRequest) {
@@ -95,11 +99,26 @@ export async function POST(req: NextRequest) {
       return fail(`A sending account with email ${data.email} already exists`, 400);
     }
 
+    // Only accept a domain this org actually owns — otherwise the id is just
+    // untrusted input that would attach the mailbox to someone else's domain.
+    const domainId = data.domainId
+      ? (
+          await prisma.domain.findFirst({
+            where: { id: data.domainId, organizationId: ctx.orgId },
+            select: { id: true },
+          })
+        )?.id ?? null
+      : null;
+
     const account = await prisma.sendingAccount.create({
       data: {
         organizationId: ctx.orgId,
         name: data.name,
         email: data.email,
+        // A mailbox on a domain bought through us is "managed" — same row, same
+        // send path, it just reads differently in the UI.
+        provider: domainId ? "managed" : "smtp",
+        domainId,
         host: data.host,
         port: data.port,
         secure: data.secure,
@@ -113,7 +132,33 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    return ok(account, { status: 201 });
+    if (data.startWarmup) {
+      await prisma.warmup.upsert({
+        where: { sendingAccountId: account.id },
+        create: { organizationId: ctx.orgId, sendingAccountId: account.id, enabled: true },
+        update: { enabled: true },
+      });
+    }
+
+    // Mirrors the GET select — the create result carries pass and dkimPrivateKey
+    // and those must not travel back to the browser.
+    return ok(
+      {
+        id: account.id,
+        name: account.name,
+        email: account.email,
+        provider: account.provider,
+        host: account.host,
+        port: account.port,
+        secure: account.secure,
+        user: account.user,
+        from: account.from,
+        active: account.active,
+        createdAt: account.createdAt,
+        warmupStarted: !!data.startWarmup,
+      },
+      { status: 201 }
+    );
   } catch (err) {
     console.error("[sending-accounts] failed to handle POST request:", err);
     return fail(err instanceof Error ? err.message : "Internal Server Error", 500);

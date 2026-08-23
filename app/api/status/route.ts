@@ -16,6 +16,7 @@ export async function GET() {
       agent: configured.agent,
       meta: configured.meta,
       googleAds: configured.googleAds,
+      storefront: configured.storefront,
     },
   });
 }

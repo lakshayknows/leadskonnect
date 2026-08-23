@@ -61,6 +61,9 @@ sequence. A premium Next.js UI sits on top.
   The rail went from 18 rows to 11 for a reason; don't grow it back.
 - **The user never needs to understand the integration.** A lead is a lead whether it
   came from IndiaMART, Meta Ads or a CSV; the source is metadata, never a destination.
+- **Never take payment for a domain.** The reseller storefront charges the customer and
+  credits us the margin — a checkout in the app would bill them twice. See
+  `docs/domains-and-mailboxes.md` before touching anything in `lib/domains/`.
 - **Use the latest Claude model** (`claude-opus-4-8`) for the agent layer.
 
 ## Documentation index (the map)
@@ -74,7 +77,9 @@ sequence. A premium Next.js UI sits on top.
 | [docs/information-architecture.md](docs/information-architecture.md) | Product IA, navigation, and the core screens |
 | [docs/channels.md](docs/channels.md) | Per-channel features + official limits |
 | [docs/rate-limits.md](docs/rate-limits.md) | Consolidated quotas + throttling strategy |
+| [docs/pricing.md](docs/pricing.md) | Recurring costs (infra + AI/comms COGS) + pricing tier margin analysis |
 | [docs/security.md](docs/security.md) | OAuth2, secrets, encryption, RBAC, GDPR |
+| [docs/domains-and-mailboxes.md](docs/domains-and-mailboxes.md) | Sending domains via the reseller storefront, DNS verification, mailbox connect |
 | [docs/crm-data-model.md](docs/crm-data-model.md) | Lead schema, logs, CSV import/export |
 | [docs/templates-and-variables.md](docs/templates-and-variables.md) | Template engine, variables, sequencing |
 | [docs/ai-agent.md](docs/ai-agent.md) | Claude agent: tools, prompt, safety |

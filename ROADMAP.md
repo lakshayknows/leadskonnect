@@ -51,6 +51,18 @@ lead sources) was already built; V3 is mostly product surface.
   `scripts/verify-sequence.ts` to inspect where enrollments are parked.
   [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)
 
+## Sending domains (shipped 2026-08-23)
+- **Buy a sending domain without leaving the product.** Cold outreach on a company's
+  primary domain eventually gets that domain filtered, and the manual fix — register a
+  lookalike, configure MX/SPF/DKIM/DMARC, provision a mailbox, come back and connect it —
+  is where people give up. Three steps now: pick a name, buy it in the reseller
+  storefront, connect the mailbox. DNS is verified against public resolvers on a backoff
+  with a 5-minute recovery sweep, and the mailbox lands as an ordinary `SendingAccount`
+  so warm-up, the reply poller and `safeSend` need no changes.
+  The storefront takes the payment and credits the margin, so there is deliberately no
+  checkout, no order table and no registrar API in the app.
+  [docs/domains-and-mailboxes.md](docs/domains-and-mailboxes.md)
+
 ## Cross-cutting (land alongside relevant phases)
 - **Rate limiting** (token buckets, jitter, warm-up) — begins in Phase 2, reused everywhere. [docs/rate-limits.md](docs/rate-limits.md)
 - **Security** (OAuth2, secrets vault, RBAC, encryption, GDPR) — begins in Phase 1, hardened each phase. [docs/security.md](docs/security.md)

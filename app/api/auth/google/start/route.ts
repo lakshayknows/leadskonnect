@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { env, configured } from "@/lib/env";
 import { requireOrg } from "@/lib/tenant";
+import { prisma } from "@/lib/db";
 
 export const runtime = "nodejs";
 
@@ -34,6 +35,19 @@ export async function GET(req: NextRequest) {
   const state = randomUUID();
   const redirectUri = `${env.appUrl}/api/auth/google/callback`;
 
+  // Optional: when the connect was started from the sending-domain wizard, carry
+  // the domain through the round trip so the callback can link the mailbox to it
+  // and return the user to the step they left, rather than the Accounts list.
+  const domainId = req.nextUrl.searchParams.get("domain");
+  const ownedDomainId = domainId
+    ? (
+        await prisma.domain.findFirst({
+          where: { id: domainId, organizationId: ctx.orgId },
+          select: { id: true },
+        })
+      )?.id ?? null
+    : null;
+
   const url = new URL("https://accounts.google.com/o/oauth2/v2/auth");
   url.searchParams.set("client_id", env.google.clientId!);
   url.searchParams.set("redirect_uri", redirectUri);
@@ -55,5 +69,6 @@ export async function GET(req: NextRequest) {
   };
   res.cookies.set("g_oauth_state", state, cookieOpts);
   res.cookies.set("g_oauth_org", ctx.orgId, cookieOpts);
+  if (ownedDomainId) res.cookies.set("g_oauth_domain", ownedDomainId, cookieOpts);
   return res;
 }

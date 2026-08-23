@@ -9,6 +9,7 @@
  */
 import { prisma } from "./db";
 import { cached } from "./cache";
+import { configured } from "./env";
 import { SEED_TEMPLATES } from "./templates-seed";
 import { nextActionsFor, nextActionFor, getTaskBuckets, startOfToday, type NextAction } from "./tasks";
 import { getBoard } from "./pipeline";
@@ -27,6 +28,53 @@ const SEND_ACCOUNT_SELECT = {
   active: true,
   createdAt: true,
 } satisfies Prisma.SendingAccountSelect;
+
+/**
+ * Sending domains for the Accounts screen. Shape MUST match GET /api/domains,
+ * because it is handed straight to SWR as that key's fallback.
+ */
+export async function getSendingDomains(orgId: string) {
+  const domains = await prisma.domain.findMany({
+    where: { organizationId: orgId },
+    orderBy: { createdAt: "desc" },
+    select: {
+      id: true,
+      name: true,
+      status: true,
+      dnsMode: true,
+      expiresAt: true,
+      autoRenew: true,
+      verifiedAt: true,
+      failureReason: true,
+      createdAt: true,
+      records: {
+        select: {
+          id: true,
+          kind: true,
+          type: true,
+          host: true,
+          expectedValue: true,
+          observedValue: true,
+          status: true,
+          lastCheckedAt: true,
+        },
+        orderBy: { kind: "asc" },
+      },
+      _count: { select: { mailboxes: true } },
+    },
+  });
+
+  return {
+    available: configured.storefront,
+    domains: domains.map((d) => ({
+      ...d,
+      mailboxCount: d._count.mailboxes,
+      _count: undefined,
+      recordsVerified: d.records.filter((r) => r.status === "verified").length,
+      recordsTotal: d.records.length,
+    })),
+  };
+}
 
 export async function getStats(orgId: string) {
   return cached(`stats:${orgId}`, 30_000, async () => {

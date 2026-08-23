@@ -1,15 +1,20 @@
 import { SWRConfig } from "swr";
 import AccountsClient from "./AccountsClient";
-import { getSendingAccounts } from "@/lib/queries";
+import { getSendingAccounts, getSendingDomains } from "@/lib/queries";
 import { getServerTenant } from "@/lib/tenant";
 
 export const dynamic = "force-dynamic";
 
 export default async function Page() {
   const tenant = await getServerTenant();
-  const accounts = tenant ? await getSendingAccounts(tenant.orgId).catch(() => []) : [];
+  const [accounts, domains] = await Promise.all([
+    tenant ? getSendingAccounts(tenant.orgId).catch(() => []) : [],
+    tenant ? getSendingDomains(tenant.orgId).catch(() => ({ available: false, domains: [] })) : { available: false, domains: [] },
+  ]);
   return (
-    <SWRConfig value={{ fallback: { "/api/sending-accounts": accounts } }}>
+    <SWRConfig
+      value={{ fallback: { "/api/sending-accounts": accounts, "/api/domains": domains } }}
+    >
       <AccountsClient />
     </SWRConfig>
   );

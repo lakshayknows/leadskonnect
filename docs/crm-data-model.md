@@ -150,3 +150,22 @@ contact with years of history stays cheap.
 ## External CRM sync (optional)
 - Push new leads + log outreach as activities to HubSpot/Salesforce via their API or
   Zapier. Keep `provider_id` mapping for two-way sync.
+
+## Sending domains
+
+Added 2026-08-23 with the reseller-storefront flow
+([domains-and-mailboxes.md](domains-and-mailboxes.md)).
+
+| Model | Purpose |
+|---|---|
+| `Domain` | One sending domain per workspace, scoped by `@@unique([organizationId, name])`. `nextCheckAt` + `@@index([status, nextCheckAt])` drive the verification sweep — the DB decides what is due, the queue is only transport. `status`: `dns_pending → active`, or `failed` / `expired`. |
+| `DomainDnsRecord` | One expected record (MX / SPF / DMARC, plus DKIM once a selector is issued) plus `observedValue` — what a public resolver actually returned last check. Unique on `[domainId, kind, host]` so verification upserts rather than duplicating. |
+
+`SendingAccount` gained two fields: `domainId` (nullable FK, `onDelete: SetNull`)
+and a third `provider` value, `"managed"`, for a mailbox bought through us.
+Nothing downstream branches on either — a managed mailbox is an ordinary sending
+account, which is why warm-up, the reply poller, deliverability scoring and
+`safeSend` all kept working untouched.
+
+There is deliberately **no order or payment table**: the storefront takes the
+money and credits us the margin.

@@ -55,3 +55,22 @@ the box. Sessions via HTTPS-only cookies or JWTs. All endpoints behind auth chec
 - **Unsubscribe** in every email; global suppression list honored across channels.
 - **Right to deletion** — provide a path to delete a person's data.
 - Maintain an **audit trail** of actions for accountability.
+
+## Known gap: mailbox credentials at rest
+
+`SendingAccount.pass`, `refreshToken` and `dkimPrivateKey` are **plaintext
+columns**. There is no encryption-at-rest layer in `lib/` — the "encrypt PII at
+rest" line above is intent, not implementation.
+
+This was tolerable while every mailbox was BYO and a handful of customers pasted
+their own app password. The sending-domain flow
+([domains-and-mailboxes.md](domains-and-mailboxes.md)) changes the exposure: it
+actively asks people to store mailbox credentials, and does so at volume.
+
+Mitigations already in place: the credentials never leave the server — every
+list route uses a safe select (`SEND_ACCOUNT_SELECT` in `lib/queries.ts`) and
+`POST /api/sending-accounts` returns an explicit field list rather than the
+created row, so `pass` cannot reach a browser.
+
+Still needed: envelope-encrypt these three columns with a key held outside the
+database. `lib/identity.ts` is the natural home for the key handling.

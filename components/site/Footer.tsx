@@ -11,6 +11,8 @@ function Mark() {
   );
 }
 
+const BRANDSTAC_URL = "https://brandstac.com";
+
 const COLUMNS: { title: string; links: { label: string; href: string }[] }[] = [
   {
     title: "Product",
@@ -64,6 +66,17 @@ export default function Footer() {
             <p className="mt-4 max-w-xs text-sm text-ink-soft">
               Personalized outreach across every channel — sequenced, throttled, and human.
             </p>
+            <p className="mt-4 text-sm text-ink-soft">
+              A product by{" "}
+              <a
+                href={BRANDSTAC_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold text-ink underline-offset-4 hover:underline"
+              >
+                brandstac
+              </a>
+            </p>
           </div>
 
           {COLUMNS.map((col) => (
@@ -84,7 +97,18 @@ export default function Footer() {
 
         <div className="mt-14 flex flex-col items-center justify-between gap-3 border-t border-line pt-6 text-xs text-ink-soft sm:flex-row">
           <span>© {new Date().getFullYear()} Followthroo. All rights reserved.</span>
-          <span className="font-mono">Made for teams who actually get replies.</span>
+          <span className="font-mono">
+            Built by{" "}
+            <a
+              href={BRANDSTAC_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="transition-colors hover:text-ink"
+            >
+              brandstac
+            </a>{" "}
+            — New Delhi
+          </span>
         </div>
       </div>
     </footer>
