@@ -5,6 +5,9 @@ export const metadata: Metadata = {
   title: "Followthroo — Multi-Channel Outreach",
   description:
     "AI-powered outreach across email, LinkedIn, WhatsApp, and social — one clear, consistent story.",
+  applicationName: "Followthroo",
+  creator: "brandstac",
+  publisher: "brandstac",
 };
 
 export const viewport: Viewport = {

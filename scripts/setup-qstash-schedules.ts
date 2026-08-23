@@ -19,6 +19,8 @@ const SCHEDULES = [
   { path: "/api/inbox/poll", cron: "*/5 * * * *", label: "reply-poller (every 5 min)" },
   { path: "/api/warmup/run", cron: "0 */4 * * *", label: "warm-up (every 4 h)" },
   { path: "/api/cron/sla-sweep", cron: "*/15 * * * *", label: "SLA sweep (every 15 min)" },
+  { path: "/api/cron/enrollment-sweep", cron: "*/10 * * * *", label: "enrollment sweep (every 10 min)" },
+  { path: "/api/cron/domain-sweep", cron: "*/5 * * * *", label: "domain + DNS sweep (every 5 min)" },
 ];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any

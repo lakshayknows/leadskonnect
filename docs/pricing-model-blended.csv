@@ -1,0 +1,10 @@
+﻿Assumptions: FX Rs87/$1 | Mix 20% Startup / 70% Growth / 10% Enterprise | Blended ARPU Rs2449/seat | Payment processing 3% of revenue
+
+People (seats),Revenue (Rs/mo),Vercel ($),Supabase ($),Upstash ($),Infra Subtotal (Rs/mo),AI Cost (Rs/mo),Payment Processing (Rs/mo),Total Cost (Rs/mo),Gross Margin (Rs/mo),Gross Margin (%)
+10,24490,20,25,2,4089,4872,735,9696,14794,60.4%
+25,61225,20,25,4,4263,12180,1837,18280,42945,70.1%
+50,122450,20,30,7,4959,24360,3674,32992,89458,73.1%
+100,244900,20,40,13,6351,48720,7347,62418,182482,74.5%
+250,612250,40,75,30,12615,121800,18368,152782,459468,75.0%
+500,1224500,60,140,58,22446,243600,36735,302781,921719,75.3%
+1000,2449000,100,230,105,37845,487200,73470,598515,1850485,75.6%

@@ -90,7 +90,7 @@ export default function CampaignsPage() {
   const [mode, setMode] = useState<"list" | "choose" | "build">("list");
   const [editingCampaign, setEditingCampaign] = useState<Campaign | null>(null);
   const [name, setName] = useState("");
-  const [selectedAccount, setSelectedAccount] = useState("default");
+  const [selectedAccount, setSelectedAccount] = useState("");
   const [nodes, setNodes] = useState<BuilderNode[]>([newSend(0)]);
   const [msg, setMsg] = useState<{ kind: "error" | "success" | "info"; text: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -100,14 +100,14 @@ export default function CampaignsPage() {
     setNodes((ns) => ns.map((n, idx) => (idx === i ? ({ ...n, ...patch } as BuilderNode) : n)));
   }
 
-  function startManual() { setEditingCampaign(null); setNodes([newSend(0)]); setName(""); setSelectedAccount("default"); setMode("build"); }
+  function startManual() { setEditingCampaign(null); setNodes([newSend(0)]); setName(""); setSelectedAccount(""); setMode("build"); }
   function startFromPreset(p: (typeof PRESETS)[number]) {
-    setEditingCampaign(null); setNodes(p.nodes.map((n) => ({ ...n }))); setName(p.name); setSelectedAccount("default"); setMode("build");
+    setEditingCampaign(null); setNodes(p.nodes.map((n) => ({ ...n }))); setName(p.name); setSelectedAccount(""); setMode("build");
   }
   function startEdit(c: Campaign) {
     setEditingCampaign(c);
     setName(c.name);
-    setSelectedAccount(c.sendingAccountId ?? "default");
+    setSelectedAccount(c.sendingAccountId ?? "");
     setNodes(fromGraph(c.sequence));
     setMsg(null);
     setMode("build");
@@ -116,9 +116,10 @@ export default function CampaignsPage() {
   async function save(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return setMsg({ kind: "error", text: "Campaign name is required." });
+    if (!selectedAccount) return setMsg({ kind: "error", text: "Choose the mailbox this campaign sends from." });
     setBusy(true); setMsg(null);
     try {
-      const body = { name, sequence: toGraph(nodes), sendingAccountId: selectedAccount === "default" ? null : selectedAccount };
+      const body = { name, sequence: toGraph(nodes), sendingAccountId: selectedAccount || null };
       if (editingCampaign) {
         await api(`/api/campaigns/${editingCampaign.id}`, { method: "PATCH", body });
         setMsg({ kind: "success", text: "Campaign updated." });
@@ -355,11 +356,16 @@ export default function CampaignsPage() {
                       <Input required value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Q3 Sales Follow-up" />
                     </div>
                     <div>
-                      <Label>Send from</Label>
+                      <Label>Send from *</Label>
                       <Select value={selectedAccount} onChange={(e) => setSelectedAccount(e.target.value)}>
-                        <option value="default">Default (server settings)</option>
+                        <option value="">Select a mailbox…</option>
                         {sendingAccounts.map((acc) => <option key={acc.id} value={acc.id}>{acc.name} ({acc.email})</option>)}
                       </Select>
+                      {sendingAccounts.length === 0 && (
+                        <p className="mt-1.5 text-xs text-danger">
+                          No mailbox connected. Campaigns can&apos;t send until you connect one in Sending accounts.
+                        </p>
+                      )}
                     </div>
                   </div>
                 </Panel>
@@ -468,8 +474,8 @@ export default function CampaignsPage() {
               <button
                 onClick={async () => {
                   const ok = await confirm({
-                    title: "Enroll every contact?",
-                    body: "This sends messages to everyone in your list, up to 500 contacts. There's no way to un-send them.",
+                    title: "Enroll every lead?",
+                    body: "This sends messages to everyone in your list, up to 500 leads. There's no way to un-send them.",
                     confirmLabel: "Enroll everyone",
                     tone: "danger",
                   });

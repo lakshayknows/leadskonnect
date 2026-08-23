@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import useSWR from "swr";
 import { Inbox as InboxIcon, RefreshCw, Send, Mail, ArrowDownLeft, ArrowUpRight } from "lucide-react";
 import { api } from "@/lib/client";
@@ -133,7 +134,7 @@ export default function InboxClient() {
               <EmptyState
                 icon={InboxIcon}
                 title="No conversations yet"
-                body="Every reply — email, LinkedIn or WhatsApp — lands here on one thread per contact. Launch a campaign and the first responses show up automatically."
+                body="Every reply — email, LinkedIn or WhatsApp — lands here on one thread per lead. Launch a campaign and the first responses show up automatically."
                 className="border-0"
               />
             ) : (
@@ -175,9 +176,18 @@ export default function InboxClient() {
             ) : (
               <>
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line px-5 py-3">
-                  <div>
+                  <div className="min-w-0">
                     <div className="font-display font-bold">{name(thread.lead)}</div>
                     <div className="text-xs text-ink-soft">{thread.lead?.email} {thread.lead?.company ? `· ${thread.lead.company}` : ""}</div>
+                    {/* The conversation is half the picture; the record is the other half. */}
+                    {thread.lead && (
+                      <Link
+                        href={`/dashboard/leads/${thread.lead.id}`}
+                        className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
+                      >
+                        Open lead <ArrowUpRight className="h-3 w-3" />
+                      </Link>
+                    )}
                   </div>
                   <div className="flex flex-wrap gap-1.5">
                     {STATUS_ACTIONS.map((a) => (

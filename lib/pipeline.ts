@@ -521,17 +521,14 @@ export async function sweepSlaBreaches(organizationId: string) {
       const target = await prisma.user.findUnique({ where: { id: toUserId }, select: { email: true, name: true } });
       if (target?.email) {
         const contactName = [item.lead.firstName, item.lead.lastName].filter(Boolean).join(" ") || item.lead.email || "A contact";
-        const { emailChannel } = await import("./channels/email");
-        const sent = await emailChannel
-          .send(
-            { id: `escalation:${item.id}`, email: target.email, firstName: target.name },
-            {
-              subject: `Overdue: ${contactName} in ${item.pipeline.name}`,
-              body: `${contactName} has been sitting in "${item.stage.name}" past its SLA and needs attention.`,
-            },
-          )
-          .catch(() => ({ ok: false }));
-        if (sent.ok) channels.push("email");
+        // Internal escalation to a manager — platform mailbox, not the customer's.
+        const { sendSystemEmail } = await import("./channels/email");
+        const sent = await sendSystemEmail(
+          target.email,
+          `Overdue: ${contactName} in ${item.pipeline.name}`,
+          `${contactName} has been sitting in "${item.stage.name}" past its SLA and needs attention.`,
+        ).catch(() => false);
+        if (sent) channels.push("email");
       }
     }
 

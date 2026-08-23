@@ -51,10 +51,20 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   if (parsed.data.status !== undefined) data.status = parsed.data.status;
   if (parsed.data.sequence !== undefined)
     data.sequence = parsed.data.sequence as unknown as Prisma.InputJsonValue;
-  if ("sendingAccountId" in parsed.data)
-    data.sendingAccount = parsed.data.sendingAccountId
-      ? { connect: { id: parsed.data.sendingAccountId } }
-      : { disconnect: true };
+  if ("sendingAccountId" in parsed.data) {
+    // Scope the connect to this org: `connect: { id }` alone would happily attach
+    // another tenant's mailbox and send their customers' mail through it.
+    if (parsed.data.sendingAccountId) {
+      const owned = await prisma.sendingAccount.findFirst({
+        where: { id: parsed.data.sendingAccountId, organizationId: ctx.orgId },
+        select: { id: true },
+      });
+      if (!owned) return fail("Sending account not found", 404);
+      data.sendingAccount = { connect: { id: owned.id } };
+    } else {
+      data.sendingAccount = { disconnect: true };
+    }
+  }
 
   const updated = await prisma.campaign.update({ where: { id }, data });
   return ok(updated);

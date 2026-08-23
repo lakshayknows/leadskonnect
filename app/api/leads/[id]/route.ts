@@ -4,6 +4,7 @@ import { ok, fail } from "@/lib/http";
 import { requireOrg } from "@/lib/tenant";
 import { invalidate } from "@/lib/cache";
 import { recomputeAndSaveLeadScore } from "@/lib/scoring";
+import { getLeadDetail } from "@/lib/queries";
 import { suppress } from "@/lib/crm";
 
 export const runtime = "nodejs";
@@ -18,14 +19,15 @@ const PATCHABLE = new Set([
 ]);
 const SCORE_SIGNALS = new Set(["budgetMentioned", "timelineMentioned", "decisionMakerConfirmed"]);
 
+// The full contact record the lead page renders: identities, open tasks, pipeline
+// position, live sequences and the derived next action. Messages/activities are no
+// longer included here — they're part of the merged timeline at ./timeline, which
+// paginates separately so a contact with years of history stays cheap to open.
 export async function GET(req: NextRequest, { params }: Ctx) {
   const ctx = await requireOrg(req);
   if (ctx instanceof Response) return ctx;
   const { id } = await params;
-  const lead = await prisma.lead.findFirst({
-    where: { id, organizationId: ctx.orgId },
-    include: { messages: { orderBy: { createdAt: "desc" }, take: 50 }, activities: { orderBy: { at: "desc" }, take: 50 } },
-  });
+  const lead = await getLeadDetail(ctx.orgId, id);
   if (!lead) return fail("not found", 404);
   return ok(lead);
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import useSWR from "swr";
 import { Bot, Play, FileEdit, Check, X } from "lucide-react";
 import { api } from "@/lib/client";
@@ -29,7 +30,7 @@ export default function AgentPage() {
   const confirm = useConfirm();
   const toast = useToast();
 
-  const [selectedAccount, setSelectedAccount] = useState("default");
+  const [selectedAccount, setSelectedAccount] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [selectionInit, setSelectionInit] = useState(false);
   const [brief, setBrief] = useState("Introduce Followthroo warmly in 3 sentences and ask for a quick call.");
@@ -58,8 +59,9 @@ export default function AgentPage() {
   async function run() {
     const leadIds = [...selected];
     if (leadIds.length === 0) return setMsg("Select at least one lead.");
+    if (!selectedAccount) return setMsg("Choose the mailbox to send from.");
     const ok = await confirm({
-      title: `Run the agent on ${leadIds.length} contact${leadIds.length === 1 ? "" : "s"}?`,
+      title: `Run the agent on ${leadIds.length} lead${leadIds.length === 1 ? "" : "s"}?`,
       body: "The agent sends real messages on your connected channels. This can't be undone.",
       confirmLabel: "Run agent",
       tone: "danger",
@@ -74,7 +76,7 @@ export default function AgentPage() {
           leadIds,
           brief,
           confidenceThreshold,
-          sendingAccountId: selectedAccount === "default" ? undefined : selectedAccount,
+          sendingAccountId: selectedAccount || undefined,
         },
         method: "POST",
       });
@@ -117,15 +119,21 @@ export default function AgentPage() {
               </div>
               <div className="space-y-4">
                 <div>
-                  <Label>Send From (SMTP Account)</Label>
+                  <Label>Send from</Label>
                   <Select value={selectedAccount} onChange={(e) => setSelectedAccount(e.target.value)}>
-                    <option value="default">Default SMTP (Server Config)</option>
+                    <option value="">Select a mailbox…</option>
                     {accounts.map((acc) => (
                       <option key={acc.id} value={acc.id}>
                         {acc.name} ({acc.email})
                       </option>
                     ))}
                   </Select>
+                  {accounts.length === 0 && (
+                    <p className="mt-1.5 text-xs text-danger">
+                      No mailbox connected.{" "}
+                      <Link href="/dashboard/accounts" className="underline">Connect one</Link> before the agent can email.
+                    </p>
+                  )}
                 </div>
                 <div>
                   <Label>Autonomy</Label>
@@ -141,7 +149,7 @@ export default function AgentPage() {
               </div>
             </div>
             <div className="mt-4 flex items-center gap-3">
-              <button onClick={run} disabled={busy} className="btn btn-primary disabled:opacity-50">
+              <button onClick={run} disabled={busy || !selectedAccount} className="btn btn-primary disabled:opacity-50">
                 <Play className="h-4 w-4" /> {busy ? "Running…" : "Run agent"}
               </button>
               <span className="font-mono text-xs text-ink-soft">{selected.size} lead(s) selected</span>
@@ -177,7 +185,7 @@ export default function AgentPage() {
                     <div className="flex items-center justify-between gap-2">
                       <div className="min-w-0">
                         <div className="truncate text-sm font-semibold">
-                          {[d.lead.firstName, d.lead.lastName].filter(Boolean).join(" ") || d.lead.email || "Unnamed contact"}
+                          {[d.lead.firstName, d.lead.lastName].filter(Boolean).join(" ") || d.lead.email || "Unnamed lead"}
                         </div>
                         <div className="text-xs uppercase tracking-wide text-ink-soft">{d.channel}</div>
                       </div>

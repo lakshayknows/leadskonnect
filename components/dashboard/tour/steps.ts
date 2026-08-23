@@ -17,31 +17,31 @@ export type TourStep = {
 };
 
 /**
- * Seven steps, ordered as the work actually happens: get contacts in, write
- * what you'll say, sequence it, watch replies land, connect the mailbox that
- * sends it. Each names a task, not a UI control — "Start with your contacts",
- * not "This is the Contacts button".
+ * Seven steps, ordered as the work actually happens: see what needs you, get
+ * leads in, write what you'll say, sequence it, watch replies land, and never
+ * lose the follow-up. Each names a task, not a UI control — "Start with your
+ * leads", not "This is the Leads button".
  */
 export const PRODUCT_TOUR: TourStep[] = [
   {
     target: "overview-stats",
     path: "/dashboard",
-    title: "Your outreach at a glance",
-    body: "Sent, replies and active campaigns update as your sequences run. It's quiet right now because nothing has gone out yet.",
+    title: "What needs you today",
+    body: "Home is a work queue, not a report. New leads, follow-ups due, replies waiting — each one clicks straight through to the work.",
     placement: "bottom",
   },
   {
     target: "sidebar-contacts",
     path: "/dashboard",
-    title: "Start with your contacts",
-    body: "Import a CSV or add people one at a time. Everything else in Followthroo points at this list.",
+    title: "Start with your leads",
+    body: "Everyone you're trying to reach lives here, whichever channel or source they came from. Everything else in Followthroo points at this list.",
     placement: "right",
   },
   {
     target: "leads-import",
     path: "/dashboard/leads",
     title: "Bring your list in",
-    body: "Upload a CSV and we'll match the columns for you. Duplicates resolve to one contact rather than getting messaged twice.",
+    body: "Add someone by hand or upload a CSV and we'll match the columns for you. Duplicates resolve to one lead rather than getting messaged twice.",
     placement: "bottom",
   },
   {
@@ -66,10 +66,10 @@ export const PRODUCT_TOUR: TourStep[] = [
     placement: "right",
   },
   {
-    target: "sidebar-accounts",
+    target: "sidebar-tasks",
     path: "/dashboard/campaigns",
-    title: "Connect a mailbox to send",
-    body: "Campaigns stay in draft until a sending account is connected. Connect Gmail in one click, or add SMTP details.",
+    title: "Nothing falls through",
+    body: "When someone replies and nobody has answered, a follow-up appears here on its own. Every lead always has a next action — that's the whole idea.",
     placement: "right",
   },
 ];

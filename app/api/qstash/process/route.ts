@@ -4,6 +4,10 @@ import { runJob } from "@/lib/job-router";
 import { env } from "@/lib/env";
 
 export const runtime = "nodejs";
+// This route performs the node's send AND then publishes the next advance. Without an
+// explicit budget a cut-off between those two steps delivers the mail but strands the
+// sequence — the exact failure the enrollment sweep now also backstops.
+export const maxDuration = 300;
 
 const receiver = env.qstash.currentSigningKey && env.qstash.nextSigningKey
   ? new Receiver({

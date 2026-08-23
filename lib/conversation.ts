@@ -9,6 +9,7 @@
  */
 import { prisma } from "./db";
 import type { Channel, Department } from "@prisma/client";
+import { ensureReplyFollowUp } from "./tasks";
 
 export async function recordConversationEvent(args: {
   organizationId: string;
@@ -48,6 +49,21 @@ export async function recordConversationEvent(args: {
     // describing. A duplicate externalId (webhook replay racing a manual write, etc.)
     // lands here too.
     console.error("[conversation] failed to record event:", e);
+    // A failed write means we can't trust that this event is new, and creating a
+    // follow-up for a replayed webhook would be worse than creating none.
+    return;
+  }
+
+  // Someone replied and nobody has answered yet — that is a thing to do, so record
+  // it as one. This sits here rather than in each adapter because every channel
+  // writes through this function: email poller, WhatsApp webhook and the inbound
+  // ingest path all get follow-up tasks without knowing tasks exist.
+  if (args.direction === "inbound") {
+    await ensureReplyFollowUp({
+      organizationId: args.organizationId,
+      leadId: args.leadId,
+      channel: args.channel,
+    }).catch((e) => console.error("[conversation] follow-up task failed:", e));
   }
 }
 

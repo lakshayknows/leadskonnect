@@ -114,6 +114,31 @@ export async function scheduleAdvance(enrollmentId: string, node: CampaignNode):
   return enqueueJob({ kind: "advance", enrollmentId }, delay);
 }
 
+/**
+ * How long a run holds an enrollment before the sweep may retry it. A crashed or
+ * timed-out advance releases itself implicitly once the lease expires.
+ */
+const CLAIM_LEASE_MS = 15 * 60_000;
+/** Tolerance for a queue callback that lands slightly ahead of its own nextRunAt. */
+const CLAIM_GRACE_MS = 60_000;
+
+/**
+ * Atomically take ownership of a due enrollment, so a late queue callback and the
+ * recovery sweep can never run the same node twice. Returns false if the enrollment
+ * is not due, not active, or already claimed by another runner.
+ */
+async function claimEnrollment(id: string): Promise<boolean> {
+  const { count } = await prisma.enrollment.updateMany({
+    where: {
+      id,
+      status: "active",
+      nextRunAt: { lte: new Date(Date.now() + CLAIM_GRACE_MS) },
+    },
+    data: { nextRunAt: new Date(Date.now() + CLAIM_LEASE_MS) },
+  });
+  return count === 1;
+}
+
 async function finish(id: string, status: "completed" | "stopped" | "replied") {
   await prisma.enrollment.update({ where: { id }, data: { status, nextRunAt: null } });
 }
@@ -167,6 +192,24 @@ export async function advanceEnrollment(enrollmentId: string): Promise<void> {
   });
   if (!enr) return;
   if (enr.status !== "active") return; // paused / replied / stopped / completed
+
+  // Respect the campaign's own status. Pausing or finishing a campaign only ever set
+  // Campaign.status — it never touched in-flight enrollments — so without this a resumed
+  // hop (queue callback or sweep) would keep sending out of a campaign the user stopped.
+  if (enr.campaign.status !== "active") {
+    if (enr.campaign.status === "paused") {
+      // Hold, don't kill: re-check in an hour so unpausing resumes the sequence.
+      await prisma.enrollment.update({
+        where: { id: enr.id },
+        data: { nextRunAt: new Date(Date.now() + 60 * 60_000) },
+      });
+    }
+    return;
+  }
+
+  // Take the lease before doing any work — this is the only thing preventing a duplicate
+  // send when a delayed queue callback and the recovery sweep both fire for one hop.
+  if (!(await claimEnrollment(enr.id))) return;
   if (!enr.currentNodeId) return finish(enr.id, "completed");
 
   const orgId = enr.organizationId ?? enr.campaign.organizationId;
@@ -192,7 +235,9 @@ export async function advanceEnrollment(enrollmentId: string): Promise<void> {
       leadId: enr.leadId,
       campaignId: enr.campaignId,
       templateId: node.templateId ?? undefined,
-      account: enr.campaign.sendingAccountId || "default",
+      // No fallback sender: a campaign with no mailbox fails visibly on the message
+      // record rather than going out under the platform's address.
+      account: enr.campaign.sendingAccountId ?? undefined,
     });
     nextId = node.next ?? null;
   } else if (node.type === "wait") {
@@ -210,7 +255,24 @@ export async function advanceEnrollment(enrollmentId: string): Promise<void> {
   const nextNode = graph.nodes[nextId];
   if (!nextNode) return finish(enr.id, "completed");
 
-  await scheduleAdvance(enr.id, nextNode);
+  const queued = await scheduleAdvance(enr.id, nextNode);
+  if (!queued) {
+    // scheduleAdvance writes nextRunAt *before* attempting the publish, so a failed
+    // enqueue would otherwise leave a row that looks perfectly scheduled forever.
+    // Roll it back into the past and let sweepDueEnrollments retry the hop.
+    await prisma.enrollment.update({
+      where: { id: enr.id },
+      data: { nextRunAt: new Date(Date.now() - 1000) },
+    });
+    await logActivity({
+      organizationId: orgId,
+      leadId: enr.leadId,
+      campaignId: enr.campaignId,
+      type: "enrollment_enqueue_failed",
+      meta: { from: node.id, to: nextNode.id },
+    }).catch(() => {});
+    return;
+  }
   await logActivity({
     organizationId: orgId,
     leadId: enr.leadId,
@@ -218,4 +280,49 @@ export async function advanceEnrollment(enrollmentId: string): Promise<void> {
     type: "enrollment_advanced",
     meta: { from: node.id, to: nextNode.id },
   }).catch(() => {});
+}
+
+/**
+ * Recovery sweep: run every enrollment whose nextRunAt is overdue.
+ *
+ * A sequence normally lives as a single in-flight queue message per lead, so one dropped
+ * or failed publish used to strand that lead silently and permanently. This makes the
+ * database the source of truth for what is due — it is the reader the
+ * `@@index([status, nextRunAt])` on Enrollment was always built for.
+ *
+ * `overdueMs` keeps the sweep clear of the normal path: only hops that are late by more
+ * than the grace period are touched, so it never races a healthy queue callback.
+ */
+export async function sweepDueEnrollments(opts: {
+  organizationId?: string;
+  overdueMs?: number;
+  limit?: number;
+} = {}): Promise<{ due: number; recovered: number; failed: number }> {
+  const { organizationId, overdueMs = 10 * 60_000, limit = 200 } = opts;
+  const due = await prisma.enrollment.findMany({
+    where: {
+      status: "active",
+      nextRunAt: { lte: new Date(Date.now() - overdueMs) },
+      // Never resurrect leads on a draft/paused/finished campaign. Enrollments outlive the
+      // campaign status that created them, and a sweep is exactly where that bites.
+      campaign: { status: "active" },
+      ...(organizationId ? { organizationId } : {}),
+    },
+    orderBy: { nextRunAt: "asc" },
+    take: limit,
+    select: { id: true },
+  });
+
+  let recovered = 0;
+  let failed = 0;
+  for (const { id } of due) {
+    try {
+      await advanceEnrollment(id);
+      recovered++;
+    } catch (e) {
+      failed++;
+      console.error(`[sweep] enrollment ${id} failed to advance:`, e);
+    }
+  }
+  return { due: due.length, recovered, failed };
 }

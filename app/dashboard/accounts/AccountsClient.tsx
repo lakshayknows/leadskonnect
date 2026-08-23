@@ -5,12 +5,13 @@ import useSWR from "swr";
 import { api } from "@/lib/client";
 import { Banner, DashHeader, EmptyState, Input, Label, Panel, Select, useConfirm } from "@/components/ui";
 import { Trash2, ShieldCheck, Mail, Server, RefreshCw } from "lucide-react";
+import { SendingDomainsPanel } from "@/components/dashboard/SendingDomainsPanel";
 
 type SendingAccount = {
   id: string;
   name: string;
   email: string;
-  provider: string; // "smtp" | "gmail_oauth"
+  provider: string; // "smtp" | "gmail_oauth" | "managed"
   host: string | null;
   port: number;
   secure: boolean;
@@ -123,12 +124,17 @@ export default function SendingAccountsPage() {
   return (
     <>
       <DashHeader
-        title="Sending Accounts"
-        subtitle="Manage SMTP email accounts to send automated campaigns and agent outreach."
+        title="Mailboxes & domains"
+        subtitle="The domains you send from, and the mailboxes that send."
       />
+      {/* Domains come first: on this screen the domain is the container and the
+          mailbox is the thing inside it, so reading order should match. */}
+      <div className="px-8 pt-8">
+        <SendingDomainsPanel />
+      </div>
       <div className="grid gap-6 p-8 lg:grid-cols-[380px_1fr]">
         <Panel className="h-fit">
-          <h2 className="font-display text-lg font-bold">Connect Email Account</h2>
+          <h2 className="font-display text-lg font-bold">Connect a mailbox you already have</h2>
 
           <a
             href="/api/auth/google/start"
@@ -252,7 +258,7 @@ export default function SendingAccountsPage() {
             <EmptyState
               icon={Mail}
               title="No mailbox connected"
-              body="Campaigns and the agent need somewhere to send from. Connect Gmail in one click, or add SMTP details using the form on the left."
+              body="Campaigns and the agent need somewhere to send from. Buy a fresh domain and mailboxes above, connect Gmail in one click, or add SMTP details on the left."
             />
           ) : (
             <div className="grid gap-4 md:grid-cols-2">
@@ -262,6 +268,11 @@ export default function SendingAccountsPage() {
                     <div className="flex items-center gap-2">
                       <Mail className="h-5 w-5 text-action" />
                       <h3 className="font-display font-bold">{acc.name}</h3>
+                      {acc.provider === "managed" && (
+                        <span className="rounded bg-accent-soft px-1.5 py-0.5 text-[10px] font-bold text-accent-strong">
+                          Managed
+                        </span>
+                      )}
                       {acc.active && (
                         <span className="rounded bg-success-soft px-1.5 py-0.5 text-[10px] font-bold text-success-strong">
                           Active

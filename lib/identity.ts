@@ -225,6 +225,11 @@ export async function mergeLeads(organizationId: string, survivorId: string, los
     prisma.message.updateMany({ where, data: { leadId: survivorId } }),
     prisma.activityLog.updateMany({ where, data: { leadId: survivorId } }),
     prisma.inboxThread.updateMany({ where, data: { leadId: survivorId } }),
+    // Tasks and notes cascade on lead delete, so they MUST be repointed before
+    // the losers are removed below — otherwise merging silently destroys the
+    // follow-up someone scheduled and the notes they wrote.
+    prisma.task.updateMany({ where, data: { leadId: survivorId } }),
+    prisma.note.updateMany({ where, data: { leadId: survivorId } }),
   ]);
 
   // Enrollments and pipeline items are unique per (campaign|pipeline, lead), so

@@ -83,6 +83,8 @@ model Lead {
   enrollments        Enrollment[]
   inboxThreads       InboxThread[]
   contactIdentities  ContactIdentity[]
+  tasks              Task[]
+  notes              Note[]
   leadSource         LeadSource?         @relation(fields: [leadSourceId], references: [id])
   leadSourceId       String?
   pipelineItems      PipelineItem[]
@@ -287,7 +289,7 @@ model SendingAccount {
   organizationId String? // tenant scope
   name           String // e.g. "Support Desk" or "Personal Gmail"
   email          String
-  provider       String    @default("smtp") // "smtp" | "gmail_oauth"
+  provider       String    @default("smtp") // "smtp" | "gmail_oauth" | "managed"
   host           String? // SMTP host (null for gmail_oauth)
   port           Int       @default(587)
   secure         Boolean   @default(false)
@@ -312,11 +314,18 @@ model SendingAccount {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
+  // Set when this mailbox was bought through the platform. Nothing downstream
+  // branches on it — a managed mailbox is an ordinary SendingAccount, so warm-up,
+  // the reply poller, deliverability and safeSend all keep working untouched.
+  domainId String?
+  domain   Domain? @relation(fields: [domainId], references: [id], onDelete: SetNull)
+
   campaigns Campaign[]
   warmup    Warmup?
 
   @@unique([organizationId, email])
   @@index([organizationId])
+  @@index([domainId])
 }
 
 // ---- Deliverability: mailbox warm-up (see lib/warmup.ts, docs/rate-limits.md) ----
@@ -652,7 +661,7 @@ model Pipeline {
 
   /// manual | round_robin | workload — territory/source-based rules aren't modeled (no
   /// territory concept exists yet), so those aren't offered as options.
-  assignmentRule      String  @default("manual")
+  assignmentRule       String  @default("manual")
   /// round_robin's cursor — the userId assigned last, so the next pick continues from there.
   lastAssignedMemberId String?
 
@@ -775,4 +784,166 @@ model ConversationEvent {
 
   @@unique([organizationId, channel, externalId])
   @@index([organizationId, leadId, occurredAt])
+}
+
+/// ---- Next action ----------------------------------------------------------
+/// The product's central promise — "I'll remember what you need to do next" —
+/// needs somewhere to remember it. A Task is one owed action against one contact.
+/// Deliberately not a project-management object: no subtasks, no dependencies,
+/// no projects. It exists so a lead cannot fall through the cracks.
+enum TaskKind {
+  follow_up
+  call
+  email
+  whatsapp
+  linkedin
+  meeting
+  other
+}
+
+enum TaskStatus {
+  open
+  done
+  cancelled
+}
+
+model Task {
+  id             String     @id @default(cuid())
+  organizationId String
+  /// Nullable so a standalone reminder is possible, but in practice every task
+  /// created by the product hangs off a contact.
+  leadId         String?
+  lead           Lead?      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  pipelineItemId String?
+  title          String
+  kind           TaskKind   @default(follow_up)
+  status         TaskStatus @default(open)
+  dueAt          DateTime?
+  /// Assigned rep. Raw userId — memberships are per-org and may change.
+  ownerId        String?
+  createdBy      String?
+  /// user | ai | system — so "we created this follow-up for you" stays visible
+  /// rather than looking like something the rep forgot they typed.
+  createdKind    String     @default("user")
+  completedAt    DateTime?
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  // Drives the Today/Overdue/Upcoming buckets without a table scan.
+  @@index([organizationId, status, dueAt])
+  @@index([organizationId, ownerId, status])
+  @@index([leadId])
+}
+
+/// A human's own words on a contact. Separate from ConversationEvent, which is
+/// reserved for things that actually happened on a channel — a note is internal
+/// and was never sent to anyone.
+model Note {
+  id             String   @id @default(cuid())
+  organizationId String
+  leadId         String
+  lead           Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  authorId       String?
+  body           String
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId, leadId, createdAt])
+}
+
+// ==================================================================
+// Sending domains & managed mailboxes — see docs/domains-and-mailboxes.md
+//
+// A workspace buys a lookalike domain in our reseller storefront so cold
+// outreach never runs on the domain its invoices go out on. The store takes the
+// payment and credits us the margin, so there is no order or payment table here
+// — what we track is the domain and whether its mail records actually resolve.
+// ==================================================================
+
+enum DomainStatus {
+  /// Records recorded, waiting for public DNS to agree.
+  dns_pending
+  /// Every record resolves — this domain can send.
+  active
+  /// Verification gave up; needs a human.
+  failed
+  expired
+}
+
+enum DnsRecordKind {
+  MX
+  SPF
+  DKIM
+  DMARC
+}
+
+enum DnsRecordStatus {
+  pending
+  verified
+  mismatch
+  missing
+}
+
+/// A domain the workspace sends from.
+model Domain {
+  id             String       @id @default(uuid())
+  organizationId String
+  /// Lowercase, no trailing dot. Unique per org, not globally — two workspaces
+  /// could legitimately both manage the same domain in a reseller setup.
+  name           String
+  status         DomainStatus @default(dns_pending)
+  /// String rather than an enum so a second registrar is a data change.
+  registrar      String       @default("godaddy")
+  /// The registrar's id for the registration — used to poll it and to renew.
+  registrarRef   String?
+  /// "auto"   = on our nameservers, we write the records ourselves.
+  /// "manual" = customer's nameservers, they paste what we show them.
+  dnsMode        String       @default("auto")
+  nameservers    String[]     @default([])
+  /// Which mail product the records point at, so the expected record set can be
+  /// recomputed later without another provider round-trip.
+  mailProvider   String?
+  expiresAt      DateTime?
+  autoRenew      Boolean      @default(true)
+  verifiedAt     DateTime?
+  failureReason  String?
+  /// The DB is the source of truth for what is due; the queue is only transport
+  /// (same contract as Enrollment.nextRunAt — see docs/ARCHITECTURE.md).
+  nextCheckAt    DateTime?
+  /// How many verification passes have run, so backoff can widen and eventually
+  /// give up instead of polling a misconfigured domain forever.
+  checkAttempts  Int          @default(0)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  records   DomainDnsRecord[]
+  mailboxes SendingAccount[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+  @@index([status, nextCheckAt])
+}
+
+/// One record the domain needs before it can send, and what the public
+/// resolver last returned for it.
+model DomainDnsRecord {
+  id            String          @id @default(uuid())
+  domainId      String
+  domain        Domain          @relation(fields: [domainId], references: [id], onDelete: Cascade)
+  kind          DnsRecordKind
+  /// The DNS type a resolver answers with — MX, TXT, CNAME.
+  type          String
+  /// Host relative to the domain: "@", "_dmarc", "selector1._domainkey".
+  host          String
+  expectedValue String
+  /// What the resolver actually returned. Shown beside the expected value on a
+  /// mismatch, so a typo is visible rather than merely reported.
+  observedValue String?
+  priority      Int?
+  status        DnsRecordStatus @default(pending)
+  lastCheckedAt DateTime?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@unique([domainId, kind, host])
+  @@index([domainId])
 }

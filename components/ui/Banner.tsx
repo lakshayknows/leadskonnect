@@ -5,6 +5,8 @@ import { cn } from "@/lib/cn";
 
 const KINDS = {
   error: "border-danger/30 bg-danger-soft text-danger-strong",
+  // Between info and error: something worth changing, but nothing is broken.
+  warn: "border-warning/30 bg-warning-soft text-warning-strong",
   success: "border-success/30 bg-success-soft text-success-strong",
   info: "border-line bg-tint text-ink",
 } as const;

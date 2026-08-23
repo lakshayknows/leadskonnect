@@ -10,7 +10,7 @@ const LINKS = [
   { href: "/dashboard/settings/team", icon: Users2, label: "Team" },
   { href: "/dashboard/settings/pipelines", icon: Workflow, label: "Pipelines" },
   { href: "/dashboard/settings/sources", icon: Webhook, label: "Lead sources" },
-  { href: "/dashboard/accounts", icon: Mail, label: "Sending accounts" },
+  { href: "/dashboard/accounts", icon: Mail, label: "Mailboxes & domains" },
   { href: "/dashboard/settings/linkedin", icon: Linkedin, label: "LinkedIn" },
   { href: "/dashboard/settings/channels", icon: MessageCircle, label: "Business channels" },
   { href: "/dashboard/settings/compliance", icon: ShieldCheck, label: "Compliance ledger" },

@@ -59,8 +59,17 @@ export async function enrollLeads(
     });
     enrolled++;
     const ok = await scheduleAdvance(enr.id, startNode);
-    if (ok) enqueued++;
-    else queueAvailable = false;
+    if (ok) {
+      enqueued++;
+    } else {
+      // Nothing was queued, but scheduleAdvance already wrote a future nextRunAt. Pull it
+      // into the past so the enrollment sweep recovers this lead instead of stranding it.
+      await prisma.enrollment.update({
+        where: { id: enr.id },
+        data: { nextRunAt: new Date(Date.now() - 1000) },
+      });
+      queueAvailable = false;
+    }
   }
 
   return { launched: campaign.id, enrolled, skipped, enqueued, queueAvailable };

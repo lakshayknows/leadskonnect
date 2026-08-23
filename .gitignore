@@ -30,6 +30,8 @@ coverage/
 playwright-report/
 test-results/
 /e2e/.auth/
+# scratch output from agent-driven browser sessions
+.playwright-mcp/
 
 # misc
 .DS_Store

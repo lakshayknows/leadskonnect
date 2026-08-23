@@ -60,7 +60,7 @@ export async function runWarmupForOrg(orgId: string): Promise<WarmupRunResult> {
     for (let i = 0; i < remaining; i++) {
       const recip = recipients[(sentToday + i) % recipients.length];
       const to: Lead = { id: "warmup", email: recip.sendingAccount.email, phone: null, linkedinUrl: null, firstName: null };
-      const res = await emailChannel.send(to, { subject: rand(SUBJECTS), body: rand(BODIES) }, w.sendingAccountId);
+      const res = await emailChannel.send(to, { subject: rand(SUBJECTS), body: rand(BODIES) }, w.sendingAccountId, orgId);
       await prisma.warmupEvent.create({
         data: { organizationId: orgId, sendingAccountId: w.sendingAccountId, direction: "sent", providerMessageId: res.providerId },
       });

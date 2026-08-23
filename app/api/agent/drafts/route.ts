@@ -4,6 +4,7 @@ import { prisma } from "@/lib/db";
 import { ok, fail } from "@/lib/http";
 import { requireOrg } from "@/lib/tenant";
 import { safeSend } from "@/lib/channels";
+import { defaultSendingAccountId } from "@/lib/channels/email";
 import { logActivity } from "@/lib/crm";
 
 export const runtime = "nodejs";
@@ -42,11 +43,14 @@ export async function PATCH(req: NextRequest) {
     return ok({ discarded: true });
   }
 
+  // Approving a draft sends it from the workspace's own mailbox; there is no platform
+  // fallback sender, so a workspace with none connected gets a clear failure.
+  const accountId = await defaultSendingAccountId(ctx.orgId);
   const result = await safeSend(
     draft.channel,
     { id: draft.lead.id, email: draft.lead.email, phone: draft.lead.phone, linkedinUrl: draft.lead.linkedinUrl, firstName: draft.lead.firstName },
     { subject: draft.renderedSubject ?? undefined, body: draft.renderedBody ?? "" },
-    "default",
+    accountId ?? undefined,
     ctx.orgId,
   );
 

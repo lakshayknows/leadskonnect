@@ -4,8 +4,12 @@ import { env, configured } from "@/lib/env";
 
 export const runtime = "nodejs";
 
-function backTo(kind: "connected" | "error", detail?: string) {
-  const url = new URL(`${env.appUrl}/dashboard/accounts`);
+function backTo(kind: "connected" | "error", detail?: string, domainId?: string | null) {
+  // Started from the sending-domain wizard? Return to it, on the step they were
+  // on. Dropping them on the Accounts list mid-flow loses their place.
+  const url = domainId
+    ? new URL(`${env.appUrl}/dashboard/accounts/new?step=mailbox&domain=${domainId}`)
+    : new URL(`${env.appUrl}/dashboard/accounts`);
   url.searchParams.set(kind, detail ?? "1");
   return NextResponse.redirect(url.toString());
 }
@@ -37,6 +41,7 @@ export async function GET(req: NextRequest) {
   const state = params.get("state");
   const cookieState = req.cookies.get("g_oauth_state")?.value;
   const orgId = req.cookies.get("g_oauth_org")?.value;
+  const domainId = req.cookies.get("g_oauth_domain")?.value ?? null;
 
   if (!code) return backTo("error", "missing_code");
   if (!state || !cookieState || state !== cookieState) return backTo("error", "state_mismatch");
@@ -73,7 +78,17 @@ export async function GET(req: NextRequest) {
     const effectiveRefresh = refreshToken ?? existing?.refreshToken;
     if (!effectiveRefresh) return backTo("error", "no_refresh_token");
 
-    await prisma.sendingAccount.upsert({
+    // Only trust the cookie's domain if it still belongs to this org.
+    const linkedDomainId = domainId
+      ? (
+          await prisma.domain.findFirst({
+            where: { id: domainId, organizationId: orgId },
+            select: { id: true },
+          })
+        )?.id ?? null
+      : null;
+
+    const account = await prisma.sendingAccount.upsert({
       where: { organizationId_email: { organizationId: orgId, email } },
       create: {
         organizationId: orgId,
@@ -86,17 +101,30 @@ export async function GET(req: NextRequest) {
         user: email,
         refreshToken: effectiveRefresh,
         active: true,
+        domainId: linkedDomainId,
       },
       update: {
         provider: "gmail_oauth",
         refreshToken: effectiveRefresh,
         active: true,
+        ...(linkedDomainId ? { domainId: linkedDomainId } : {}),
       },
     });
 
-    const res = backTo("connected", email);
+    // Connected from the sending-domain flow means it is a fresh outreach
+    // mailbox, so warm-up should already be running by the time they see it.
+    if (linkedDomainId) {
+      await prisma.warmup.upsert({
+        where: { sendingAccountId: account.id },
+        create: { organizationId: orgId, sendingAccountId: account.id, enabled: true },
+        update: { enabled: true },
+      });
+    }
+
+    const res = backTo("connected", email, linkedDomainId);
     res.cookies.delete("g_oauth_state");
     res.cookies.delete("g_oauth_org");
+    res.cookies.delete("g_oauth_domain");
     return res;
   } catch (e) {
     console.error("[google/callback] error:", e);

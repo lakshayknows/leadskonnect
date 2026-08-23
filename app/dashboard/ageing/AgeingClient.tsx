@@ -88,7 +88,7 @@ export default function AgeingClient() {
           <EmptyState
             icon={CheckCircle2}
             title="Nothing is overdue"
-            body="Every contact in every pipeline is inside its stage's SLA. Items appear here the moment one is breached, and escalate up the reporting line."
+            body="Every lead in every pipeline is inside its stage's SLA. Items appear here the moment one is breached, and escalate up the reporting line."
           />
         )}
 
@@ -97,7 +97,7 @@ export default function AgeingClient() {
             <table className="w-full min-w-[52rem] text-sm">
               <thead>
                 <tr className="border-b border-line text-left font-mono text-xs uppercase tracking-wide text-ink-soft">
-                  <th className="px-4 py-3 font-medium">Contact</th>
+                  <th className="px-4 py-3 font-medium">Lead</th>
                   <th className="px-4 py-3 font-medium">Pipeline</th>
                   <th className="px-4 py-3 font-medium">Stage</th>
                   <th className="px-4 py-3 font-medium">Source</th>

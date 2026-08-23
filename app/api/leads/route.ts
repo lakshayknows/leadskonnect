@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db";
 import { ok, fail } from "@/lib/http";
 import { requireOrg } from "@/lib/tenant";
 import { resolveSegmentLeadIds } from "@/lib/segments";
+import { enrichLeadRows } from "@/lib/queries";
 import { cached, invalidate } from "@/lib/cache";
 
 export const runtime = "nodejs";
@@ -67,10 +68,14 @@ export async function GET(req: NextRequest) {
   };
 
   const filterKey = `leads:count:${orgId}:${stage ?? ""}:${company ?? ""}:${book ?? ""}:${group ?? ""}:${(tags ?? []).join("|")}:${q ?? ""}`;
-  const [items, total] = await Promise.all([
+  const [rows, total] = await Promise.all([
     prisma.lead.findMany({ where, orderBy: { createdAt: "desc" }, take: pageSize, skip }),
     cached(filterKey, 15_000, () => prisma.lead.count({ where })),
   ]);
+
+  // Source / owner / last activity / next action are all derived, so they're
+  // attached here rather than denormalised onto Lead where they'd go stale.
+  const items = await enrichLeadRows(orgId, rows);
 
   return ok({ items, total, page, pageSize, totalPages: Math.max(Math.ceil(total / pageSize), 1) });
 }

@@ -48,7 +48,9 @@ export async function safeSend(
     };
   }
 
-  const result = await channel.send(lead, rendered, account);
+  // orgId goes to the adapter too: per-tenant credentials must be looked up scoped to
+  // the owning org, never by a bare account id.
+  const result = await channel.send(lead, rendered, account, orgId);
 
   // LinkedIn's "ok" here means "queued for the extension to draft," not "a human actually
   // sent it" — that confirmation writes its own ConversationEvent later, from
