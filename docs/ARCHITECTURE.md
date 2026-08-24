@@ -110,3 +110,35 @@ rate-limit layer.
 - Redis provider on Vercel (Marketplace) for BullMQ.
 - Whether LinkedIn browser automation runs in a Vercel Sandbox or a dedicated worker
   host (long-lived session + residential IP considerations).
+
+## Scheduling
+
+`vercel.json` holds every recurring job and self-schedules on deploy — there is no
+manual setup step. Vercel sends each invocation with the project's `CRON_SECRET` as
+an `Authorization: Bearer` header, which `lib/cron-auth.ts` verifies.
+
+**`CRON_SECRET` must be set in the Vercel project.** Without it Vercel sends no
+Authorization header, `isAuthorizedCron` returns false, and every scheduled job
+quietly 401s — the jobs appear in the dashboard and appear to run.
+
+| Path | Schedule |
+|---|---|
+| `/api/inbox/poll` | every 5 min |
+| `/api/cron/domain-sweep` | every 5 min |
+| `/api/cron/enrollment-sweep` | every 10 min |
+| `/api/cron/sla-sweep` | every 15 min |
+| `/api/cron/task-sweep` | every 15 min |
+| `/api/cron/daily-digest` | hourly (sends per org at local 8am) |
+| `/api/warmup/run` | every 4 h |
+
+Two constraints worth knowing. Vercel cron expressions are **always UTC**, which is
+why the digest runs hourly and works out each org's local hour itself rather than
+being scheduled for "8am". And **Hobby plans reject anything more frequent than
+daily at build time** — this table needs a Pro plan or it will not deploy.
+
+Delivery is best effort: Vercel may miss a run or occasionally fire one twice, and it
+never retries a failure. Every sweep is therefore written to be idempotent and to
+reconcile from database state rather than assume it ran last time.
+
+`scripts/setup-qstash-schedules.ts` remains as a fallback for non-Vercel hosting.
+Running both schedulers doubles the invocations.

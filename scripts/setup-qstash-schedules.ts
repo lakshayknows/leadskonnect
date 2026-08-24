@@ -1,15 +1,28 @@
 /**
- * Create/refresh QStash Schedules for recurring jobs — reply polling + warm-up — so
- * scheduling works on any Vercel plan (Hobby included). Idempotent: deletes any existing
- * schedules pointing at our endpoints, then recreates them.
+ * QStash Schedules — the FALLBACK scheduler.
  *
- * Run once AFTER the app is deployed to prod:
- *   APP_URL=https://www.followthroo.com npx tsx scripts/setup-qstash-schedules.ts
- * (APP_URL falls back to NEXT_PUBLIC_APP_URL). Requires QSTASH_TOKEN in the environment.
+ * `vercel.json` is the source of truth for recurring jobs now: it self-schedules
+ * on every deploy, needs no manual step, and Vercel signs each invocation with
+ * CRON_SECRET (see lib/cron-auth.ts). Running this script as well would give you
+ * two schedulers firing the same endpoints — harmless, because every sweep is
+ * idempotent, but it doubles the invocations you pay for.
  *
- * Scheduled calls are authenticated by the QStash request signature (see lib/cron-auth.ts),
- * so no CRON_SECRET is required. APP_URL MUST match NEXT_PUBLIC_APP_URL exactly (signature
- * verification checks the destination URL).
+ * Use this only when NOT deploying to Vercel, or on a Hobby plan, where cron
+ * expressions running more than once a day fail the build outright.
+ *
+ * If you have previously run this against production and are now on vercel.json,
+ * delete the old schedules first — from the Upstash console under QStash →
+ * Schedules, or by re-running this with the SCHEDULES array emptied.
+ *
+ * Usage (PowerShell):
+ *   $env:APP_URL="https://app.followthroo.com"; npx tsx scripts/setup-qstash-schedules.ts
+ * Usage (bash):
+ *   APP_URL=https://app.followthroo.com npx tsx scripts/setup-qstash-schedules.ts
+ *
+ * Requires QSTASH_TOKEN in the environment — this script does not read .env.local,
+ * so export it in the shell first. APP_URL must match NEXT_PUBLIC_APP_URL exactly:
+ * signature verification checks the destination URL, and a mismatch 401s silently
+ * forever.
  */
 const QSTASH_URL = (process.env.QSTASH_URL || "https://qstash.upstash.io").replace(/\/$/, "");
 const TOKEN = process.env.QSTASH_TOKEN;
