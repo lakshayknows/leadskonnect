@@ -235,6 +235,8 @@ model User {
   tourVersion           Int? // TOUR_VERSION they finished; a bump re-offers the tour
   checklistState        Json? // { dismissedAt } — completion itself is always derived
   themePreference       String? // "light" | "dark" | "system"
+  notificationPrefs     Json? // { taskReminders, dailyDigest } — null = defaults on
+  lastDigestAt          DateTime? // guards the daily digest against double-sending
 
   @@map("user")
 }
@@ -745,20 +747,25 @@ model StageTransition {
 }
 
 model EscalationEvent {
-  id             String       @id @default(cuid())
+  id             String        @id @default(cuid())
   organizationId String
-  itemId         String
-  item           PipelineItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  /// Exactly one of itemId / taskId is set. Prisma cannot express that, so it is
+  /// enforced by the two callers that write here.
+  itemId         String?
+  item           PipelineItem? @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  taskId         String?
+  task           Task?         @relation(fields: [taskId], references: [id], onDelete: Cascade)
   /// 1 = owner, 2 = group leader, 3 = admin — follows the org hierarchy.
   level          Int
   toUserId       String?
   /// in_app | email | whatsapp | sms | push
-  channel        String       @default("in_app")
-  sentAt         DateTime     @default(now())
-  meta           Json         @default("{}")
+  channel        String        @default("in_app")
+  sentAt         DateTime      @default(now())
+  meta           Json          @default("{}")
 
   @@index([organizationId, sentAt])
   @@index([itemId])
+  @@index([taskId])
 }
 
 /// ---- Unified conversation -------------------------------------------------
@@ -801,6 +808,16 @@ enum TaskKind {
   other
 }
 
+/// Ordered low to high so `orderBy: { priority: "desc" }` sorts the way a human
+/// expects. `none` is the default because most tasks genuinely are not ranked,
+/// and a required priority just trains people to pick one at random.
+enum TaskPriority {
+  none
+  low
+  medium
+  high
+}
+
 enum TaskStatus {
   open
   done
@@ -808,30 +825,43 @@ enum TaskStatus {
 }
 
 model Task {
-  id             String     @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
   /// Nullable so a standalone reminder is possible, but in practice every task
   /// created by the product hangs off a contact.
   leadId         String?
-  lead           Lead?      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  lead           Lead?        @relation(fields: [leadId], references: [id], onDelete: Cascade)
   pipelineItemId String?
   title          String
-  kind           TaskKind   @default(follow_up)
-  status         TaskStatus @default(open)
+  /// Longer context for whoever picks this up — "what exactly do you want said".
+  /// Separate from Note, which is a human's words about the *contact*.
+  instruction    String?
+  kind           TaskKind     @default(follow_up)
+  priority       TaskPriority @default(none)
+  status         TaskStatus   @default(open)
   dueAt          DateTime?
   /// Assigned rep. Raw userId — memberships are per-org and may change.
   ownerId        String?
   createdBy      String?
   /// user | ai | system — so "we created this follow-up for you" stays visible
   /// rather than looking like something the rep forgot they typed.
-  createdKind    String     @default("user")
+  createdKind    String       @default("user")
   completedAt    DateTime?
-  createdAt      DateTime   @default(now())
-  updatedAt      DateTime   @updatedAt
+  /// The one nudge sent to the owner. Null-guarded so a retry cannot re-send.
+  remindedAt     DateTime?
+  /// The one escalation sent to the owner's manager — mirrors PipelineItem.slaBreachedAt.
+  escalatedAt    DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  escalations EscalationEvent[]
 
   // Drives the Today/Overdue/Upcoming buckets without a table scan.
   @@index([organizationId, status, dueAt])
   @@index([organizationId, ownerId, status])
+  // The reminder sweep runs across every org, so it needs an index that is not
+  // org-scoped.
+  @@index([status, dueAt])
   @@index([leadId])
 }
 

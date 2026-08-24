@@ -74,3 +74,16 @@ created row, so `pass` cannot reach a browser.
 
 Still needed: envelope-encrypt these three columns with a key held outside the
 database. `lib/identity.ts` is the natural home for the key handling.
+
+## Task assignment
+
+`Task.ownerId` is a raw userId with no foreign key, by design — org memberships
+change and a hard FK would fight that. The consequence is that the API must do
+the checking itself, and until 2026-08-24 it did not: `POST /api/tasks` accepted
+any string and wrote it straight to the column, including a user id from another
+workspace.
+
+`canAssignTo` in `lib/tasks.ts` now gates both create and reassign against the
+same hierarchy leads and pipelines already use. `GET /api/tasks/assignees`
+returns only the people a caller may legally pick, so the picker and the guard
+cannot drift apart.

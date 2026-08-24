@@ -63,6 +63,18 @@ lead sources) was already built; V3 is mostly product surface.
   checkout, no order table and no registrar API in the app.
   [docs/domains-and-mailboxes.md](docs/domains-and-mailboxes.md)
 
+## Tasks that actually chase you (shipped 2026-08-24)
+- **A due date that does something.** Creating a task offered one text field: no
+  assignee, no date picker, and a hardcoded due-now, so every task was a follow-up
+  owned by whoever clicked and already overdue. Worse, nothing ever fired — "overdue"
+  was a query scope, so a task went red on a screen nobody had open, and the
+  Notifications settings wrote to localStorage and admitted it in its own footer.
+  Now: a real form (assignee, due presets defaulting to tomorrow 9am, type, priority,
+  instruction, contact), role-scoped assignment enforced server-side, an owner nudge
+  when a task comes due, escalation to the manager a day later recorded on the existing
+  Escalations screen, and a morning digest at local 8am. Preferences persist per user.
+  [docs/crm-data-model.md](docs/crm-data-model.md)
+
 ## Cross-cutting (land alongside relevant phases)
 - **Rate limiting** (token buckets, jitter, warm-up) — begins in Phase 2, reused everywhere. [docs/rate-limits.md](docs/rate-limits.md)
 - **Security** (OAuth2, secrets vault, RBAC, encryption, GDPR) — begins in Phase 1, hardened each phase. [docs/security.md](docs/security.md)

@@ -117,8 +117,18 @@ them because there's no number" is useful; an absent button is not.
 ### Tasks — `/dashboard/tasks`
 
 Overdue / Today / Upcoming / Recently done. Rows carry the lead, the channel, the due
-time and an `auto` marker when the system created it. Not a project manager — the
-only job is that nothing falls through.
+time, the owner (in the Everyone view), a priority dot, and an `auto` marker when the
+system created it. Not a project manager — the only job is that nothing falls through.
+
+"Nothing falls through" is what justifies the 2026-08-24 additions and bounds them.
+A task can be given to a teammate (owner/admin anywhere, group leader within their
+department, member self-only), carries a real due date, and now actually reaches
+someone: the owner is emailed when it comes due, their manager if it is still open a
+day later, and everyone gets one morning digest at 8am **local** time. Priority and
+instruction exist because a task handed to someone else needs to say how urgent it is
+and what "done" means.
+
+Still deliberately absent: subtasks, dependencies, projects, recurring tasks.
 
 ### Inbox, Pipeline, Control tower
 
