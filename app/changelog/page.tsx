@@ -9,6 +9,19 @@ export const metadata = { title: "Changelog — Followthroo" };
  */
 const ENTRIES = [
   {
+    version: "0.9.0",
+    date: "Aug 2026",
+    items: [
+      "Buy a sending domain and business mailboxes without leaving Followthroo — pick a name, buy it in the store, and we check the mail records against live DNS and connect the mailbox for you",
+      "Cold outreach can run on a lookalike domain instead of the one your invoices go out on, so a spam flag never reaches the address your customers already know",
+      "Connecting a mailbox no longer means hunting for server settings: we recognise who runs your mail and ask only for the address and password, or connect Google in one click",
+      "Tasks can be handed to a teammate, with a real due date, a priority and an instruction — not just a title",
+      "A due date now does something. You get an email when a task comes due, and your manager hears about it if it is still open a day later",
+      "One morning email at 8am listing what is overdue and what is due today. Nothing arrives on a day with nothing due",
+      "Notification preferences save to your account instead of just the browser you set them in",
+    ],
+  },
+  {
     version: "0.8.0",
     date: "Aug 2026",
     items: [
