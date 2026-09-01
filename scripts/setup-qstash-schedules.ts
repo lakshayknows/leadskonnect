@@ -1,28 +1,31 @@
 /**
- * QStash Schedules — the FALLBACK scheduler.
+ * QStash Schedules — the scheduler.
  *
- * `vercel.json` is the source of truth for recurring jobs now: it self-schedules
- * on every deploy, needs no manual step, and Vercel signs each invocation with
- * CRON_SECRET (see lib/cron-auth.ts). Running this script as well would give you
- * two schedulers firing the same endpoints — harmless, because every sweep is
- * idempotent, but it doubles the invocations you pay for.
+ * Vercel Cron via vercel.json was tried and removed: Hobby plans reject any cron
+ * expression that runs more than once a day, at deploy time, and this app needs
+ * a 5-minute reply poller. QStash has no such limit, costs nothing extra here,
+ * and its signature verification is already wired (lib/cron-auth.ts).
  *
- * Use this only when NOT deploying to Vercel, or on a Hobby plan, where cron
- * expressions running more than once a day fail the build outright.
- *
- * If you have previously run this against production and are now on vercel.json,
- * delete the old schedules first — from the Upstash console under QStash →
- * Schedules, or by re-running this with the SCHEDULES array emptied.
+ * This does NOT run itself. Nothing is scheduled until someone runs it against
+ * production, and a fresh environment therefore has no reply polling, no
+ * warm-up, no sweeps and no task reminders until they do.
  *
  * Usage (PowerShell):
  *   $env:APP_URL="https://app.followthroo.com"; npx tsx scripts/setup-qstash-schedules.ts
  * Usage (bash):
  *   APP_URL=https://app.followthroo.com npx tsx scripts/setup-qstash-schedules.ts
  *
- * Requires QSTASH_TOKEN in the environment — this script does not read .env.local,
- * so export it in the shell first. APP_URL must match NEXT_PUBLIC_APP_URL exactly:
- * signature verification checks the destination URL, and a mismatch 401s silently
- * forever.
+ * Requires QSTASH_TOKEN in the environment — this script does not read
+ * .env.local, so export it in the shell first. APP_URL must match
+ * NEXT_PUBLIC_APP_URL exactly: signature verification checks the destination
+ * URL, and a mismatch 401s silently, forever.
+ *
+ * Idempotent: it deletes any existing schedules pointing at these endpoints
+ * before recreating them, so re-running after adding a job is safe.
+ *
+ * If the project ever moves to a Vercel Pro plan, vercel.json crons become
+ * viable again (100 jobs, per-minute precision) and would remove this manual
+ * step — see docs/ARCHITECTURE.md.
  */
 const QSTASH_URL = (process.env.QSTASH_URL || "https://qstash.upstash.io").replace(/\/$/, "");
 const TOKEN = process.env.QSTASH_TOKEN;

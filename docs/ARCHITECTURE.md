@@ -113,13 +113,17 @@ rate-limit layer.
 
 ## Scheduling
 
-`vercel.json` holds every recurring job and self-schedules on deploy — there is no
-manual setup step. Vercel sends each invocation with the project's `CRON_SECRET` as
-an `Authorization: Bearer` header, which `lib/cron-auth.ts` verifies.
+**QStash Schedules, registered by `scripts/setup-qstash-schedules.ts`.** They do
+not self-register: a fresh environment has no reply polling, no warm-up, no
+sweeps and no task reminders until that script is run against production.
 
-**`CRON_SECRET` must be set in the Vercel project.** Without it Vercel sends no
-Authorization header, `isAuthorizedCron` returns false, and every scheduled job
-quietly 401s — the jobs appear in the dashboard and appear to run.
+Vercel Cron via `vercel.json` was tried and removed. **Hobby plans reject any
+cron expression more frequent than daily, and reject it at deploy time** — the
+whole deployment fails, not just the cron. This app needs a 5-minute reply
+poller, so `vercel.json` is only an option on Pro.
+
+`lib/cron-auth.ts` accepts either a QStash signature or a `CRON_SECRET` bearer,
+so both schedulers work and manual `curl` runs do too.
 
 | Path | Schedule |
 |---|---|
