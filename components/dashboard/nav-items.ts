@@ -45,7 +45,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Campaigns", href: "/dashboard/campaigns", icon: Rocket },
       { label: "Templates", href: "/dashboard/templates", icon: FileText },
-      { label: "AI", href: "/dashboard/agent", icon: Bot },
+      { label: "Test emails", href: "/dashboard/agent", icon: Bot },
     ],
   },
   {

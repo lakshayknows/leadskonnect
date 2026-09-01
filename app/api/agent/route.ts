@@ -10,7 +10,10 @@ export const runtime = "nodejs";
 export const maxDuration = 300; // Vercel Fluid Compute default
 
 const RunAgent = z.object({
-  leadIds: z.array(z.string()).min(1),
+  // One lead per run. This endpoint sends real messages, and its only caller is
+  // the Test emails screen — an unbounded array here was a 200-recipient blast
+  // one request away. runAgent itself stays multi-lead capable for future use.
+  leadIds: z.array(z.string()).min(1).max(1, "Send a test to one lead at a time."),
   brief: z.string().min(1),
   maxSteps: z.number().min(1).max(50).optional(),
   sendingAccountId: z.string().optional(),
@@ -24,7 +27,7 @@ export async function POST(req: NextRequest) {
     if (!configured.agent) return fail("ANTHROPIC_API_KEY not configured", 503);
 
     const parsed = RunAgent.safeParse(await req.json().catch(() => null));
-    if (!parsed.success) return fail("expected { leadIds[], brief, maxSteps?, sendingAccountId?, confidenceThreshold? }");
+    if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "expected { leadIds[], brief, maxSteps?, sendingAccountId?, confidenceThreshold? }");
 
     if (parsed.data.sendingAccountId) {
       const owned = await prisma.sendingAccount.findFirst({

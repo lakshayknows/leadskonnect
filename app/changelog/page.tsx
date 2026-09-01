@@ -9,6 +9,16 @@ export const metadata = { title: "Changelog — Followthroo" };
  */
 const ENTRIES = [
   {
+    version: "0.9.1",
+    date: "Sep 2026",
+    items: [
+      "The AI page is now Test emails, and sends to one lead at a time — it used to tick every lead on the page by default, so a single click could message hundreds",
+      "Search and pagination when choosing who to send to. Only leads with an email address are offered, since that is what gets sent",
+      "Adding a contact that already exists now says so instead of \"Lead added\" — it updates the existing record rather than creating a duplicate, so it stays where it was in your list",
+      "Fixed the contact search when creating a task, which never returned any results",
+    ],
+  },
+  {
     version: "0.9.0",
     date: "Aug 2026",
     items: [

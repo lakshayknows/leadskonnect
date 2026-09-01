@@ -70,3 +70,24 @@ built yet.
 Triggered from `/api/agent` (`maxDuration = 300`, Vercel Fluid Compute). Tool calls go
 through the same authenticated, rate-limited paths as manual sends — there is no separate
 "agent-only" code path for actually contacting someone.
+
+## The screen is a test surface, not a bulk console
+
+`/dashboard/agent` is labelled **Test emails** and sends to **one lead per run**,
+enforced in the UI and by `leadIds: z.array(z.string()).min(1).max(1)` on
+`POST /api/agent`.
+
+It did not used to be. The page loaded up to 200 leads, ticked every one of them
+on mount, and one click posted the lot — a 200-recipient blast as the default
+state of the screen, behind a single confirm.
+
+That was worse than it looked, because `runAgent` has no per-lead loop: every
+selected lead is flattened into one prompt and the model chooses who to contact,
+bounded only by `maxSteps = 20` turns. Two hundred leads could never all be
+processed in one run; it would bail with `summary: "max steps reached"` having
+reached an unknown few, and report nothing about which. One lead per run makes
+the 20-turn budget generous and the outcome legible.
+
+`runAgent` itself is unchanged and still accepts many leads — the cap is on the
+endpoint the screen uses, so a future bulk surface can lift it deliberately
+rather than inherit it by accident.

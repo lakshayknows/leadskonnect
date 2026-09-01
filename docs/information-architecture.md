@@ -43,7 +43,7 @@ COMMUNICATE   Inbox        /dashboard/inbox
               Calendar     (soon)
 AUTOMATE      Campaigns    /dashboard/campaigns
               Templates    /dashboard/templates
-              AI           /dashboard/agent
+              Test emails  /dashboard/agent
 ANALYZE       Reports      /dashboard/reports
               Settings     /dashboard/settings
 ```

@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
-import { CalendarClock, Check, Loader2, Search, X } from "lucide-react";
+import { CalendarClock, Check, Loader2 } from "lucide-react";
 import { Banner, Button, Dialog, Input, Label, Select, Textarea } from "@/components/ui";
 import { api } from "@/lib/client";
+import { LeadPicker, leadLabel } from "@/components/dashboard/LeadPicker";
 
 export type TaskKindValue =
   | "follow_up"
@@ -35,18 +36,6 @@ type Assignees = {
     isSelf: boolean;
   }[];
 };
-
-type LeadHit = {
-  id: string;
-  firstName: string | null;
-  lastName: string | null;
-  email: string | null;
-  company: string | null;
-};
-
-function leadLabel(l: LeadHit): string {
-  return [l.firstName, l.lastName].filter(Boolean).join(" ") || l.email || "Unnamed lead";
-}
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -117,94 +106,6 @@ export type TaskDraft = {
   priority: TaskPriorityValue;
   leadId: string | null;
 };
-
-/** Searchable contact picker. Only rendered when the lead is not already fixed. */
-function LeadPicker({
-  value,
-  label,
-  onPick,
-}: {
-  value: string | null;
-  label: string | null;
-  onPick: (id: string | null, label: string | null) => void;
-}) {
-  const [q, setQ] = useState("");
-  const [query, setQuery] = useState("");
-  const [openList, setOpenList] = useState(false);
-
-  useEffect(() => {
-    const t = setTimeout(() => setQuery(q.trim()), 300);
-    return () => clearTimeout(t);
-  }, [q]);
-
-  const { data, isLoading } = useSWR<{ rows?: LeadHit[]; leads?: LeadHit[] } | LeadHit[]>(
-    openList && query.length >= 2 ? `/api/leads?q=${encodeURIComponent(query)}&pageSize=8` : null
-  );
-
-  // The leads endpoint has grown a couple of envelope shapes over time; accept
-  // whichever arrives rather than guessing and rendering nothing.
-  const hits: LeadHit[] = Array.isArray(data)
-    ? data
-    : ((data?.rows ?? data?.leads ?? []) as LeadHit[]);
-
-  if (value) {
-    return (
-      <div className="mt-1 flex items-center gap-2 rounded-xl border border-line bg-canvas px-3 py-2.5">
-        <span className="min-w-0 flex-1 truncate text-sm">{label ?? "Selected contact"}</span>
-        <button
-          type="button"
-          onClick={() => onPick(null, null)}
-          className="shrink-0 rounded-lg p-1 text-ink-soft transition-colors hover:bg-tint hover:text-ink"
-          aria-label="Clear contact"
-        >
-          <X className="h-3.5 w-3.5" aria-hidden />
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="relative mt-1">
-      <Search
-        className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-ink-soft"
-        aria-hidden
-      />
-      <Input
-        value={q}
-        onChange={(e) => setQ(e.target.value)}
-        onFocus={() => setOpenList(true)}
-        placeholder="Search a contact (optional)"
-        className="!pl-9"
-        aria-label="Search for a contact to attach"
-      />
-      {openList && query.length >= 2 && (
-        <div className="absolute z-10 mt-1 max-h-56 w-full overflow-y-auto rounded-xl border border-line bg-surface-raised shadow-lg">
-          {isLoading && <div className="px-3 py-2.5 text-xs text-ink-soft">Searching…</div>}
-          {!isLoading && hits.length === 0 && (
-            <div className="px-3 py-2.5 text-xs text-ink-soft">No contacts match that.</div>
-          )}
-          {hits.map((l) => (
-            <button
-              key={l.id}
-              type="button"
-              onClick={() => {
-                onPick(l.id, leadLabel(l));
-                setOpenList(false);
-                setQ("");
-              }}
-              className="block w-full px-3 py-2 text-left transition-colors hover:bg-tint"
-            >
-              <div className="truncate text-sm">{leadLabel(l)}</div>
-              {(l.company || l.email) && (
-                <div className="truncate text-xs text-ink-soft">{l.company || l.email}</div>
-              )}
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 /**
  * Create or edit a task.
@@ -373,14 +274,16 @@ export function TaskDialog({
                   {fixedLeadLabel ?? "This contact"}
                 </div>
               ) : (
-                <LeadPicker
-                  value={leadId}
-                  label={leadName}
-                  onPick={(id, label) => {
-                    setLeadId(id);
-                    setLeadName(label);
-                  }}
-                />
+                <div className="mt-1">
+                  <LeadPicker
+                    value={leadId}
+                    onChange={(id, l) => {
+                      setLeadId(id);
+                      setLeadName(l ? leadLabel(l) : null);
+                    }}
+                    heightClass="max-h-52"
+                  />
+                </div>
               )}
             </div>
           )}

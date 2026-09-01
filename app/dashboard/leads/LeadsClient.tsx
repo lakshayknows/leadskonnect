@@ -128,7 +128,7 @@ export default function LeadsPage() {
     setMsg(null);
     try {
       const tags = form.tags.split(",").map((t) => t.trim()).filter(Boolean);
-      await api("/api/leads", {
+      const saved = await api<{ id: string; created: boolean }>("/api/leads", {
         body: {
           firstName: form.firstName || undefined,
           email: form.email.trim() || undefined,
@@ -139,7 +139,14 @@ export default function LeadsPage() {
       });
       setForm({ firstName: "", email: "", company: "", tags: "", linkedinUrl: "" });
       setAddOpen(false);
-      setMsg({ kind: "success", text: "Lead added." });
+      // An existing address is updated in place and keeps its original position
+      // in the newest-first list, so "Lead added" would send someone hunting for
+      // a new row at the top that was never going to be there.
+      setMsg(
+        saved.created
+          ? { kind: "success", text: "Lead added." }
+          : { kind: "info", text: "That contact already existed — we updated it instead of adding a duplicate." },
+      );
       mutate();
     } catch (e) {
       setMsg({ kind: "error", text: (e as Error).message });

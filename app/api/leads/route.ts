@@ -94,7 +94,18 @@ export async function POST(req: NextRequest) {
   const customJson = (custom ?? {}) as Prisma.InputJsonValue;
 
   let lead;
+  // Whether this was a create or an update is the single most useful thing the
+  // caller can know. Adding an address that already exists updates the row in
+  // place and — correctly — leaves `createdAt` alone, so the lead does not move
+  // to the top of a newest-first list. Without this flag that reads as "my lead
+  // vanished", which is exactly how it was reported.
+  let created = true;
   if (email) {
+    const existing = await prisma.lead.findUnique({
+      where: { organizationId_email: { organizationId: orgId, email } },
+      select: { id: true },
+    });
+    created = !existing;
     lead = await prisma.lead.upsert({
       where: { organizationId_email: { organizationId: orgId, email } },
       create: { email, organizationId: orgId, ...rest, custom: customJson },
@@ -103,11 +114,12 @@ export async function POST(req: NextRequest) {
   } else {
     // LinkedIn-only contact — dedupe on the profile URL (no composite unique to rely on).
     const existing = await prisma.lead.findFirst({ where: { organizationId: orgId, linkedinUrl: rest.linkedinUrl } });
+    created = !existing;
     lead = existing
       ? await prisma.lead.update({ where: { id: existing.id }, data: { ...rest, ...(custom ? { custom: customJson } : {}) } })
       : await prisma.lead.create({ data: { organizationId: orgId, ...rest, custom: customJson } });
   }
   invalidate("leads:");
   invalidate("stats");
-  return ok(lead, { status: 201 });
+  return ok({ ...lead, created }, { status: created ? 201 : 200 });
 }
