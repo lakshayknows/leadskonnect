@@ -80,6 +80,28 @@ export const env = {
   // Two models: the main tool-calling loop uses the (configurable, defaults to the most
   // capable) model; reply-intent classification always uses the small/cheap one, since
   // it runs on every inbound reply and doesn't need frontier-model reasoning.
+  // Agent provider: OpenRouter, via its Anthropic-compatible endpoint.
+  //
+  // OpenRouter exposes an "Anthropic Skin" at /v1/messages that speaks the
+  // Messages API natively and passes native tool use straight through, so the
+  // existing @anthropic-ai/sdk client works against it with only a baseURL
+  // change — no second wire format, no translated tool schema.
+  //
+  // Model ids here are OpenRouter's, which are provider-prefixed
+  // ("anthropic/claude-...", "minimax/..."), NOT bare Anthropic ids.
+  openrouter: {
+    apiKey: get("OPENROUTER_API_KEY"),
+    baseUrl: url("OPENROUTER_BASE_URL") ?? "https://openrouter.ai/api",
+    model: get("OPENROUTER_MODEL") ?? "minimax/minimax-m2",
+    classifierModel: get("OPENROUTER_CLASSIFIER_MODEL") ?? get("OPENROUTER_MODEL") ?? "minimax/minimax-m2",
+    // Comma-separated. OpenRouter tries these in order when the primary is
+    // unavailable, which is why there is no second provider integration here.
+    fallbackModels: (get("OPENROUTER_FALLBACK_MODELS") ?? "")
+      .split(",")
+      .map((m) => m.trim())
+      .filter(Boolean),
+  },
+
   anthropic: {
     apiKey: get("ANTHROPIC_API_KEY"),
     model: get("ANTHROPIC_MODEL") ?? "claude-opus-5",
@@ -138,8 +160,10 @@ export const configured = {
   email: !!(env.smtp.host && env.smtp.user && env.smtp.pass),
   whatsapp: !!(env.twilio.accountSid && env.twilio.authToken && env.twilio.whatsappFrom),
   linkedin: !!(env.linkedin.accessToken || env.linkedin.liAt),
-  agent: !!env.anthropic.apiKey,
-  anthropic: !!env.anthropic.apiKey,
+  // Either provider satisfies the agent — OpenRouter wins when both are set.
+  agent: !!(env.openrouter.apiKey || env.anthropic.apiKey),
+  anthropic: !!(env.openrouter.apiKey || env.anthropic.apiKey),
+  openrouter: !!env.openrouter.apiKey,
   qstash: !!(env.qstash.url && env.qstash.token),
   google: !!(env.google.clientId && env.google.clientSecret),
   meta: !!(env.meta.verifyToken && env.meta.appSecret && env.meta.pageAccessToken),

@@ -91,3 +91,27 @@ the 20-turn budget generous and the outcome legible.
 `runAgent` itself is unchanged and still accepts many leads — the cap is on the
 endpoint the screen uses, so a future bulk surface can lift it deliberately
 rather than inherit it by accident.
+
+## Provider
+
+The agent and the reply classifier both go through `provider()` in `lib/agent.ts`,
+which picks OpenRouter when `OPENROUTER_API_KEY` is set and Anthropic direct
+otherwise. Both use `@anthropic-ai/sdk`: OpenRouter's Anthropic-compatible
+endpoint speaks the same Messages API and passes native tool use through
+untouched, so switching provider is a `baseURL`, not a rewrite.
+
+Two things follow from that:
+
+- **Model ids are OpenRouter's when OpenRouter is active** — provider-prefixed
+  (`anthropic/claude-...`, `minimax/...`), not bare Anthropic ids. A bare id
+  against OpenRouter is a 404, not a fallback.
+- **Failover is OpenRouter's own.** `OPENROUTER_FALLBACK_MODELS` is passed as the
+  `models` array, which OpenRouter tries in order. There is deliberately no
+  second provider integration: it would mean a parallel agent loop in the OpenAI
+  wire format with a translated tool schema, and it would engage precisely when
+  something was already wrong — swapping in weaker tool adherence at the worst
+  moment. The NVIDIA path referenced in older comments was removed for this
+  reason and is not coming back.
+
+`configured.agent` is true when **either** key is present, and `/api/agent`
+returns a 503 naming both rather than only `ANTHROPIC_API_KEY`.

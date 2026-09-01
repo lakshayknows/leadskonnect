@@ -24,7 +24,12 @@ export async function POST(req: NextRequest) {
   try {
     const ctx = await requireOrg(req);
     if (ctx instanceof Response) return ctx;
-    if (!configured.agent) return fail("ANTHROPIC_API_KEY not configured", 503);
+    if (!configured.agent) {
+      return fail(
+        "No AI provider configured — set OPENROUTER_API_KEY (or ANTHROPIC_API_KEY) and redeploy.",
+        503,
+      );
+    }
 
     const parsed = RunAgent.safeParse(await req.json().catch(() => null));
     if (!parsed.success) return fail(parsed.error.issues[0]?.message ?? "expected { leadIds[], brief, maxSteps?, sendingAccountId?, confidenceThreshold? }");

@@ -417,6 +417,12 @@ model Invitation {
   expiresAt      DateTime
   inviterId      String
   inviter        User         @relation(fields: [inviterId], references: [id], onDelete: Cascade)
+  // better-auth's organization plugin writes this on every invite. Its absence
+  // made `prisma.invitation.create()` fail with "Unknown argument createdAt",
+  // surfacing as a bare 500 from /api/auth/organization/invite-member — the
+  // adapter passes the whole parsed object through, so a column it expects and
+  // we do not have is a hard failure, not a silently ignored field.
+  createdAt      DateTime     @default(now())
 
   @@map("invitation")
 }

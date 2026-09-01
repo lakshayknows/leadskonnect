@@ -16,6 +16,8 @@ const ENTRIES = [
       "Search and pagination when choosing who to send to. Only leads with an email address are offered, since that is what gets sent",
       "Adding a contact that already exists now says so instead of \"Lead added\" — it updates the existing record rather than creating a duplicate, so it stays where it was in your list",
       "Fixed the contact search when creating a task, which never returned any results",
+      "Fixed team invites, which failed with a server error for everyone",
+      "The AI agent runs through OpenRouter now, so you can choose the model it uses",
     ],
   },
   {

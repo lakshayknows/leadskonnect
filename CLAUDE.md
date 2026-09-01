@@ -64,7 +64,17 @@ sequence. A premium Next.js UI sits on top.
 - **Never take payment for a domain.** The reseller storefront charges the customer and
   credits us the margin — a checkout in the app would bill them twice. See
   `docs/domains-and-mailboxes.md` before touching anything in `lib/domains/`.
-- **Use the latest Claude model** (`claude-opus-4-8`) for the agent layer.
+- **The agent layer runs through OpenRouter**, via its Anthropic-compatible
+  endpoint, so one SDK and one wire format serve every model. The model is
+  `OPENROUTER_MODEL` (provider-prefixed ids, e.g. `minimax/minimax-m2`,
+  `anthropic/claude-...`) and failover is `OPENROUTER_FALLBACK_MODELS` — not a
+  second provider integration. `ANTHROPIC_API_KEY` still works as a direct
+  alternative when no OpenRouter key is set.
+  This replaces the previous "use the latest Claude model" rule. The agent leans
+  hard on tool calling — `send_message`, `draft_message`, `move_stage`,
+  `update_lead_fields` — so a model with weaker tool adherence shows up as wrong
+  actions on real leads, not merely worse prose. Test a model change on
+  **Test emails** (`/dashboard/agent`, one lead per run) before trusting it.
 
 ## Documentation index (the map)
 
