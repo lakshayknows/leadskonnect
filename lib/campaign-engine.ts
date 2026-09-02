@@ -144,6 +144,20 @@ async function finish(id: string, status: "completed" | "stopped" | "replied") {
 }
 
 /** Has the lead replied since this enrollment began (optionally within N days)? */
+/**
+ * Has this contact replied since being enrolled?
+ *
+ * Deliberately lead-wide rather than campaign-scoped: the product promise is
+ * "a reply anywhere pauses the rest for that lead", and a person who answered
+ * one sequence should not keep receiving another.
+ *
+ * The precision now comes from what writes `type: "replied"` in the first
+ * place. lib/inbox/store.ts only uses it when an inbound mail's
+ * In-Reply-To/References names a message we actually sent; a new enquiry from a
+ * known contact is logged as `inbound` instead. So this stayed as it was while
+ * the false positives went away — but that makes the activity type load-bearing:
+ * do not start writing "replied" for anything unverified.
+ */
 async function hasReplied(enr: Enrollment): Promise<boolean> {
   const since = enr.createdAt;
   const a = await prisma.activityLog.findFirst({

@@ -12,6 +12,8 @@ export interface Lead {
 export interface SendResult {
   ok: boolean;
   providerId?: string;
+  /** The RFC-822 Message-ID actually placed on the wire, when the channel sets one. */
+  rfcMessageId?: string;
   /** set when the channel is not configured or the send was skipped */
   skipped?: boolean;
   reason?: string;
@@ -80,7 +82,7 @@ export interface Adapter {
    * id alone is a bare uuid, so without the owning org in the lookup one tenant could
    * send through another's connected mailbox or number.
    */
-  send?(lead: Lead, rendered: RenderedMessage, account?: string, orgId?: string): Promise<SendResult>;
+  send?(lead: Lead, rendered: RenderedMessage, account?: string, orgId?: string, rfcMessageId?: string): Promise<SendResult>;
   /** Parse a provider payload into normalised events. */
   receive?(payload: unknown, headers?: Headers): Promise<InboundEvent[]>;
   /** Verify a webhook signature before anything is parsed or trusted. */
@@ -94,7 +96,7 @@ export interface Adapter {
 export interface Channel {
   name: "email" | "linkedin" | "whatsapp" | "social";
   isConfigured(): boolean;
-  send(lead: Lead, rendered: RenderedMessage, account?: string, orgId?: string): Promise<SendResult>;
+  send(lead: Lead, rendered: RenderedMessage, account?: string, orgId?: string, rfcMessageId?: string): Promise<SendResult>;
   capabilities?(): AdapterCapabilities;
   receive?(payload: unknown, headers?: Headers): Promise<InboundEvent[]>;
   verify?(rawBody: string, headers: Headers): boolean;

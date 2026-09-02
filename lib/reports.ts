@@ -12,7 +12,13 @@ import type { Department } from "@prisma/client";
 
 export interface ReportData {
   days: number;
-  totals: { leads: number; sent: number; opened: number; clicked: number; replied: number; suppressed: number };
+  totals: {
+    leads: number; sent: number; opened: number; clicked: number; replied: number; suppressed: number;
+    /** Inbound mail from a known contact that did NOT answer a campaign send.
+     *  Counted separately so tightening the reply definition surfaces this
+     *  traffic rather than losing it. */
+    inbound: number;
+  };
   rates: { open: number; click: number; reply: number }; // percentages 0–100
   funnel: { stage: string; count: number }[];
   series: { date: string; sent: number; opened: number; clicked: number; replied: number }[];
@@ -33,7 +39,7 @@ export async function getReport(orgId: string, days = 30): Promise<ReportData> {
       select: { sentAt: true, campaignId: true },
     }),
     prisma.activityLog.findMany({
-      where: { organizationId: orgId, at: { gte: since }, type: { in: ["opened", "clicked", "replied"] } },
+      where: { organizationId: orgId, at: { gte: since }, type: { in: ["opened", "clicked", "replied", "inbound"] } },
       select: { at: true, type: true, messageId: true, campaignId: true },
     }),
     prisma.lead.groupBy({ by: ["stage"], where: { organizationId: orgId }, _count: { _all: true } }),
@@ -46,7 +52,12 @@ export async function getReport(orgId: string, days = 30): Promise<ReportData> {
 
   const openedMsgs = new Set(activities.filter((a) => a.type === "opened" && a.messageId).map((a) => a.messageId));
   const clickedMsgs = new Set(activities.filter((a) => a.type === "clicked" && a.messageId).map((a) => a.messageId));
+  // "replied" is now only ever written for a VERIFIED reply — one whose
+  // In-Reply-To/References names a message we sent (lib/inbox/store.ts). Mail
+  // from a known contact that starts a new thread lands in `inbound` instead, so
+  // the reply rate finally means what it says.
   const repliedCount = activities.filter((a) => a.type === "replied").length;
+  const inboundCount = activities.filter((a) => a.type === "inbound").length;
   const sent = messages.length;
 
   // Time series (fill every day in the window).
@@ -72,7 +83,7 @@ export async function getReport(orgId: string, days = 30): Promise<ReportData> {
 
   return {
     days,
-    totals: { leads, sent, opened: openedMsgs.size, clicked: clickedMsgs.size, replied: repliedCount, suppressed },
+    totals: { leads, sent, opened: openedMsgs.size, clicked: clickedMsgs.size, replied: repliedCount, suppressed, inbound: inboundCount },
     rates: { open: pct(openedMsgs.size, sent), click: pct(clickedMsgs.size, sent), reply: pct(repliedCount, sent) },
     funnel: stageGroups.map((g) => ({ stage: g.stage, count: g._count._all })),
     series,

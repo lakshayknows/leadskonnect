@@ -162,6 +162,11 @@ model Message {
   renderedBody    String?
   status          MessageStatus @default(queued)
   providerId      String? // external message id (Twilio SID, SMTP id, …)
+  /// The RFC-822 Message-ID header we set on the way out, e.g.
+  /// "<uuid.orgId@sending.domain>". This is what makes a reply provably a reply:
+  /// an inbound mail whose In-Reply-To or References names it is answering THIS
+  /// message, on this campaign, rather than merely coming from the same address.
+  rfcMessageId    String?
   idempotencyKey  String        @unique
   sentAt          DateTime?
   createdAt       DateTime      @default(now())
@@ -172,6 +177,8 @@ model Message {
   @@index([organizationId])
   @@index([leadId])
   @@index([status])
+  // The reply poller looks messages up by header on every inbound mail.
+  @@index([organizationId, rfcMessageId])
 }
 
 model ActivityLog {
@@ -529,6 +536,18 @@ model InboxMessage {
   subject           String?
   body              String?
   providerMessageId String? // Gmail message id / IMAP UID / SMTP id
+  /// RFC-822 threading headers, kept verbatim. providerMessageId above is the
+  /// provider's opaque id and is useless for correlation across mailboxes;
+  /// these are the ones every mail client actually threads on.
+  rfcMessageId      String?
+  inReplyTo         String?
+  references        String[] @default([])
+  /// How this message was tied to a campaign — see lib/inbox/store.ts.
+  /// header  = In-Reply-To/References matched a Message we sent (a real reply)
+  /// thread  = continues a thread we already know
+  /// address = the From address matched a contact, nothing more
+  /// none    = unmatched
+  matchKind         String   @default("none")
   sentAt            DateTime @default(now())
   createdAt         DateTime @default(now())
 
@@ -537,6 +556,7 @@ model InboxMessage {
   @@index([organizationId])
   @@index([threadId])
   @@index([providerMessageId])
+  @@index([organizationId, rfcMessageId])
 }
 
 // ---- LinkedIn: companion Chrome-extension automation (see docs/channels.md, extension/) ----

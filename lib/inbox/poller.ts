@@ -15,6 +15,7 @@
 import { prisma } from "../db";
 import { gmailAccessToken } from "../channels/email";
 import { recordInbound } from "./store";
+import { extractHeader } from "./threading";
 import { parseLeadEmail } from "../email-lead-parser";
 import { ingestMany } from "../ingest";
 
@@ -45,7 +46,17 @@ function parseAddress(header?: string): string {
 async function handleInboundMessage(
   orgId: string,
   leadSourceKey: string | null,
-  input: { fromAddr: string; toAddr?: string; subject?: string; body?: string; providerMessageId?: string; sentAt?: Date },
+  input: {
+    fromAddr: string;
+    toAddr?: string;
+    subject?: string;
+    body?: string;
+    providerMessageId?: string;
+    rfcMessageId?: string;
+    inReplyTo?: string;
+    references?: string;
+    sentAt?: Date;
+  },
 ): Promise<{ recorded: boolean; matched: boolean }> {
   if (!leadSourceKey) return recordInbound(orgId, input);
 
@@ -96,7 +107,11 @@ async function pollGmail(orgId: string, accountId: string, refreshToken: string,
 
   async function handle(id: string, inSpam: boolean) {
     const res = await fetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject`,
+      // Message-ID / In-Reply-To / References are what turn "mail from a contact"
+      // into "a reply to a specific campaign send" (lib/inbox/threading.ts).
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${id}?format=metadata` +
+        "&metadataHeaders=From&metadataHeaders=To&metadataHeaders=Subject" +
+        "&metadataHeaders=Message-ID&metadataHeaders=In-Reply-To&metadataHeaders=References",
       { headers: { Authorization: `Bearer ${token}` } }
     );
     const msg = await res.json().catch(() => ({}));
@@ -118,6 +133,9 @@ async function pollGmail(orgId: string, accountId: string, refreshToken: string,
       subject: get("Subject"),
       body: msg.snippet,
       providerMessageId: id,
+      rfcMessageId: get("Message-ID"),
+      inReplyTo: get("In-Reply-To"),
+      references: get("References"),
       sentAt: msg.internalDate ? new Date(Number(msg.internalDate)) : undefined,
     });
     if (r.recorded) counts.recorded++;
@@ -157,7 +175,10 @@ async function pollImap(
     try {
       const since = new Date(sinceMs);
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      for await (const msg of client.fetch({ since }, { envelope: true, uid: true }) as any) {
+      // `headers` in addition to the envelope: envelope gives messageId and
+      // inReplyTo, but not References, which is the one that keeps matching
+      // past the first exchange in a long thread.
+      for await (const msg of client.fetch({ since }, { envelope: true, uid: true, headers: ["references"] }) as any) {
         counts.fetched++;
         const from = msg.envelope?.from?.[0]?.address?.toLowerCase();
         if (!from) continue;
@@ -166,11 +187,18 @@ async function pollImap(
           if (await recordWarmupReceived(orgId, account.id, "inbox", providerMessageId)) counts.warmup++;
           continue;
         }
+        // imapflow hands back the requested headers as a raw buffer. Unfolding
+        // by hand rather than regexing: a References chain is long and RFC-822
+        // folds it across continuation lines that start with whitespace.
+        const referencesHeader = extractHeader(msg.headers, "references");
         const r = await handleInboundMessage(orgId, leadSourceKey, {
           fromAddr: from,
           toAddr: msg.envelope?.to?.[0]?.address,
           subject: msg.envelope?.subject,
           providerMessageId,
+          rfcMessageId: msg.envelope?.messageId,
+          inReplyTo: msg.envelope?.inReplyTo,
+          references: referencesHeader,
           sentAt: msg.envelope?.date ? new Date(msg.envelope.date) : undefined,
         });
         if (r.recorded) counts.recorded++;

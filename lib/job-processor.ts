@@ -6,6 +6,7 @@ import { recordOutbound } from "./inbox/store";
 import { injectTracking } from "./tracking";
 import { senderNameForCampaign, senderNameForAccount } from "./sender";
 import { randomUUID } from "node:crypto";
+import { buildRfcMessageId, domainOfAddress } from "./inbox/threading";
 import type { SendJob } from "./queue";
 
 /**
@@ -33,8 +34,20 @@ export async function processSendJob(jobData: SendJob) {
     ? renderMessage(tpl, lead, { senderName })
     : { body: "", subject: undefined };
 
-  // Pre-generate the Message id so open/click tracking can key on it before sending.
+  // Pre-generate the Message id so open/click tracking can key on it before
+  // sending — and so the RFC Message-ID below can be derived from it rather than
+  // being a second identifier to keep in step.
   const messageId = randomUUID();
+
+  // The Message-ID header goes out under the sending mailbox's own domain;
+  // receiving servers treat a header from an unrelated domain as suspect.
+  const sendingDomain = account
+    ? domainOfAddress(
+        (await prisma.sendingAccount.findFirst({ where: { id: account, organizationId }, select: { email: true } }))?.email
+      )
+    : null;
+  const rfcMessageId =
+    channel === "email" ? buildRfcMessageId(messageId, sendingDomain ?? "followthroo.com") : undefined;
   const outbound =
     channel === "email" && rendered.body
       ? { subject: rendered.subject, body: injectTracking(rendered.body, messageId) }
@@ -51,7 +64,8 @@ export async function processSendJob(jobData: SendJob) {
     },
     outbound,
     account,
-    organizationId
+    organizationId,
+    rfcMessageId
   );
 
   await prisma.message.create({
@@ -66,6 +80,9 @@ export async function processSendJob(jobData: SendJob) {
       renderedBody: rendered.body, // store the clean body, not the tracked one
       status: result.ok ? "sent" : result.skipped ? "queued" : "failed",
       providerId: result.providerId,
+      // What actually went on the wire — the poller matches inbound
+      // In-Reply-To/References against this.
+      rfcMessageId: result.rfcMessageId ?? rfcMessageId ?? null,
       idempotencyKey: randomUUID(),
       sentAt: result.ok ? new Date() : null,
     },
@@ -89,6 +106,7 @@ export async function processSendJob(jobData: SendJob) {
       subject: rendered.subject,
       body: rendered.body,
       providerMessageId: result.providerId,
+      rfcMessageId: result.rfcMessageId ?? rfcMessageId ?? null,
       channel: "email",
     }).catch((e) => console.error("[job-processor] recordOutbound failed:", e));
   }

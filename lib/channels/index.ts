@@ -27,7 +27,10 @@ export async function safeSend(
   lead: Lead,
   rendered: RenderedMessage,
   account = "default",
-  orgId = "global"
+  orgId = "global",
+  /** RFC-822 Message-ID to stamp on the outgoing mail, so a reply can be
+   *  matched back to this exact send (lib/inbox/threading.ts). Email only. */
+  rfcMessageId?: string
 ): Promise<SendResult> {
   const channel = channels[channelName];
 
@@ -50,7 +53,7 @@ export async function safeSend(
 
   // orgId goes to the adapter too: per-tenant credentials must be looked up scoped to
   // the owning org, never by a bare account id.
-  const result = await channel.send(lead, rendered, account, orgId);
+  const result = await channel.send(lead, rendered, account, orgId, rfcMessageId);
 
   // LinkedIn's "ok" here means "queued for the extension to draft," not "a human actually
   // sent it" — that confirmation writes its own ConversationEvent later, from
