@@ -21,6 +21,18 @@ export type SourceInfo = { key: string; label: string; instructions: string };
 
 export const KNOWN_SOURCES: SourceInfo[] = [
   {
+    key: "manual",
+    label: "Manual",
+    instructions:
+      "Contacts you add by hand in Followthroo. Nothing to configure — this is the default source for the Add contact form.",
+  },
+  {
+    key: "csv",
+    label: "CSV import",
+    instructions:
+      "Contacts brought in by uploading a spreadsheet. Nothing to configure — imports are tagged with this source automatically.",
+  },
+  {
     key: "web_form",
     label: "Website form",
     instructions:

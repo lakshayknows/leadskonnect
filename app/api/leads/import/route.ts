@@ -3,6 +3,7 @@ import Papa from "papaparse";
 import { prisma } from "@/lib/db";
 import { ok, fail } from "@/lib/http";
 import { requireOrg } from "@/lib/tenant";
+import { ensureSource } from "@/lib/identity";
 import { invalidate } from "@/lib/cache";
 
 export const runtime = "nodejs";
@@ -69,6 +70,13 @@ export async function POST(req: NextRequest) {
   const parsed = Papa.parse<Record<string, string>>(csv, { header: true, skipEmptyLines: true });
   if (parsed.errors.length) return fail(`CSV parse error: ${parsed.errors[0].message}`);
 
+  // Imported contacts get the "csv" source and the importer as creator. They are
+  // deliberately left unassigned: importing 500 rows does not make you the rep
+  // working all 500, and under lib/scope.ts unassigned means a visible pool the
+  // team can claim from, not something hidden.
+  const leadSourceId = await ensureSource(orgId, "csv");
+  const provenance = { leadSourceId, createdById: ctx.userId, createdKind: "import" };
+
   const results = { imported: 0, skipped: 0, errors: [] as string[] };
   for (const row of parsed.data) {
     const { lead, custom } = normalizeRow(row);
@@ -83,7 +91,7 @@ export async function POST(req: NextRequest) {
       if (email) {
         await prisma.lead.upsert({
           where: { organizationId_email: { organizationId: orgId, email } },
-          create: { ...(lead as object), organizationId: orgId, custom } as never,
+          create: { ...(lead as object), organizationId: orgId, ...provenance, custom } as never,
           update: { ...(lead as object), custom } as never,
         });
       } else {
@@ -92,7 +100,7 @@ export async function POST(req: NextRequest) {
         if (existing) {
           await prisma.lead.update({ where: { id: existing.id }, data: { ...(lead as object), custom } as never });
         } else {
-          await prisma.lead.create({ data: { ...(lead as object), organizationId: orgId, custom } as never });
+          await prisma.lead.create({ data: { ...(lead as object), organizationId: orgId, ...provenance, custom } as never });
         }
       }
       results.imported++;

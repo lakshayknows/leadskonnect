@@ -78,6 +78,23 @@ model Lead {
   timelineMentioned      Boolean?
   decisionMakerConfirmed Boolean?
 
+  // ---- ownership (who this contact belongs to) ----
+  // Raw userIds with no foreign key, matching the Task.ownerId / PipelineItem.ownerId
+  // convention: memberships are per-org and a person can be removed from one without
+  // their historical work needing to vanish.
+  //
+  // Before these existed, ownership had to be inferred at read time from the lead's
+  // open PipelineItem — fine for display, useless for a `where`, which is what a
+  // member-scoped view actually needs.
+  /// Assigned rep. Null means unassigned — a claimable pool, not hidden.
+  ownerId     String?
+  /// Who added the contact. Distinct from ownerId: importing 500 leads does not
+  /// make you the rep working all 500.
+  createdById String?
+  /// user | import | webhook | ai — so "you added this" and "IndiaMART sent this"
+  /// stay distinguishable in reporting.
+  createdKind String  @default("user")
+
   messages           Message[]
   activities         ActivityLog[]
   enrollments        Enrollment[]
@@ -94,6 +111,9 @@ model Lead {
   @@unique([organizationId, email])
   @@index([organizationId])
   @@index([organizationId, linkedinUrl])
+  // Drives the per-member lead scope (lib/scope.ts) without a table scan.
+  @@index([organizationId, ownerId])
+  @@index([organizationId, createdById])
   @@index([stage])
   @@index([optedOut])
 }
