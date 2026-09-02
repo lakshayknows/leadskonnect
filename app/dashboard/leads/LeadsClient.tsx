@@ -30,6 +30,7 @@ type Lead = {
 };
 
 type LeadsResponse = { items: Lead[]; total: number; page: number; pageSize: number; totalPages: number };
+type Assignees = { self: string; members: { userId: string; name: string; email: string | null; isSelf: boolean }[] };
 type Segment = { id: string; name: string; kind: string; count: number; leadIds: string[] };
 type Campaign = { id: string; name: string };
 
@@ -81,6 +82,9 @@ export default function LeadsPage() {
   const { data, isLoading, error, mutate } = useSWR<LeadsResponse>(`/api/leads?${params}`);
   const { data: segments, mutate: mutateSegments } = useSWR<Segment[]>("/api/segments");
   const { data: campaigns } = useSWR<Campaign[]>("/api/campaigns");
+  // Who this person may hand contacts to. Same source as task assignment, so the
+  // two can never disagree about who reports to whom.
+  const { data: assignees } = useSWR<Assignees>("/api/tasks/assignees");
   const confirm = useConfirm();
   const prompt = usePrompt();
 
@@ -190,6 +194,31 @@ export default function LeadsPage() {
 
   // ---- Bulk actions on the current selection ----
   const selectedIds = () => Array.from(selected);
+
+  /**
+   * Hand the selected contacts to a teammate.
+   *
+   * Options come from /api/tasks/assignees, which already encodes who you may
+   * give work to — owners and admins anyone, a manager their department, and
+   * everyone else only themselves. Reusing it means assignment cannot drift
+   * from task assignment, and the server re-checks it anyway.
+   */
+  async function bulkAssign(ownerId: string) {
+    const value = ownerId === "__unassign" ? null : ownerId;
+    try {
+      await api("/api/leads/bulk", { body: { leadIds: [...selected], ownerId: value } });
+      setMsg({
+        kind: "success",
+        text: value
+          ? `Assigned ${selected.size} contact(s).`
+          : `Returned ${selected.size} contact(s) to the team pool.`,
+      });
+      setSelected(new Set());
+      mutate();
+    } catch (e) {
+      setMsg({ kind: "error", text: (e as Error).message });
+    }
+  }
 
   async function bulkAddTag() {
     const tag = await prompt({
@@ -332,6 +361,11 @@ export default function LeadsPage() {
             <Select onChange={(e) => { bulkEnroll(e.target.value); e.target.value = ""; }} className="!w-44 !bg-ink-invert/15 !text-ink-invert !border-ink-invert/20 !py-1 text-xs" defaultValue="">
               <option value="" className="text-ink">Enroll in campaign…</option>
               {(campaigns ?? []).map((c) => <option key={c.id} value={c.id} className="text-ink">{c.name}</option>)}
+            </Select>
+            <Select onChange={(e) => { bulkAssign(e.target.value); e.target.value = ""; }} className="!w-44 !bg-ink-invert/15 !text-ink-invert !border-ink-invert/20 !py-1 text-xs" defaultValue="">
+              <option value="" className="text-ink">Assign to…</option>
+              {(assignees?.members ?? []).map((a) => <option key={a.userId} value={a.userId} className="text-ink">{a.isSelf ? `${a.name} (me)` : a.name}</option>)}
+              <option value="__unassign" className="text-ink">Unassign (team pool)</option>
             </Select>
             <button onClick={() => setSelected(new Set())} className="ml-auto text-ink-invert/70 hover:text-ink-invert">Clear</button>
           </div>

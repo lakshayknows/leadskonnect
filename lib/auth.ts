@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
-import { organization } from "better-auth/plugins";
+import { organization, genericOAuth } from "better-auth/plugins";
 import { ac, orgRoles } from "./access-control";
 import { prisma } from "./db";
 import { sendSystemEmail } from "./channels/email";
@@ -14,6 +14,18 @@ import { roleLabel } from "./roles";
  * — distinct from the gmail.send sending-account flow at /api/auth/google/callback.
  */
 const googleConfigured = !!(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
+
+/**
+ * "Sign in with Zoho". better-auth has no built-in Zoho provider, so this rides
+ * the genericOAuth plugin — its callback is {baseURL}/oauth2/callback/zoho,
+ * which is the redirect URI registered in the Zoho API console.
+ *
+ * Zoho is region-partitioned (see lib/zoho.ts): an Indian account's tokens are
+ * only valid against .in endpoints. ZOHO_DC picks the region these sign-in
+ * endpoints point at, defaulting to India.
+ */
+const zohoConfigured = !!(process.env.ZOHO_CLIENT_ID && process.env.ZOHO_CLIENT_SECRET);
+const zohoDc = process.env.ZOHO_DC || "in";
 
 const baseUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
@@ -107,6 +119,31 @@ export const auth = betterAuth({
     },
   },
   plugins: [
+    ...(zohoConfigured
+      ? [
+          genericOAuth({
+            config: [
+              {
+                providerId: "zoho",
+                clientId: process.env.ZOHO_CLIENT_ID!,
+                clientSecret: process.env.ZOHO_CLIENT_SECRET!,
+                authorizationUrl: `https://accounts.zoho.${zohoDc}/oauth/v2/auth`,
+                tokenUrl: `https://accounts.zoho.${zohoDc}/oauth/v2/token`,
+                userInfoUrl: `https://accounts.zoho.${zohoDc}/oauth/user/info`,
+                // Identity only. Permission to SEND as this person is a separate,
+                // later consent (/api/auth/zoho/start) — asking for mail access
+                // just to sign up would be the wrong trade for a new user.
+                scopes: ["email", "profile", "AaaServer.profile.READ"],
+                authorizationUrlParams: { access_type: "offline", prompt: "consent" },
+                mapProfileToUser: (profile: Record<string, unknown>) => ({
+                  email: String(profile.Email ?? profile.email ?? ""),
+                  name: String(profile.Display_Name ?? profile.displayName ?? profile.First_Name ?? ""),
+                }),
+              },
+            ],
+          }),
+        ]
+      : []),
     organization({
       /**
        * better-auth validates every invite and role change against the roles it

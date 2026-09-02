@@ -524,23 +524,47 @@ async function getUnanswered(orgId: string, limit = 8) {
  *
  * Analytics live on Reports. A rep opening the app at 9am needs a work queue.
  */
-export async function getHome(orgId: string) {
+/**
+ * `scope` narrows Home to what one person can see, or — with viewAs — to one
+ * named person. Both come from lib/scope.ts, so a member's own dashboard and an
+ * owner drilling into that member render through the same path rather than two.
+ * Omitted, it behaves exactly as before: the whole workspace.
+ */
+export async function getHome(orgId: string, scope?: { where: Prisma.LeadWhereInput; userIds: string[] | null }) {
   const today = startOfToday();
+  const leadWhere: Prisma.LeadWhereInput = scope ? { AND: [scope.where] } : { organizationId: orgId };
+  // A single user in scope means "just this person's work", which is what the
+  // task buckets key on. Null means unrestricted.
+  const ownerId = scope?.userIds?.length === 1 ? scope.userIds[0] : undefined;
 
   const [attention, buckets, board, newLeads, newLeadsBySource, unreadReplies, overdueItems] = await Promise.all([
     getUnanswered(orgId, 8),
-    getTaskBuckets(orgId),
+    getTaskBuckets(orgId, ownerId),
     getBoard(orgId).catch(() => null),
-    prisma.lead.count({ where: { organizationId: orgId, createdAt: { gte: today } } }),
+    prisma.lead.count({ where: { ...leadWhere, createdAt: { gte: today } } }),
     // No `leadSourceId: { not: null }` filter: a lead added by hand has no source
     // row, and excluding it would make this panel contradict the counter above it.
     prisma.lead.groupBy({
       by: ["leadSourceId"],
-      where: { organizationId: orgId, createdAt: { gte: today } },
+      where: { ...leadWhere, createdAt: { gte: today } },
       _count: { _all: true },
     }),
-    prisma.inboxThread.count({ where: { organizationId: orgId, status: "unread" } }),
-    prisma.pipelineItem.count({ where: { organizationId: orgId, closedAt: null, slaBreachedAt: { not: null } } }),
+    prisma.inboxThread.count({
+      where: {
+        organizationId: orgId,
+        status: "unread",
+        // A thread is only yours if its contact is.
+        ...(scope ? { lead: scope.where } : {}),
+      },
+    }),
+    prisma.pipelineItem.count({
+      where: {
+        organizationId: orgId,
+        closedAt: null,
+        slaBreachedAt: { not: null },
+        ...(ownerId ? { ownerId } : {}),
+      },
+    }),
   ]);
 
   const sourceIds = newLeadsBySource.map((r) => r.leadSourceId).filter((s): s is string => !!s);

@@ -29,6 +29,8 @@ interface PollSummary extends PollCounts {
   account: string;
   provider: string;
   error?: string;
+  /** Set when polling was skipped for a reason that is not an error. */
+  note?: string;
 }
 
 function parseAddress(header?: string): string {
@@ -227,9 +229,18 @@ export async function pollOrgInbox(orgId: string): Promise<PollSummary[]> {
       const r =
         acc.provider === "gmail_oauth" && acc.refreshToken
           ? await pollGmail(orgId, acc.id, acc.refreshToken, sinceMs, orgEmails, acc.leadSourceKey)
-          : acc.provider === "smtp"
-            ? await pollImap(orgId, acc, sinceMs, orgEmails, acc.leadSourceKey)
-            : { fetched: 0, recorded: 0, matched: 0, warmup: 0 };
+          : // Zoho polls over IMAP with an app-specific password when one is set.
+            // The OAuth scopes we request cover sending and account lookup only,
+            // so a Zoho mailbox connected purely by OAuth can send but cannot be
+            // polled — surfaced as a clear reason rather than silent silence,
+            // because "no replies ever arrive" is the worst way to learn that.
+            acc.provider === "zoho_oauth"
+            ? acc.pass
+              ? await pollImap(orgId, acc, sinceMs, orgEmails, acc.leadSourceKey)
+              : { fetched: 0, recorded: 0, matched: 0, warmup: 0, note: "add an app password in Settings to poll this Zoho mailbox for replies" }
+            : acc.provider === "smtp"
+              ? await pollImap(orgId, acc, sinceMs, orgEmails, acc.leadSourceKey)
+              : { fetched: 0, recorded: 0, matched: 0, warmup: 0 };
       await prisma.sendingAccount.update({ where: { id: acc.id }, data: { lastPolledAt: new Date() } });
       results.push({ ...base, ...r });
     } catch (e) {

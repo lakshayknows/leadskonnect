@@ -164,6 +164,30 @@ export const emailChannel: Channel = {
       }
       const fromAddress = sendingAccount.from || `${sendingAccount.name} <${sendingAccount.email}>`;
 
+      // Zoho OAuth accounts send through the Zoho Mail API. The account's region
+      // and Zoho account id were resolved at connect time and stored on the row
+      // (see app/api/auth/zoho/callback), so nothing is re-derived per send.
+      if (sendingAccount.provider === "zoho_oauth") {
+        if (!sendingAccount.refreshToken) {
+          return { ok: false, skipped: true, reason: `Zoho account ${account} needs re-connect (no refresh token)` };
+        }
+        if (!sendingAccount.dkimSelector) {
+          return { ok: false, skipped: true, reason: `Zoho account ${account} needs re-connect (no Zoho account id)` };
+        }
+        const { sendViaZohoMail, dcFromHost } = await import("../zoho");
+        const id = await sendViaZohoMail({
+          refreshToken: sendingAccount.refreshToken,
+          dc: dcFromHost(sendingAccount.host),
+          accountId: sendingAccount.dkimSelector,
+          from: sendingAccount.email,
+          to: lead.email,
+          subject: rendered.subject ?? "",
+          html: htmlBody,
+          messageId: rfcMessageId,
+        });
+        return { ok: true, providerId: id, rfcMessageId };
+      }
+
       // Gmail OAuth accounts send through the Gmail API (matches the gmail.send scope).
       if (sendingAccount.provider === "gmail_oauth") {
         if (!configured.google) {
