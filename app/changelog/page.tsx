@@ -9,6 +9,19 @@ export const metadata = { title: "Changelog — Followthroo" };
  */
 const ENTRIES = [
   {
+    version: "0.9.2",
+    date: "Sep 2026",
+    items: [
+      "Mailbox passwords, Google sign-in tokens and DKIM signing keys are now encrypted in the database, under a key we hold outside it. Keys can be rotated without downtime or a maintenance window",
+      "Fixed: a workspace's mailbox password could be read by any member of that workspace from the Campaigns screen. It is no longer sent to the browser at all",
+      "Connecting or removing a mailbox, and creating or editing a campaign, now require an owner or admin — a team member could previously delete the mailbox everyone sends from",
+      "The Twilio and email provider webhooks now verify their signatures. Anyone who knew the address could previously unsubscribe your contacts",
+      "Click tracking links are signed, so the redirect in your emails cannot be pointed at somebody else's site",
+      "Reports loads noticeably faster — the charts now stream in behind the numbers instead of blocking them",
+      "Our Security and Privacy pages now describe what the product actually does, rather than what it intended to",
+    ],
+  },
+  {
     version: "0.9.1",
     date: "Sep 2026",
     items: [

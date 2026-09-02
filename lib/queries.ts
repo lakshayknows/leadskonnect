@@ -15,7 +15,13 @@ import { nextActionsFor, nextActionFor, getTaskBuckets, startOfToday, type NextA
 import { getBoard } from "./pipeline";
 import type { Prisma } from "@prisma/client";
 
-const SEND_ACCOUNT_SELECT = {
+/**
+ * The only safe projection of a SendingAccount. The row also carries `pass`,
+ * `refreshToken` and `dkimPrivateKey` — none of which may reach a client, so a
+ * bare `include: { sendingAccount: true }` anywhere is a credential leak, not a
+ * convenience. Exported so every caller shares one list instead of re-deriving it.
+ */
+export const SEND_ACCOUNT_SELECT = {
   id: true,
   name: true,
   email: true,
@@ -28,6 +34,17 @@ const SEND_ACCOUNT_SELECT = {
   active: true,
   createdAt: true,
 } satisfies Prisma.SendingAccountSelect;
+
+/**
+ * Shared shape for every campaign list/detail read. Keeps all Campaign scalars
+ * (so the client shape is unchanged) while narrowing the sending account to the
+ * safe field list above — the reason this is a constant rather than three
+ * hand-written `include`s is that the three drifted apart once already.
+ */
+export const CAMPAIGN_INCLUDE = {
+  sendingAccount: { select: SEND_ACCOUNT_SELECT },
+  _count: { select: { enrollments: true } },
+} satisfies Prisma.CampaignInclude;
 
 /**
  * Sending domains for the Accounts screen. Shape MUST match GET /api/domains,
@@ -76,21 +93,6 @@ export async function getSendingDomains(orgId: string) {
   };
 }
 
-export async function getStats(orgId: string) {
-  return cached(`stats:${orgId}`, 30_000, async () => {
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-    const [leads, sentToday, replies, activeCampaigns, suppressed] = await Promise.all([
-      prisma.lead.count({ where: { organizationId: orgId } }),
-      prisma.message.count({ where: { organizationId: orgId, status: "sent", sentAt: { gte: startOfDay } } }),
-      prisma.activityLog.count({ where: { organizationId: orgId, type: "replied" } }),
-      prisma.campaign.count({ where: { organizationId: orgId, status: "active" } }),
-      prisma.suppression.count({ where: { organizationId: orgId } }),
-    ]);
-    return { leads, sentToday, replies, activeCampaigns, suppressed };
-  });
-}
-
 export function getSendingAccounts(orgId: string) {
   return prisma.sendingAccount.findMany({
     where: { organizationId: orgId },
@@ -111,7 +113,7 @@ export async function getTemplates(orgId: string) {
 export function getCampaigns(orgId: string) {
   return prisma.campaign.findMany({
     where: { organizationId: orgId },
-    include: { sendingAccount: true, _count: { select: { enrollments: true } } },
+    include: CAMPAIGN_INCLUDE,
     orderBy: { createdAt: "desc" },
   });
 }

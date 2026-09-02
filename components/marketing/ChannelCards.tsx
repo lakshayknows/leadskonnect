@@ -2,10 +2,8 @@
 
 import React, { useEffect, useRef } from "react";
 import { Mail, Linkedin, MessageCircle, MessagesSquare, Database, Bot } from "lucide-react";
-import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { gsap } from "./gsap";
 
-gsap.registerPlugin(ScrollTrigger);
 
 type Card = { icon: typeof Mail; title: string; metric: string; blurb: string };
 

@@ -2,10 +2,8 @@
 
 import React, { useEffect, useRef } from "react";
 import { Upload, Sparkles, Waypoints, ShieldCheck } from "lucide-react";
-import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { gsap } from "./gsap";
 
-gsap.registerPlugin(ScrollTrigger);
 
 // This IS a real sequence, so numbered steps encode true order.
 const STEPS = [

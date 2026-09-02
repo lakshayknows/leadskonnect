@@ -68,14 +68,6 @@ export const env = {
     liAt: get("LINKEDIN_LI_AT"),
   },
 
-  // Agent provider: NVIDIA (OpenAI-compatible endpoint).
-  // Falls back to the bare BASE_URL / MODEL names if that's what's in .env.local.
-  nvidia: {
-    apiKey: get("NVIDIA_API_KEY"),
-    baseUrl: url("NVIDIA_BASE_URL") ?? url("BASE_URL") ?? "https://integrate.api.nvidia.com/v1",
-    model: get("NVIDIA_MODEL") ?? get("MODEL") ?? "meta/llama-3.3-70b-instruct",
-  },
-
   // Agent provider: Anthropic Claude — CLAUDE.md's standing rule for the agent layer.
   // Two models: the main tool-calling loop uses the (configurable, defaults to the most
   // capable) model; reply-intent classification always uses the small/cheap one, since

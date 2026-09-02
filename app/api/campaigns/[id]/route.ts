@@ -3,8 +3,9 @@ import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { ok, fail } from "@/lib/http";
-import { requireOrg } from "@/lib/tenant";
+import { requireOrg, requireRole } from "@/lib/tenant";
 import { CampaignSequence } from "@/lib/campaign-engine";
+import { CAMPAIGN_INCLUDE } from "@/lib/queries";
 
 export const runtime = "nodejs";
 
@@ -18,7 +19,7 @@ export async function GET(req: NextRequest, { params }: Ctx) {
 
   const campaign = await prisma.campaign.findFirst({
     where: { id, organizationId: ctx.orgId },
-    include: { sendingAccount: true, _count: { select: { enrollments: true } } },
+    include: CAMPAIGN_INCLUDE,
   });
   if (!campaign) return fail("Campaign not found", 404);
   return ok(campaign);
@@ -35,6 +36,8 @@ const UpdateCampaign = z.object({
 export async function PATCH(req: NextRequest, { params }: Ctx) {
   const ctx = await requireOrg(req);
   if (ctx instanceof Response) return ctx;
+  const gate = requireRole(ctx, ["owner", "admin"]);
+  if (gate) return gate;
   const { id } = await params;
 
   // Verify ownership
@@ -74,6 +77,8 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
 export async function DELETE(req: NextRequest, { params }: Ctx) {
   const ctx = await requireOrg(req);
   if (ctx instanceof Response) return ctx;
+  const gate = requireRole(ctx, ["owner", "admin"]);
+  if (gate) return gate;
   const { id } = await params;
 
   const existing = await prisma.campaign.findFirst({

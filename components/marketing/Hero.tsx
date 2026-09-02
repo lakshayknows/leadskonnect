@@ -3,10 +3,8 @@
 import React, { useEffect, useRef } from "react";
 import Link from "next/link";
 import { ArrowRight, Mail, Linkedin, MessageCircle } from "lucide-react";
-import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { gsap } from "./gsap";
 
-gsap.registerPlugin(ScrollTrigger);
 
 /**
  * Connection graph: three channel nodes thread into one lead node, with pulses

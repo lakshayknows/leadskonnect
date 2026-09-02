@@ -3,7 +3,7 @@
 > Master context file. Claude Code reads this every session. If it conflicts with
 > what you see in code, trust the code and update this file.
 
-**Last updated:** 2026-08-11
+**Last updated:** 2026-09-02
 **Status:** draft
 
 ---
@@ -31,7 +31,7 @@ sequence. A premium Next.js UI sits on top.
 | LinkedIn | Official REST API where possible; else Puppeteer/Playwright browser automation (careful) |
 | Data | **PostgreSQL** (or HubSpot CRM via API) |
 | Jobs/queues | **BullMQ** (throttling, scheduling, retries) |
-| Auth | Auth0 / Clerk for user login; per-service OAuth2 server-to-server |
+| Auth | **better-auth** (email/password + Google) with its organization plugin; per-service OAuth2 server-to-server |
 | Deploy | Vercel (Fluid Compute; Node 24 LTS) |
 
 ## Repo conventions
@@ -51,6 +51,17 @@ sequence. A premium Next.js UI sits on top.
   (30–90s between actions), warm up new accounts. Never burst.
 - **No secrets in source, logs, or client code.** Least-privilege tokens, rotation,
   vault. See `docs/security.md`.
+- **Platform secrets live in env; tenant credentials live in the database only as
+  ciphertext.** A customer connecting their own mailbox, WhatsApp number or SMS
+  provider means their credential has to be stored — so it goes through the
+  Prisma extension in `lib/db-encryption.ts` (AES-256-GCM, key in
+  `ENCRYPTION_KEYS`, outside the database). Never add a credential column without
+  adding it to `ENCRYPTED_COLUMNS`, and never filter on one — encrypted columns
+  cannot appear in a `where`; use a blind index (`lib/crypto.ts`).
+- **A SendingAccount row must never reach a browser.** It carries `pass`,
+  `refreshToken` and `dkimPrivateKey`. Use `SEND_ACCOUNT_SELECT` /
+  `CAMPAIGN_INCLUDE` from `lib/queries.ts`; a bare
+  `include: { sendingAccount: true }` is a credential leak.
 - **Respect consent & opt-out.** Maintain a suppression list; honor unsubscribe and
   GDPR deletion. WhatsApp requires opt-in + approved templates.
 - **Design system is binding.** Follow `design_constraints.md` — especially the

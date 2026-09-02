@@ -16,11 +16,14 @@
  * these endpoints fan out across every org, so a header check would be a tenant-data leak.
  */
 import { env } from "./env";
+import { safeEqual } from "./webhook-auth";
 
 export async function isAuthorizedCron(req: Request, rawBody = ""): Promise<boolean> {
   const cronSecret = process.env.CRON_SECRET;
   const authz = req.headers.get("authorization");
-  if (cronSecret && authz === `Bearer ${cronSecret}`) return true;
+  // Constant-time: a plain === on a secret leaks its prefix a byte at a time to
+  // anyone who can time the response, and these endpoints fan out across orgs.
+  if (cronSecret && safeEqual(authz, `Bearer ${cronSecret}`)) return true;
 
   const signature = req.headers.get("upstash-signature");
   if (signature && env.qstash.currentSigningKey && env.qstash.nextSigningKey) {

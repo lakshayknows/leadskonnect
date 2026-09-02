@@ -1,10 +1,8 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
-import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { gsap } from "./gsap";
 
-gsap.registerPlugin(ScrollTrigger);
 
 const GUARDRAILS = [
   { channel: "Email", value: "500–2,000", unit: "per day", note: "Gmail-aware, paced hourly", color: "var(--color-ch-email)" },

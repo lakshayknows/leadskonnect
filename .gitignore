@@ -47,3 +47,7 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 .env*
+# Must come AFTER the .env* rule above: git applies the last matching pattern,
+# so an earlier negation is silently overridden. Without this line a fresh clone
+# would drop .env.example (it survives today only because it is already tracked).
+!.env.example

@@ -16,7 +16,7 @@
 | `id` | uuid (pk) | |
 | `first_name`, `last_name` | text | |
 | `email` | citext (unique) | dedupe key on import |
-| `phone` | text (encrypted) | E.164; needed for WhatsApp |
+| `phone` | text — see docs/security.md for what is and is not encrypted | E.164; needed for WhatsApp |
 | `linkedin_url` | text | |
 | `company`, `title` | text | |
 | `stage` | enum | `new · contacted · replied · qualified · won · lost` |
