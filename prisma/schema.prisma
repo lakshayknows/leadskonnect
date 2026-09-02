@@ -138,17 +138,52 @@ model Campaign {
 }
 
 model Template {
-  id             String   @id @default(uuid())
+  id             String    @id @default(uuid())
   organizationId String? // tenant scope
   channel        Channel
   name           String
+  /// The live copy. Kept on the row (rather than only on TemplateVersion) so
+  /// every existing read path — seeding, the campaign send, the list — keeps
+  /// working untouched; a version is a snapshot of these two fields.
   subject        String?
   body           String
-  variables      Json     @default("[]") // declared vars + required fallbacks
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  variables      Json      @default("[]") // declared vars + required fallbacks
+  createdById    String?
+  /// Soft delete. A hard delete would leave Message.templateId dangling, and
+  /// because processSendJob resolves the body at send time, a missing template
+  /// resolves to null and sends an EMPTY email rather than failing.
+  archivedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  versions TemplateVersion[]
 
   @@index([organizationId])
+  @@index([organizationId, archivedAt])
+}
+
+/// An immutable snapshot of a template's wording.
+///
+/// The reason this exists: lib/job-processor.ts resolves a template's body at
+/// the moment of sending, from templateId alone. So editing a template silently
+/// rewrote every unsent step of every in-flight sequence — someone mid-way
+/// through a five-touch campaign would receive touches 1-2 in the old wording
+/// and 3-5 in the new. A campaign step can now pin the version it was built
+/// with, which is what makes "apply to future campaigns only" mean anything.
+model TemplateVersion {
+  id          String   @id @default(uuid())
+  templateId  String
+  template    Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  /// 1-based, per template.
+  version     Int
+  subject     String?
+  body        String
+  variables   Json     @default("[]")
+  createdById String?
+  createdAt   DateTime @default(now())
+
+  @@unique([templateId, version])
+  @@index([templateId])
 }
 
 model Message {

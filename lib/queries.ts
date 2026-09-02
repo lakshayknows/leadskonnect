@@ -102,10 +102,10 @@ export function getSendingAccounts(orgId: string) {
 }
 
 export async function getTemplates(orgId: string) {
-  let templates = await prisma.template.findMany({ where: { organizationId: orgId }, orderBy: { createdAt: "desc" } });
+  let templates = await prisma.template.findMany({ where: { organizationId: orgId, archivedAt: null }, orderBy: { createdAt: "desc" } });
   if (templates.length === 0) {
     await prisma.template.createMany({ data: SEED_TEMPLATES.map((t) => ({ ...t, organizationId: orgId })) });
-    templates = await prisma.template.findMany({ where: { organizationId: orgId }, orderBy: { createdAt: "desc" } });
+    templates = await prisma.template.findMany({ where: { organizationId: orgId, archivedAt: null }, orderBy: { createdAt: "desc" } });
   }
   return templates;
 }

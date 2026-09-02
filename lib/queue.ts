@@ -29,6 +29,8 @@ export interface SendJob {
   leadId: string;
   campaignId?: string;
   templateId?: string;
+  /** Pinned template snapshot; falls back to the template's live copy. */
+  templateVersionId?: string;
   account?: string;
 }
 

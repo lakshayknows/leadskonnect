@@ -24,6 +24,12 @@ export const SendNode = z.object({
   type: z.literal("send"),
   channel: z.enum(CHANNELS),
   templateId: z.string().nullable().optional(),
+  /// Pins this step to one snapshot of the template's wording. Without it the
+  /// body is resolved live at send time, so editing the template rewrites every
+  /// unsent step of every running sequence. This is what "apply to future
+  /// campaigns only" pins, and what "update this campaign's unsent messages"
+  /// repoints.
+  templateVersionId: z.string().nullable().optional(),
   waitDays: z.number().min(0).default(0),
   next: z.string().nullable().optional(),
 });
@@ -58,6 +64,12 @@ export const GraphSequence = z.object({
 const LegacyStep = z.object({
   channel: z.enum(CHANNELS),
   templateId: z.string().nullable().optional(),
+  /// Pins this step to one snapshot of the template's wording. Without it the
+  /// body is resolved live at send time, so editing the template rewrites every
+  /// unsent step of every running sequence. This is what "apply to future
+  /// campaigns only" pins, and what "update this campaign's unsent messages"
+  /// repoints.
+  templateVersionId: z.string().nullable().optional(),
   waitDays: z.number().min(0).default(0),
   unless: z.string().optional(),
   onlyIf: z.string().optional(),
@@ -249,6 +261,7 @@ export async function advanceEnrollment(enrollmentId: string): Promise<void> {
       leadId: enr.leadId,
       campaignId: enr.campaignId,
       templateId: node.templateId ?? undefined,
+      templateVersionId: node.templateVersionId ?? undefined,
       // No fallback sender: a campaign with no mailbox fails visibly on the message
       // record rather than going out under the platform's address.
       account: enr.campaign.sendingAccountId ?? undefined,

@@ -14,7 +14,7 @@ import type { SendJob } from "./queue";
  * Performs the actual send, updates message status in Postgres, and logs the CRM activity.
  */
 export async function processSendJob(jobData: SendJob) {
-  const { organizationId, channel, leadId, campaignId, templateId, account } = jobData;
+  const { organizationId, channel, leadId, campaignId, templateId, templateVersionId, account } = jobData;
 
   // Scope the lead to the job's organization — never send to another tenant's lead.
   const lead = await prisma.lead.findFirst({ where: { id: leadId, organizationId } });
@@ -22,8 +22,19 @@ export async function processSendJob(jobData: SendJob) {
     throw new Error(`[job-processor] lead ${leadId} not found in org ${organizationId}`);
   }
 
+  // Version first, live copy second. A step pinned to a snapshot keeps sending
+  // the wording it was built with even after someone edits the template; an
+  // unpinned step behaves exactly as it always did. The org scope is on the
+  // parent template, so a pinned id from another tenant resolves to nothing.
   const tpl = templateId
-    ? await prisma.template.findFirst({ where: { id: templateId, organizationId } })
+    ? templateVersionId
+      ? await prisma.templateVersion
+          .findFirst({
+            where: { id: templateVersionId, templateId, template: { organizationId } },
+            select: { subject: true, body: true, variables: true },
+          })
+          .then((v) => v ?? prisma.template.findFirst({ where: { id: templateId, organizationId } }))
+      : await prisma.template.findFirst({ where: { id: templateId, organizationId } })
     : null;
 
   // The sending account's own name (the identity email's From header already shows)
