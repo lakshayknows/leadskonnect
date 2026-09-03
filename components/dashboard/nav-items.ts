@@ -1,6 +1,6 @@
 import {
   LayoutDashboard, Users, Building2, Rocket, FileText, Inbox, Bot,
-  ListChecks, BarChart3, Settings, GitBranch, CalendarDays,
+  ListChecks, BarChart3, Settings, GitBranch, CalendarDays, Linkedin,
   type LucideIcon,
 } from "lucide-react";
 import type { TourTargetId } from "./tour/target";
@@ -44,6 +44,7 @@ export const NAV_GROUPS: NavGroup[] = [
     title: "Automate",
     items: [
       { label: "Campaigns", href: "/dashboard/campaigns", icon: Rocket },
+      { label: "LinkedIn", href: "/dashboard/linkedin", icon: Linkedin },
       { label: "Templates", href: "/dashboard/templates", icon: FileText },
       { label: "Test emails", href: "/dashboard/agent", icon: Bot },
     ],

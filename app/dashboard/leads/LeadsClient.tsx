@@ -527,11 +527,11 @@ export default function LeadsPage() {
         onSubmit={addLead}
         onImport={() => fileRef.current?.click()}
         onQueued={() => {
-          // Close the dialog and land on the sourcing view: the job runs in
-          // another tab and takes a while, so leaving them staring at a form
-          // would be the wrong place to wait.
+          // LinkedIn has its own screen now, and that is where results live.
+          // Two homes for the same thing is how people end up unsure which one
+          // is real — so this hands off rather than duplicating it here.
           setAddOpen(false);
-          router.push("/dashboard/leads?view=sourcing");
+          router.push("/dashboard/linkedin");
         }}
       />
 

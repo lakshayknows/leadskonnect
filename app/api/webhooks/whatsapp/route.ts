@@ -4,6 +4,7 @@ import { ok, fail, requireDb } from "@/lib/http";
 import { logActivity, suppress } from "@/lib/crm";
 import { env } from "@/lib/env";
 import { verifyTwilioSignature } from "@/lib/webhook-auth";
+import { normalizePhone } from "@/lib/identity";
 
 export const runtime = "nodejs";
 
@@ -38,10 +39,48 @@ export async function POST(req: NextRequest) {
   const body = (params.Body ?? "").trim();
   if (!from) return ok({ ignored: true });
 
-  const lead = await prisma.lead.findFirst({ where: { phone: { contains: from.slice(-8) } } });
-  if (!lead?.organizationId) return ok({ processed: true, matched: false });
+  // ---- Which tenant does this belong to? ----
+  //
+  // This used to be `findFirst({ phone: { contains: from.slice(-8) } })` with no
+  // organizationId at all — so an inbound message matched the FIRST lead in the
+  // entire database whose number happened to end in those eight digits, quite
+  // possibly another customer's. A reply could be logged against the wrong
+  // workspace, and "stop" could suppress the wrong company's contact.
+  //
+  // It cannot simply be scoped, because there is one shared platform number
+  // today: the webhook carries no tenant signal at all. Until each workspace
+  // connects its own number, the honest behaviour is to match exactly and refuse
+  // to guess when the answer is ambiguous.
+  // Match through ContactIdentity rather than Lead.phone: identity values are
+  // normalised at write time (lib/identity.ts), which is the whole point of the
+  // graph, whereas Lead.phone holds whatever the CSV or the webhook supplied.
+  // Falls back to an exact Lead.phone match for contacts that predate it.
+  const normalized = normalizePhone(from);
+  const candidates = normalized
+    ? [
+        ...(await prisma.contactIdentity.findMany({
+          where: { kind: "phone", value: normalized },
+          select: { leadId: true, organizationId: true },
+        })).map((i) => ({ id: i.leadId, organizationId: i.organizationId as string | null })),
+        ...(await prisma.lead.findMany({
+          where: { phone: { in: [normalized, from] }, organizationId: { not: null } },
+          select: { id: true, organizationId: true },
+        })),
+      ]
+    : [];
 
-  const orgId = lead.organizationId;
+  if (candidates.length === 0) return ok({ processed: true, matched: false });
+
+  const orgs = new Set(candidates.map((c) => c.organizationId));
+  if (orgs.size > 1) {
+    // Two customers have the same contact. Writing to either is a coin flip, and
+    // a wrong suppression is unrecoverable — so do neither, and say so.
+    console.warn(`[whatsapp] ${orgs.size} workspaces have this number; refusing to guess. Per-tenant numbers fix this.`);
+    return ok({ processed: true, matched: false, ambiguous: true });
+  }
+
+  const lead = candidates[0];
+  const orgId = lead.organizationId!;
 
   // An inbound message carries a Body; a status callback does not. This is the
   // distinction that keeps a delivery receipt from being logged as a reply.

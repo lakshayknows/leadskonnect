@@ -18,6 +18,10 @@ const ENTRIES = [
       "Daily reading limits, so a big list cannot put your LinkedIn account at risk. The dialog tells you what is left before you start",
       "When LinkedIn changes its layout we say so, instead of reporting an empty result and letting you think the search found nobody",
       "Fixed: a LinkedIn invite note longer than 300 characters was silently cut off mid-word when it reached your browser. It is now refused when you write it",
+      "LinkedIn now has its own place in the sidebar, with everything it can do in one screen — paste a URL to get people, watch jobs run, and see the full catalogue of 35 jobs",
+      "Each job says plainly whether it only reads a page, whether it will fill a box for you to send yourself, or whether it goes through LinkedIn’s official API — because that is what decides the risk to your account",
+      "Jobs that are not built yet say what they are waiting on instead of just “coming soon”",
+      "Fixed a serious one: an incoming WhatsApp message could be matched to a contact in someone else’s workspace, because the lookup ignored which workspace it belonged to. A reply could land on the wrong company’s contact, and a “stop” could unsubscribe the wrong person",
     ],
   },
   {

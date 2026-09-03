@@ -70,6 +70,13 @@ sequence. A premium Next.js UI sits on top.
   existing screen — a tab, a dialog, a sub-nav row, a panel on the lead record —
   unless they serve one of the five questions in `docs/information-architecture.md`.
   The rail went from 18 rows to 11 for a reason; don't grow it back.
+  **Exception, decided 2026-09-03: LinkedIn has a row.** The rule is about not
+  giving every feature equal billing, and LinkedIn turned out to be a workspace
+  of its own — 35 distinct jobs (`docs/phantombuster.md`) across sourcing,
+  outreach, engagement and network maintenance, each with its own inputs and
+  limits. It was first built inside the Add Lead dialog, correctly per this rule,
+  and failed the only test that matters: the person who commissioned it could not
+  find it. A destination with a URL beat a good argument about nav hygiene.
 - **The user never needs to understand the integration.** A lead is a lead whether it
   came from IndiaMART, Meta Ads or a CSV; the source is metadata, never a destination.
 - **Never take payment for a domain.** The reseller storefront charges the customer and
