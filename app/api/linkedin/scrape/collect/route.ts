@@ -30,7 +30,18 @@ const Row = z
 const Body = z.object({
   /** The LinkedIn page they were on, so the contact records where it came from. */
   sourceUrl: z.string().max(1000),
-  rows: z.array(Row).min(1).max(100),
+  /** The rows they ticked. Absent when queueing the whole result set instead. */
+  rows: z.array(Row).max(100).optional(),
+  /**
+   * "Add all results", not just this page.
+   *
+   * A LinkedIn search page shows about ten people, so a bar that can only take
+   * what is on screen is a nice touch rather than a prospecting tool. This
+   * queues the same background job the app queues, which paginates properly.
+   */
+  allPages: z.boolean().optional(),
+  /** How many the page claims exist, so we can size the job sensibly. */
+  estimated: z.number().int().positive().max(5000).optional(),
 });
 
 /**
@@ -51,7 +62,8 @@ export async function POST(req: NextRequest) {
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return withCors(fail(parsed.error.issues[0]?.message ?? "invalid body"));
-  const { sourceUrl, rows } = parsed.data;
+  const { sourceUrl, rows, allPages, estimated } = parsed.data;
+  if (!allPages && !rows?.length) return withCors(fail("Nothing selected.", 422));
 
   const { organizationId, userId } = account;
 
@@ -63,11 +75,28 @@ export async function POST(req: NextRequest) {
       fail(`Daily limit reached (${usage.used} of ${usage.cap}). Resets at midnight.`, 429),
     );
   }
-  const accepted = rows.slice(0, usage.remaining);
+
+  const detected = detectScrapeKind(sourceUrl);
+
+  // "All results" is just the ordinary bulk job, queued from the page instead of
+  // from the app. The extension's own poller picks it up and paginates — no
+  // second code path, and it obeys the same cap and pacing.
+  if (allPages) {
+    if (!detected) return withCors(fail("We cannot read that page in bulk.", 422));
+    const job = await queueScrapeJob({
+      organizationId,
+      userId,
+      kind: detected.kind,
+      inputUrl: detected.url,
+      maxResults: Math.min(estimated ?? detected.info.defaultResults, usage.remaining),
+    });
+    return withCors(ok({ jobId: job.id, queued: true, maxResults: job.maxResults }));
+  }
+
+  const accepted = (rows ?? []).slice(0, usage.remaining);
 
   // Recorded as a job like any other, so it shows in Activity, counts toward the
   // cap, and carries the same provenance rather than appearing from nowhere.
-  const detected = detectScrapeKind(sourceUrl);
   const job = await queueScrapeJob({
     organizationId,
     userId,
@@ -85,7 +114,7 @@ export async function POST(req: NextRequest) {
       received: accepted.length,
       created: result.created,
       duplicates: result.duplicates,
-      skipped: rows.length - accepted.length,
+      skipped: (rows?.length ?? 0) - accepted.length,
     }),
   );
 }

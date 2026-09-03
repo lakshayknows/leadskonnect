@@ -82,6 +82,19 @@
     return [];
   }
 
+  /**
+   * LinkedIn's own result count, e.g. "About 2,300 results".
+   *
+   * Needed because a search page shows about ten people, so a bar that can only
+   * take what is on screen is a nice touch rather than a prospecting tool. This
+   * is what lets us offer the whole set.
+   */
+  function totalResults() {
+    const el = document.querySelector(".search-results-container h2, .pb2.t-black--light, .search-results__total");
+    const m = el && el.textContent ? el.textContent.replace(/[,\s]/g, "").match(/(\d+)result/i) : null;
+    return m ? Number(m[1]) : null;
+  }
+
   function rowData(card) {
     const a = card.querySelector('a[href*="/in/"]');
     if (!a) return null;
@@ -137,10 +150,12 @@
       <button class="ft-link" data-ft="all">Select all</button>
       <span class="ft-count" data-ft="count">No one selected</span>
       <span class="ft-msg" data-ft="msg"></span>
+      <button class="ft-link" data-ft="every" hidden></button>
       <button class="ft-primary" data-ft="add" disabled>Add to Followthroo</button>
     `;
     el.querySelector('[data-ft="all"]').addEventListener("click", toggleAll);
     el.querySelector('[data-ft="add"]').addEventListener("click", add);
+    el.querySelector('[data-ft="every"]').addEventListener("click", addEveryPage);
     return el;
   }
 
@@ -165,6 +180,17 @@
     const btn = el.querySelector('[data-ft="add"]');
     btn.disabled = n === 0 || state.busy;
     btn.textContent = state.busy ? "Adding…" : n === 0 ? "Add to Followthroo" : `Add ${n} to Followthroo`;
+
+    // Offered only when there is genuinely more than this page to get.
+    const every = el.querySelector('[data-ft="every"]');
+    const all = totalResults();
+    if (all && all > total) {
+      every.hidden = false;
+      every.disabled = state.busy;
+      every.textContent = `Add all ${all.toLocaleString()} results`;
+    } else {
+      every.hidden = true;
+    }
   }
 
   function message(text, kind) {
@@ -210,6 +236,39 @@
     }
     document.querySelectorAll(`.${CHECK_CLASS}`).forEach((b) => { b.checked = !all; });
     paint();
+  }
+
+  /**
+   * The whole result set, not just this page.
+   *
+   * Hands off to the background job rather than trying to paginate from here: a
+   * content script dies the moment the person navigates, and losing 2,000 rows
+   * at page 40 would be a miserable way to find that out.
+   */
+  async function addEveryPage() {
+    if (state.busy) return;
+    const cfg = await chrome.storage.local.get(["apiBase", "token"]);
+    if (!cfg.apiBase || !cfg.token) {
+      message("Connect the extension first — click its icon.", "err");
+      return;
+    }
+    state.busy = true;
+    paint();
+    try {
+      const res = await fetch(`${cfg.apiBase}/api/linkedin/scrape/collect`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${cfg.token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceUrl: location.href, allPages: true, estimated: totalResults() || undefined }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.ok) throw new Error(json.error || `server said ${res.status}`);
+      message(`Reading all ${json.data.maxResults} in the background — watch it in Followthroo`, "ok");
+    } catch (e) {
+      message(String((e && e.message) || e), "err");
+    } finally {
+      state.busy = false;
+      paint();
+    }
   }
 
   async function add() {
