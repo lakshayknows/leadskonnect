@@ -640,3 +640,30 @@ This document contains extracted content, workflow details, inputs/outputs, and 
   1. Scrapes profile URLs from search results.
   2. Enriches profiles and discovers verified work email address.
   3. Exports structured prospect list into CSV/JSON or CRM sync.
+
+---
+
+## How this maps onto Followthroo
+
+Reference spec for Phase C. Two things stand out on reading the whole catalogue.
+
+**Every single Phantom lists "LinkedIn Session Cookie" as a required input.**
+That is the whole security model of the product: you hand PhantomBuster a live
+session token and their servers browse as you. Followthroo's extension runs
+inside the rep's own logged-in tab, so there is no cookie to hand over and none
+to store — which removes the single most sensitive input the entire catalogue
+depends on, and with it the breach where one database leak exposes every
+customer's LinkedIn account at once. See `extension/README.md`.
+
+**Two of them never touch LinkedIn at all.** Profile URL Finder and Company URL
+Finder work by searching the open web for `site:linkedin.com/...`, so they need
+no session, no extension, and can run server-side like any other enrichment.
+
+Recommended ceilings, taken from the entries above and worth honouring in
+`LinkedInAccount`: ~20-30 connection requests/day, ~80 profiles/day, 100-200
+post engagements per run, 1,000 search results per query (LinkedIn's own cap).
+
+Email addresses are **not** scraped. Profile Scraper and the three "to Emails"
+flows call a separate discovery service (Dropcontact / Hunter) on credits —
+so "search to email outreach" is two products, not one, and needs an
+enrichment vendor decision before it can be built.
