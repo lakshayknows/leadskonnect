@@ -9,7 +9,7 @@ export const metadata = { title: "Changelog — Followthroo" };
  */
 const ENTRIES = [
   {
-    version: "0.9.3",
+    version: "0.9.4",
     date: "Sep 2026",
     items: [
       "Your contacts are yours. A team member now sees only what is assigned to them or added by them — there is no longer a shared pool everyone can browse",
@@ -26,13 +26,12 @@ const ENTRIES = [
     ],
   },
   {
-    version: "0.9.2",
+    version: "0.9.3",
     date: "Sep 2026",
     items: [
       "Invites are emailed now. You no longer have to copy a link and send it yourself — the copy-link button stays as a fallback",
       "Inviting someone as a Manager works. It used to fail with a server error every time, so the only Managers that existed were made directly in the database",
       "Roles are named the way you'd say them: Owner, Admin, Manager, Team member — with a line under each explaining what it means",
-      "A team member's contact list now shows what's theirs: assigned to them, added by them, and anything unassigned. A manager sees their department. Owners and admins still see everything",
       "Contacts have an owner and a creator of their own, so \"who is working this account\" is a fact rather than something the app guessed from the pipeline",
       "Contacts you add by hand are tagged Manual, and CSV imports are tagged CSV, with who added them and when",
       "A new team performance breakdown — contacts, outreach, replies, reply rate and open tasks per person",
@@ -49,13 +48,19 @@ const ENTRIES = [
       "Sign in with Zoho, and connect a Zoho mailbox to send from in one click — no server settings, no app password",
       "Your dashboard is now yours: your contacts, your tasks, your replies. Owners and managers get a team performance table and can switch the whole screen to any one person",
       "Assign contacts to a teammate in bulk, or hand them back to the team pool",
+    ],
+  },
+  {
+    version: "0.9.2",
+    date: "Sep 2026",
+    items: [
       "Mailbox passwords, Google sign-in tokens and DKIM signing keys are now encrypted in the database, under a key we hold outside it. Keys can be rotated without downtime or a maintenance window",
       "Fixed: a workspace's mailbox password could be read by any member of that workspace from the Campaigns screen. It is no longer sent to the browser at all",
       "Connecting or removing a mailbox, and creating or editing a campaign, now require an owner or admin — a team member could previously delete the mailbox everyone sends from",
       "The Twilio and email provider webhooks now verify their signatures. Anyone who knew the address could previously unsubscribe your contacts",
       "Click tracking links are signed, so the redirect in your emails cannot be pointed at somebody else's site",
-      "Reports loads noticeably faster — the charts now stream in behind the numbers instead of blocking them",
       "Our Security and Privacy pages now describe what the product actually does, rather than what it intended to",
+      "Reports loads noticeably faster — the charts now stream in behind the numbers instead of blocking them, and the logo behind every screen went from 2.2 MB to 15 KB",
     ],
   },
   {
