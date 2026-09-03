@@ -6,6 +6,7 @@ function render(cfg) {
   $("toggle").textContent = on ? "Stop" : "Start";
   $("toggle").classList.toggle("on", on);
   $("dot").classList.toggle("on", on && !!cfg.token && !cfg.lastStatusError);
+  $("dot").classList.toggle("err", !!cfg.lastStatusError);
 
   const s = cfg.stats;
   const today = s && s.day === new Date().toDateString() ? s : { sent: 0, failed: 0, skipped: 0 };
@@ -21,6 +22,22 @@ function render(cfg) {
     draftEl.style.display = "none";
   }
 
+  // Reading progress. Only rendered while a scrape is genuinely in flight —
+  // a permanently-visible empty progress bar teaches people to ignore it.
+  const reading = cfg.reading;
+  const readingEl = $("reading");
+  if (reading && reading.active) {
+    readingEl.style.display = "block";
+    $("readingLabel").textContent = reading.label || "Reading LinkedIn…";
+    const pct = reading.target ? Math.min(100, Math.round((reading.found / reading.target) * 100)) : 0;
+    $("readingBar").style.width = `${pct}%`;
+    $("readingCount").textContent = reading.target
+      ? `${reading.found || 0} of up to ${reading.target}`
+      : `${reading.found || 0} found`;
+  } else {
+    readingEl.style.display = "none";
+  }
+
   const box = $("status");
   box.style.color = cfg.lastStatusError ? "#b91c1c" : "";
   if (!cfg.token) {
@@ -30,12 +47,15 @@ function render(cfg) {
   } else if (on) {
     box.innerHTML = `Starting…<br><span class="muted">${counts}</span>`;
   } else {
-    box.textContent = "Paused. Press Start to drain your queue.";
+    box.textContent = "Paused. Press Start to read pages and draft your outreach.";
   }
 }
 
 function load() {
-  chrome.storage.local.get(["token", "enabled", "stats", "lastStatus", "lastStatusError", "draft", "apiBase"], render);
+  chrome.storage.local.get(
+    ["token", "enabled", "stats", "lastStatus", "lastStatusError", "draft", "apiBase", "reading"],
+    render,
+  );
 }
 
 /** The human's verdict on a drafted action — reports the terminal outcome, closes the

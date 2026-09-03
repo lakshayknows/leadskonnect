@@ -51,3 +51,6 @@ yarn-error.log*
 # so an earlier negation is silently overridden. Without this line a fresh clone
 # would drop .env.example (it survives today only because it is already tracked).
 !.env.example
+
+# Chrome Web Store upload artifact — built by scripts/package-extension.ts
+followthroo-linkedin-*.zip

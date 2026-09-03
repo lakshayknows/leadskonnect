@@ -1,35 +1,45 @@
 <!doctype html>
-<html>
+<html lang="en">
   <head>
     <meta charset="utf-8" />
+    <title>Followthroo for LinkedIn</title>
     <style>
-      :root { --ink:#0a0a0a; --soft:#6b6b6b; --line:#e5e5e5; --accent:#4b31e6; --soft-bg:#eeebfd; }
+      :root { --ink:#0a0a0a; --soft:#6b6b6b; --line:#e5e5e5; --accent:#4b31e6; --soft-bg:#eeebfd; --ok:#10b981; --err:#b91c1c; }
       * { box-sizing:border-box; font-family:-apple-system,Segoe UI,Roboto,sans-serif; }
-      body { width:320px; margin:0; padding:16px; color:var(--ink); }
+      body { width:340px; margin:0; padding:16px; color:var(--ink); }
       h1 { font-size:15px; margin:0 0 2px; display:flex; align-items:center; gap:8px; }
       .sub { font-size:11px; color:var(--soft); margin:0 0 14px; }
-      .dot { width:8px; height:8px; border-radius:999px; background:#c4c4c4; display:inline-block; }
-      .dot.on { background:#10b981; }
-      .status { margin:0 0 14px; padding:10px; border-radius:8px; background:var(--soft-bg); font-size:12px; }
+      .dot { width:8px; height:8px; border-radius:999px; background:#c4c4c4; display:inline-block; flex:0 0 auto; }
+      .dot.on { background:var(--ok); }
+      .dot.err { background:var(--err); }
+      .status { margin:0 0 12px; padding:10px; border-radius:8px; background:var(--soft-bg); font-size:12px; line-height:1.45; }
       .muted { color:var(--soft); font-size:11px; }
       .row { display:flex; gap:8px; }
       button { flex:1; border:0; border-radius:8px; padding:9px 12px; font-size:12px; font-weight:600; cursor:pointer; }
       .toggle { background:var(--line); color:var(--ink); }
       .toggle.on { background:var(--accent); color:#fff; }
       .ghost { background:#fff; border:1px solid var(--line); color:var(--ink); }
-      .draft { display:none; margin:0 0 14px; padding:12px; border-radius:10px; border:1px solid var(--accent); background:#fff; }
-      .draft .kind { display:inline-block; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--accent); background:var(--soft-bg); border-radius:999px; padding:2px 8px; margin-bottom:6px; }
-      .draft .who { font-size:13px; font-weight:600; margin:0 0 4px; }
-      .draft .note { font-size:11px; color:var(--soft); margin:0 0 10px; max-height:60px; overflow:hidden; white-space:pre-wrap; }
-      .draft .hint { font-size:10px; color:var(--soft); margin:0 0 10px; }
-      .draft .primary { background:var(--accent); color:#fff; }
+      .card { display:none; margin:0 0 12px; padding:12px; border-radius:10px; border:1px solid var(--accent); background:#fff; }
+      .kind { display:inline-block; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--accent); background:var(--soft-bg); border-radius:999px; padding:2px 8px; margin-bottom:6px; }
+      .who { font-size:13px; font-weight:600; margin:0 0 4px; }
+      .note { font-size:11px; color:var(--soft); margin:0 0 10px; max-height:60px; overflow:hidden; white-space:pre-wrap; }
+      .hint { font-size:10px; color:var(--soft); margin:0 0 10px; }
+      .primary { background:var(--accent); color:#fff; }
+      /* Reading progress — shown only while a scrape is actually running. */
+      .reading { display:none; margin:0 0 12px; padding:10px 12px; border-radius:10px; border:1px solid var(--line); background:#fff; }
+      .reading .label { font-size:12px; font-weight:600; margin:0 0 6px; }
+      .bar { height:4px; border-radius:999px; background:var(--line); overflow:hidden; }
+      .bar > i { display:block; height:100%; background:var(--accent); width:0; transition:width .4s ease; }
+      .foot { margin:12px 0 0; font-size:10px; color:var(--soft); line-height:1.5; text-align:center; }
+      a { color:var(--accent); }
     </style>
   </head>
   <body>
     <h1><span class="dot" id="dot"></span> Followthroo · LinkedIn</h1>
-    <p class="sub">Drafts your queued invites & messages — you review and send.</p>
+    <p class="sub">Saves people into your CRM, and drafts your outreach for you to send.</p>
 
-    <div class="draft" id="draft">
+    <!-- A drafted invite/message waiting on a human. Never auto-sent. -->
+    <div class="card" id="draft">
       <span class="kind" id="draftKind">Message</span>
       <p class="who" id="draftWho"></p>
       <p class="note" id="draftNote"></p>
@@ -40,11 +50,24 @@
       </div>
     </div>
 
+    <div class="reading" id="reading">
+      <p class="label" id="readingLabel">Reading LinkedIn…</p>
+      <div class="bar"><i id="readingBar"></i></div>
+      <p class="muted" id="readingCount" style="margin:6px 0 0"></p>
+    </div>
+
     <div class="status" id="status">Not connected.</div>
+
     <div class="row">
       <button class="toggle" id="toggle">Start</button>
       <button class="ghost" id="settings">Settings</button>
     </div>
+
+    <p class="foot">
+      Runs only in your own logged-in LinkedIn tab. We never store your password
+      or session, and never click Send for you.
+    </p>
+
     <script src="popup.js"></script>
   </body>
 </html>

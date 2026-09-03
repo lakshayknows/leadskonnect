@@ -89,7 +89,9 @@ async function runScrapeJob(apiBase, token) {
     return "idle";
   }
 
-  setStatus(`reading ${job.kind.replace(/_/g, " ")}…`);
+  const label = `Reading ${job.kind.replace(/_/g, " ")}…`;
+  setStatus(label.toLowerCase());
+  await chrome.storage.local.set({ reading: { active: true, label, found: 0, target: job.maxResults } });
   let tab;
   try {
     tab = await chrome.tabs.create({ url: job.url, active: false });
@@ -103,27 +105,48 @@ async function runScrapeJob(apiBase, token) {
     });
     void res;
 
-    const [out] = await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
-      func: async (kind, maxResults) => {
-        const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-        let last = 0;
-        for (let i = 0; i < 40; i++) {
-          const found = (window.__ftScrape ? window.__ftScrape(kind).rows || [] : []).length;
-          if (found >= maxResults) break;
-          window.scrollBy(0, window.innerHeight * 0.9);
-          await sleep(700 + Math.random() * 900);
-          if (found === last && i > 4) break; // nothing new is loading; stop
-          last = found;
-        }
-        const result = window.__ftScrape ? window.__ftScrape(kind) : { failureKind: "error", error: "reader missing" };
-        if (result.rows) result.rows = result.rows.slice(0, maxResults);
-        return result;
-      },
-      args: [job.kind, job.maxResults],
-    });
+    // Scroll in short bursts rather than one long loop, so progress can be
+    // reported between them. A scrape of a thousand rows takes minutes, and
+    // silence for minutes is indistinguishable from being broken.
+    let result = { failureKind: "error", error: "no result from page" };
+    let stalled = 0;
+    for (let pass = 0; pass < 20; pass++) {
+      const [out] = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        func: async (kind, maxResults) => {
+          const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+          const count = () => (window.__ftScrape ? (window.__ftScrape(kind).rows || []).length : 0);
+          const before = count();
+          for (let i = 0; i < 3 && count() < maxResults; i++) {
+            window.scrollBy(0, window.innerHeight * 0.9);
+            // Paced like a person skimming, not a script racing to the bottom.
+            await sleep(700 + Math.random() * 900);
+          }
+          const r = window.__ftScrape ? window.__ftScrape(kind) : { failureKind: "error", error: "reader missing" };
+          return { ...r, before, after: count() };
+        },
+        args: [job.kind, job.maxResults],
+      });
 
-    const result = (out && out.result) || { failureKind: "error", error: "no result from page" };
+      result = (out && out.result) || result;
+      const found = (result.rows || []).length;
+      await chrome.storage.local.set({ reading: { active: true, label, found, target: job.maxResults } });
+
+      // Heartbeat, so the dashboard shows movement too. Best-effort by design:
+      // a dropped progress ping must never fail the scrape it was describing.
+      fetch(`${apiBase}/api/linkedin/scrape/claim`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ jobId: job.id, progress: found }),
+      }).catch(() => {});
+
+      if (found >= job.maxResults) break;
+      // Two passes with nothing new means the page has stopped loading rows.
+      stalled = result.after === result.before ? stalled + 1 : 0;
+      if (stalled >= 2) break;
+    }
+
+    if (result.rows) result.rows = result.rows.slice(0, job.maxResults);
     await fetch(`${apiBase}/api/linkedin/scrape/claim`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -145,6 +168,7 @@ async function runScrapeJob(apiBase, token) {
     }).catch(() => {});
     setStatus(`scrape failed: ${String((e && e.message) || e)}`, true);
   } finally {
+    await chrome.storage.local.set({ reading: null });
     if (tab && tab.id) chrome.tabs.remove(tab.id).catch(() => {});
   }
   return "ran";
@@ -159,6 +183,16 @@ async function pollOnce() {
   if (draft) return setStatus("awaiting your review — open the popup to confirm or skip");
 
   // Guard the most common misconfig: the wrong host has no queue endpoint behind it.
+  // localhost is an optional_host_permission (the Web Store rightly questions a
+  // published extension that can reach your machine), so it has to be granted at
+  // runtime the first time a developer points at a local server.
+  if (/^https?:\/\/(localhost|127\.0\.0\.1):3000/i.test(apiBase)) {
+    const granted = await chrome.permissions.contains({ origins: ["http://localhost:3000/*"] });
+    if (!granted) {
+      return setStatus("local development: open Settings and press Allow to grant access to localhost", true);
+    }
+  }
+
   if (!/^https?:\/\/(app\.followthroo\.com|localhost:3000|127\.0\.0\.1:3000)/i.test(apiBase)) {
     return setStatus('App URL should be "https://app.followthroo.com" (the product lives there, not on the marketing site)', true);
   }

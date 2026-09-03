@@ -69,16 +69,17 @@ export default function LinkedInClient() {
     <>
       <DashHeader
         title="LinkedIn"
-        subtitle="Automate invites & messages from your own LinkedIn session, via the companion extension."
+        subtitle="Source contacts and draft outreach from your own LinkedIn session, via the companion extension."
       />
 
       <div className="max-w-3xl space-y-6 p-8">
         {msg && <Banner kind={msg.kind}>{msg.text}</Banner>}
 
         <Banner kind="info">
-          LinkedIn&apos;s API can&apos;t send invites or DMs, so Followthroo drives your own logged-in session through a
-          Chrome extension — with humanized pacing and daily caps. Automating a personal account is against LinkedIn&apos;s
-          ToS; keep caps conservative and use at your own risk.
+          LinkedIn&apos;s API cannot read search results or send messages, so the extension works inside your own
+          logged-in tab instead. It reads pages you ask for, and for invites and messages it fills the box and stops —
+          you press send. That last part matters: automated sending is against LinkedIn&apos;s terms, and a real person
+          clicking send is what keeps your account on the right side of it. Keep the caps conservative.
         </Banner>
 
         {/* Status + queue */}
@@ -137,13 +138,17 @@ export default function LinkedInClient() {
         <Panel>
           <h2 className="font-display text-base font-bold">Install the extension</h2>
           <ol className="mt-3 space-y-2 text-sm text-ink-soft">
-            <li><b className="text-ink">1.</b> Get the <code>extension/</code> folder from the Followthroo repo (or the download your admin shared).</li>
-            <li><b className="text-ink">2.</b> Open <code>chrome://extensions</code>, enable <b>Developer mode</b>, click <b>Load unpacked</b>, and select that folder.</li>
-            <li><b className="text-ink">3.</b> Right-click the extension → <b>Options</b> → set App URL to <code>{appOrigin}</code>, paste the token above → <b>Connect</b>.</li>
-            <li><b className="text-ink">4.</b> On the Options page, pick which campaigns run, set per-campaign caps/pacing, or "Run a group now".</li>
-            <li><b className="text-ink">5.</b> Click the extension icon → <b>Start</b>, and keep a LinkedIn tab logged in. Actions drain at your set pace.</li>
+            <li><b className="text-ink">1.</b> Install <b>Followthroo for LinkedIn</b> from the Chrome Web Store. (Before it is published: get the <code>extension/</code> folder, open <code>chrome://extensions</code>, enable <b>Developer mode</b> and <b>Load unpacked</b>.)</li>
+            <li><b className="text-ink">2.</b> Click the extension icon → <b>Settings</b> → set App URL to <code>{appOrigin}</code>, paste the token above → <b>Connect</b>.</li>
+            <li><b className="text-ink">3.</b> Click <b>Start</b>, and stay logged into LinkedIn in the same browser.</li>
+            <li><b className="text-ink">4.</b> Source contacts from <b>LinkedIn</b> in the sidebar — paste any search, profile, company, post, group or event.</li>
+            <li><b className="text-ink">5.</b> Queued invites and messages open in a tab with the text filled in. Read it, then send it yourself.</li>
           </ol>
-          <p className="mt-3 text-xs text-ink-soft">Campaign selection, per-campaign caps &amp; pacing, and run-a-group live on the extension&apos;s Options page.</p>
+          <p className="mt-3 text-xs text-ink-soft">
+            Campaign selection, per-campaign caps and pacing live on the extension&apos;s Settings page. Nothing about
+            your LinkedIn login is ever sent to us — see our{" "}
+            <a href="/extension-privacy" className="underline">extension privacy notice</a>.
+          </p>
         </Panel>
       </div>
     </>

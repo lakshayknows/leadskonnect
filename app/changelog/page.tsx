@@ -9,6 +9,17 @@ export const metadata = { title: "Changelog — Followthroo" };
  */
 const ENTRIES = [
   {
+    version: "0.9.6",
+    date: "Sep 2026",
+    items: [
+      "The Chrome extension now works on LinkedIn itself. A checkbox appears beside every person in a search, with a bar at the top — tick who you want and add them to Followthroo without leaving the page",
+      "Picked contacts are deduplicated against people you already have, and routed to the right rep by your assignment rules",
+      "The extension shows live progress while it reads a long list, instead of going quiet for minutes",
+      "New page at followthroo.com/extension explaining what it does, and a separate privacy notice covering exactly what it accesses",
+      "The extension asks for fewer permissions than before — it no longer requests access to your browser tabs, which it never needed",
+    ],
+  },
+  {
     version: "0.9.5",
     date: "Sep 2026",
     items: [
