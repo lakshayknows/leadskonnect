@@ -606,6 +606,11 @@ model LinkedInAccount {
   liMemberName        String? // display name the extension reports on check-in
   dailyInviteCap      Int       @default(20)
   dailyMessageCap     Int       @default(40)
+  /// Rows a rep may pull from LinkedIn in a day. 80 profile loads is the
+  /// community-safe ceiling (docs/phantombuster.md); reading a search results
+  /// page is far cheaper than loading 80 profiles, so this counts ROWS rather
+  /// than page loads and sits well above it.
+  dailyScrapeCap      Int       @default(500)
   minDelaySec         Int       @default(45) // humanized pacing floor
   maxDelaySec         Int       @default(120)
   mode                String    @default("auto") // auto | invite | message — default action type
@@ -669,6 +674,52 @@ enum IdentityKind {
   phone
   linkedin
   external
+}
+
+/// A request to read something off LinkedIn, run by the rep's own browser.
+///
+/// PhantomBuster's equivalent takes a session cookie and runs on their servers.
+/// This carries no credential at all: the extension already IS the rep's logged-in
+/// session, so a job is just "open this URL and tell me what you see". Which is
+/// also why the queue is claim-based — the work happens on a machine we do not
+/// control and may stop at any moment.
+model LinkedInScrapeJob {
+  id             String  @id @default(uuid())
+  organizationId String
+  /// Whose LinkedIn session will run it. Results belong to them.
+  userId         String
+  /// search_export | profile_scrape | company_employees | … (lib/linkedin/detect.ts)
+  /// Derived from the URL rather than chosen, so this is recorded, not requested.
+  kind           String
+  /// The page to open, normalised (tracking params stripped, query kept).
+  inputUrl       String
+  /// What the person typed, when they searched by keyword rather than pasting.
+  inputQuery     String?
+  maxResults     Int     @default(100)
+
+  /// queued → running → done | failed | cancelled
+  status        String    @default("queued")
+  /// Rows seen so far, so a long scrape shows progress rather than a spinner.
+  progress      Int       @default(0)
+  resultCount   Int       @default(0)
+  /// Distinguishes "LinkedIn changed its markup" from "this search is empty" —
+  /// they look identical (zero rows) and need completely different responses.
+  failureKind   String?
+  error         String?
+  /// The scraped rows, pre-import. Reviewed before anything becomes a contact:
+  /// a wrong search URL should not put 2,000 wrong people in the database.
+  results       Json      @default("[]")
+  /// Set once the rep has chosen rows and imported them.
+  importedAt    DateTime?
+  importedCount Int       @default(0)
+
+  createdAt  DateTime  @default(now())
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  // The extension polls for its own next job; the UI lists recent ones.
+  @@index([organizationId, userId, status])
+  @@index([organizationId, createdAt])
 }
 
 /// ---- Identity graph -------------------------------------------------------

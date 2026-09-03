@@ -33,6 +33,24 @@ export const KNOWN_SOURCES: SourceInfo[] = [
       "Contacts brought in by uploading a spreadsheet. Nothing to configure — imports are tagged with this source automatically.",
   },
   {
+    key: "linkedin_search",
+    label: "LinkedIn search",
+    instructions:
+      "Contacts pulled from a LinkedIn search, company page, group or event, via the Followthroo extension. Nothing to configure — paste a LinkedIn URL under Leads → Add Lead → Find leads.",
+  },
+  {
+    key: "linkedin_profile",
+    label: "LinkedIn profile",
+    instructions:
+      "A single LinkedIn profile you scraped directly. Nothing to configure.",
+  },
+  {
+    key: "linkedin_engagement",
+    label: "LinkedIn engagement",
+    instructions:
+      "People who liked or commented on a post — usually the warmest LinkedIn list, because they raised their hand in public. Nothing to configure.",
+  },
+  {
     key: "web_form",
     label: "Website form",
     instructions:

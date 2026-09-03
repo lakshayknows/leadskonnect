@@ -9,6 +9,18 @@ export const metadata = { title: "Changelog — Followthroo" };
  */
 const ENTRIES = [
   {
+    version: "0.9.5",
+    date: "Sep 2026",
+    items: [
+      "Find leads from LinkedIn. Paste a search, a profile, a company, a post, a group, an event or your connections — we work out what the page is, and your own browser reads it",
+      "Everything comes back for review before it becomes a contact. People you already have are ticked off for you, so a big list does not quietly create duplicates",
+      "Nothing is sent, connected or messaged by this — it only reads pages you can already see, in your own logged-in tab. No password or session leaves your browser",
+      "Daily reading limits, so a big list cannot put your LinkedIn account at risk. The dialog tells you what is left before you start",
+      "When LinkedIn changes its layout we say so, instead of reporting an empty result and letting you think the search found nobody",
+      "Fixed: a LinkedIn invite note longer than 300 characters was silently cut off mid-word when it reached your browser. It is now refused when you write it",
+    ],
+  },
+  {
     version: "0.9.4",
     date: "Sep 2026",
     items: [

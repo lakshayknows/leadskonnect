@@ -18,7 +18,11 @@ export function OPTIONS() {
 const Body = z.object({
   segmentId: z.string().optional(),
   leadIds: z.array(z.string()).optional(),
-  note: z.string().max(600).optional(),
+  // LinkedIn's own ceiling on a connection note (docs/phantombuster.md #18).
+  // This used to allow 600 while extension/background.js sliced at 300, so a
+  // rendered template in between was cut mid-word in the rep's face. Reject it
+  // here instead, where the author can still fix the template.
+  note: z.string().max(300, "A LinkedIn invite note cannot be longer than 300 characters.").optional(),
   type: z.enum(["auto", "invite", "message"]).default("auto"),
 });
 

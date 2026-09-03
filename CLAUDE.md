@@ -97,6 +97,7 @@ sequence. A premium Next.js UI sits on top.
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System design & data flow |
 | [docs/information-architecture.md](docs/information-architecture.md) | Product IA, navigation, and the core screens |
 | [docs/channels.md](docs/channels.md) | Per-channel features + official limits |
+| [docs/linkedin-sourcing-ux.md](docs/linkedin-sourcing-ux.md) | How LinkedIn sourcing is presented: why the URL is the input and there is no scraper picker |
 | [docs/phantombuster.md](docs/phantombuster.md) | The 35 PhantomBuster LinkedIn automations: inputs, outputs and limits, as the reference spec for our own scrapers |
 | [docs/rate-limits.md](docs/rate-limits.md) | Consolidated quotas + throttling strategy |
 | [docs/pricing.md](docs/pricing.md) | Recurring costs (infra + AI/comms COGS) + pricing tier margin analysis |

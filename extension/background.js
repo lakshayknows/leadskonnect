@@ -53,6 +53,103 @@ async function draftAction(action) {
   }
 }
 
+/* ------------------------------------------------------------------ */
+/* Scraping — reading pages the rep is already allowed to see           */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Claim one scrape job and read the page it names.
+ *
+ * Opens in a BACKGROUND tab, unlike the draft flow: nothing here needs the
+ * person's attention or their click, so stealing focus would be rude. Nothing is
+ * clicked, submitted or sent — the reader functions in scrapers.js only read
+ * what is already rendered.
+ *
+ * Returns "ran" | "idle" | "paused".
+ */
+async function runScrapeJob(apiBase, token) {
+  let job, pausedUntil;
+  try {
+    const res = await fetch(`${apiBase}/api/linkedin/scrape/claim`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const j = await res.json().catch(() => ({}));
+    if (!res.ok || !j.ok) return "idle";
+    job = j.data.job;
+    pausedUntil = j.data.pausedUntil;
+  } catch {
+    return "idle";
+  }
+
+  if (!job) {
+    if (pausedUntil) {
+      setStatus(`daily reading limit reached — resumes ${new Date(pausedUntil).toLocaleTimeString()}`);
+      return "paused";
+    }
+    return "idle";
+  }
+
+  setStatus(`reading ${job.kind.replace(/_/g, " ")}…`);
+  let tab;
+  try {
+    tab = await chrome.tabs.create({ url: job.url, active: false });
+    await waitForTab(tab.id);
+
+    // Scroll to pull in lazily-rendered rows, then read. Paced like a person
+    // skimming rather than a script racing to the bottom.
+    const [res] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      files: ["scrapers.js"],
+    });
+    void res;
+
+    const [out] = await chrome.scripting.executeScript({
+      target: { tabId: tab.id },
+      func: async (kind, maxResults) => {
+        const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+        let last = 0;
+        for (let i = 0; i < 40; i++) {
+          const found = (window.__ftScrape ? window.__ftScrape(kind).rows || [] : []).length;
+          if (found >= maxResults) break;
+          window.scrollBy(0, window.innerHeight * 0.9);
+          await sleep(700 + Math.random() * 900);
+          if (found === last && i > 4) break; // nothing new is loading; stop
+          last = found;
+        }
+        const result = window.__ftScrape ? window.__ftScrape(kind) : { failureKind: "error", error: "reader missing" };
+        if (result.rows) result.rows = result.rows.slice(0, maxResults);
+        return result;
+      },
+      args: [job.kind, job.maxResults],
+    });
+
+    const result = (out && out.result) || { failureKind: "error", error: "no result from page" };
+    await fetch(`${apiBase}/api/linkedin/scrape/claim`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ jobId: job.id, done: true, ...result }),
+    });
+
+    const n = (result.rows || []).length;
+    setStatus(
+      result.failureKind === "selector_miss"
+        ? "could not read that page — LinkedIn changed its layout"
+        : `read ${n} row${n === 1 ? "" : "s"}`,
+      result.failureKind === "selector_miss",
+    );
+  } catch (e) {
+    await fetch(`${apiBase}/api/linkedin/scrape/claim`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ jobId: job.id, done: true, failureKind: "error", error: String((e && e.message) || e) }),
+    }).catch(() => {});
+    setStatus(`scrape failed: ${String((e && e.message) || e)}`, true);
+  } finally {
+    if (tab && tab.id) chrome.tabs.remove(tab.id).catch(() => {});
+  }
+  return "ran";
+}
+
 async function pollOnce() {
   const { apiBase, token, enabled, stats, draft } = await cfg();
   if (!enabled) return setStatus("paused — press Start in the popup");
@@ -65,6 +162,12 @@ async function pollOnce() {
   if (!/^https?:\/\/(app\.followthroo\.com|localhost:3000|127\.0\.0\.1:3000)/i.test(apiBase)) {
     return setStatus('App URL should be "https://app.followthroo.com" (the product lives there, not on the marketing site)', true);
   }
+
+  // Scrape jobs come first. They are pure reading — no invite, no message, no
+  // click — so they are both safer and usually what the person is waiting on.
+  const scraped = await runScrapeJob(apiBase, token);
+  if (scraped === "ran") return schedule(20);
+  if (scraped === "paused") return schedule(900);
 
   setStatus("polling for queued actions…");
   let data;

@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import {
   Trash2, Upload, Plus, Tag, FolderPlus, X, Pencil, Check, Users, Linkedin,
   AlertTriangle, CircleDot, Search, Sparkles, ArrowRight,
@@ -12,6 +12,8 @@ import { api } from "@/lib/client";
 import { cn } from "@/lib/cn";
 import { Badge, Banner, DashHeader, Dialog, EmptyState, Input, Label, NoResults, Panel, Select, Skeleton, useConfirm, usePrompt } from "@/components/ui";
 import { tourTarget } from "@/components/dashboard/tour/target";
+import { FindLeadsPanel } from "@/components/dashboard/FindLeadsPanel";
+import { SourcingView } from "@/components/dashboard/SourcingView";
 
 type NextAction = { taskId: string | null; label: string; kind: string; dueAt: string | null; urgent: boolean; source: string };
 type Lead = {
@@ -78,7 +80,10 @@ export default function LeadsPage() {
   // ?view=unassigned is a distinct view, not a filter: those contacts are
   // outside everyone's scope by design, so the server treats it as its own
   // query and refuses it for anyone who is not an owner, admin or manager.
-  const unassignedView = useSearchParams().get("view") === "unassigned";
+  const view = useSearchParams().get("view");
+  const unassignedView = view === "unassigned";
+  const sourcingView = view === "sourcing";
+  const router = useRouter();
 
   const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
   if (unassignedView) params.set("view", "unassigned");
@@ -277,11 +282,13 @@ export default function LeadsPage() {
   return (
     <>
       <DashHeader
-        title={unassignedView ? "Unassigned leads" : "Leads"}
+        title={sourcingView ? "Sourced from LinkedIn" : unassignedView ? "Unassigned leads" : "Leads"}
         subtitle={
-          unassignedView
-            ? `${total.toLocaleString()} waiting for an owner — nobody sees these until they are assigned`
-            : `${total.toLocaleString()} in your list`
+          sourcingView
+            ? "Read from LinkedIn in your own browser. Review before anything becomes a contact."
+            : unassignedView
+              ? `${total.toLocaleString()} waiting for an owner — nobody sees these until they are assigned`
+              : `${total.toLocaleString()} in your list`
         }
         action={
           <div className="flex items-center gap-2">
@@ -308,6 +315,13 @@ export default function LeadsPage() {
       <div className="space-y-4 p-8">
         {msg ? <Banner kind={msg.kind}>{msg.text}</Banner> : error ? <Banner kind="error">{(error as Error).message}</Banner> : null}
 
+        {sourcingView && <SourcingView />}
+
+        {/* Sourcing replaces the table rather than sitting above it — they are two
+            different things, and stacking them would leave the person scrolling
+            past a review table to reach their contacts. */}
+        {!sourcingView && (
+        <>
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex rounded-xl border border-line p-1">
@@ -499,6 +513,8 @@ export default function LeadsPage() {
             </div>
           </div>
         )}
+        </>
+        )}
       </div>
 
       {/* ---- Add lead ---- */}
@@ -510,6 +526,13 @@ export default function LeadsPage() {
         busy={busy}
         onSubmit={addLead}
         onImport={() => fileRef.current?.click()}
+        onQueued={() => {
+          // Close the dialog and land on the sourcing view: the job runs in
+          // another tab and takes a while, so leaving them staring at a form
+          // would be the wrong place to wait.
+          setAddOpen(false);
+          router.push("/dashboard/leads?view=sourcing");
+        }}
       />
 
       {/* ---- Groups ---- */}
@@ -540,7 +563,7 @@ export default function LeadsPage() {
 /* ------------------------------------------------------------------ */
 
 function AddLeadDialog({
-  open, onClose, form, setForm, busy, onSubmit, onImport,
+  open, onClose, form, setForm, busy, onSubmit, onImport, onQueued,
 }: {
   open: boolean;
   onClose: () => void;
@@ -549,23 +572,34 @@ function AddLeadDialog({
   busy: boolean;
   onSubmit: (e: React.FormEvent) => void;
   onImport: () => void;
+  onQueued: (jobId: string) => void;
 }) {
+  const [tab, setTab] = useState<"manual" | "find">("manual");
   if (!open) return null;
+
+  const tabClass = (active: boolean) =>
+    `rounded-xl border px-3 py-2 text-center text-xs font-semibold transition ${
+      active ? "border-ink bg-tint" : "border-line hover:bg-tint"
+    }`;
+
   return (
     <Dialog open onClose={onClose} title="Add Lead" size="md">
       <div className="grid gap-2 sm:grid-cols-3">
-        <div className="rounded-xl border border-ink bg-tint px-3 py-2 text-center text-xs font-semibold">Add manually</div>
-        <button onClick={onImport} className="rounded-xl border border-line px-3 py-2 text-center text-xs font-semibold transition hover:bg-tint">
+        <button onClick={() => setTab("manual")} className={tabClass(tab === "manual")}>
+          Add manually
+        </button>
+        <button onClick={onImport} className={tabClass(false)}>
           <Upload className="mx-auto mb-1 h-3.5 w-3.5" /> Import CSV
         </button>
-        <div
-          title="Prospect search is coming soon."
-          className="cursor-not-allowed rounded-xl border border-line px-3 py-2 text-center text-xs font-semibold text-ink-faint"
-        >
+        {/* Was a disabled "coming soon" placeholder. This is what it was waiting for. */}
+        <button onClick={() => setTab("find")} className={tabClass(tab === "find")}>
           <Sparkles className="mx-auto mb-1 h-3.5 w-3.5" /> Find leads
-        </div>
+        </button>
       </div>
 
+      {tab === "find" && <FindLeadsPanel onQueued={onQueued} />}
+
+      {tab === "manual" && (
       <form onSubmit={onSubmit} className="mt-5 space-y-3">
         <div>
           <Label>First name</Label>
@@ -597,6 +631,7 @@ function AddLeadDialog({
           </button>
         </div>
       </form>
+      )}
     </Dialog>
   );
 }
