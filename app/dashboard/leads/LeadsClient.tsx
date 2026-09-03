@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
+import { useSearchParams } from "next/navigation";
 import {
   Trash2, Upload, Plus, Tag, FolderPlus, X, Pencil, Check, Users, Linkedin,
   AlertTriangle, CircleDot, Search, Sparkles, ArrowRight,
@@ -74,7 +75,13 @@ export default function LeadsPage() {
     return () => clearTimeout(t);
   }, [search]);
 
+  // ?view=unassigned is a distinct view, not a filter: those contacts are
+  // outside everyone's scope by design, so the server treats it as its own
+  // query and refuses it for anyone who is not an owner, admin or manager.
+  const unassignedView = useSearchParams().get("view") === "unassigned";
+
   const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
+  if (unassignedView) params.set("view", "unassigned");
   if (book) params.set("book", book);
   if (debouncedSearch.trim()) params.set("q", debouncedSearch.trim());
   if (tagFilter.length) params.set("tags", tagFilter.join(","));
@@ -270,13 +277,23 @@ export default function LeadsPage() {
   return (
     <>
       <DashHeader
-        title="Leads"
-        subtitle={`${total.toLocaleString()} in your list`}
+        title={unassignedView ? "Unassigned leads" : "Leads"}
+        subtitle={
+          unassignedView
+            ? `${total.toLocaleString()} waiting for an owner — nobody sees these until they are assigned`
+            : `${total.toLocaleString()} in your list`
+        }
         action={
           <div className="flex items-center gap-2">
-            <button onClick={() => setGroupsOpen(true)} className="btn btn-ghost !py-2 !text-sm">
-              <FolderPlus className="h-4 w-4" /> Groups
-            </button>
+            {unassignedView ? (
+              <Link href="/dashboard/leads" className="btn btn-ghost !py-2 !text-sm">
+                Back to my leads
+              </Link>
+            ) : (
+              <button onClick={() => setGroupsOpen(true)} className="btn btn-ghost !py-2 !text-sm">
+                <FolderPlus className="h-4 w-4" /> Groups
+              </button>
+            )}
             <button {...tourTarget("leads-import")} onClick={() => setAddOpen(true)} className="btn btn-primary !py-2 !text-sm">
               <Plus className="h-4 w-4" /> Add Lead
             </button>

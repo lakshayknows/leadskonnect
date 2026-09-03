@@ -136,9 +136,15 @@ export async function getCompanies(orgId: string) {
     .map((r) => ({ company: r.company as string, count: r._count._all }));
 }
 
-export async function getInboxThreads(orgId: string, status?: string) {
+export async function getInboxThreads(orgId: string, status?: string, leadWhere?: Prisma.LeadWhereInput) {
   const threads = await prisma.inboxThread.findMany({
-    where: { organizationId: orgId, ...(status ? { status: status as never } : {}) },
+    where: {
+      organizationId: orgId,
+      ...(status ? { status: status as never } : {}),
+      // A reply thread belongs to whoever owns the contact. Without this a rep
+      // could read a colleague's conversation by opening the inbox.
+      ...(leadWhere ? { lead: leadWhere } : {}),
+    },
     include: {
       lead: { select: { id: true, firstName: true, lastName: true, email: true, company: true } },
       messages: { orderBy: { sentAt: "desc" }, take: 1 },
@@ -158,9 +164,25 @@ export async function getInboxThreads(orgId: string, status?: string) {
   }));
 }
 
-export async function getLeadsPage(orgId: string, page = 1, pageSize = 50, q?: string, book?: "email" | "linkedin") {
+/**
+ * `scopeWhere` is the caller's lead scope (lib/scope.ts). It is combined with
+ * AND rather than spread, because the scope carries its own OR (assigned /
+ * created by me) and the search below carries another — merged into one object
+ * the second would replace the first and widen the result.
+ *
+ * Omitting it renders the whole workspace, which for a server-side fallback
+ * means a member sees everyone's contacts for one paint before SWR corrects it.
+ */
+export async function getLeadsPage(
+  orgId: string,
+  page = 1,
+  pageSize = 50,
+  q?: string,
+  book?: "email" | "linkedin",
+  scopeWhere?: Prisma.LeadWhereInput,
+) {
   const where: Prisma.LeadWhereInput = {
-    organizationId: orgId,
+    ...(scopeWhere ? { AND: [scopeWhere] } : { organizationId: orgId }),
     ...(book === "email" ? { email: { not: null } } : book === "linkedin" ? { linkedinUrl: { not: null } } : {}),
     ...(q?.trim()
       ? {
@@ -173,9 +195,12 @@ export async function getLeadsPage(orgId: string, page = 1, pageSize = 50, q?: s
         }
       : {}),
   };
+  // The scope is part of the cache key, or a member is served the owner's
+  // cached total and sees a count that does not match their own list.
+  const scopeKey = scopeWhere ? JSON.stringify(scopeWhere) : "all";
   const [rows, total] = await Promise.all([
     prisma.lead.findMany({ where, orderBy: { createdAt: "desc" }, take: pageSize, skip: (page - 1) * pageSize }),
-    cached(`leads:count:${orgId}:${book ?? ""}:${q ?? ""}`, 15_000, () => prisma.lead.count({ where })),
+    cached(`leads:count:${orgId}:${scopeKey}:${book ?? ""}:${q ?? ""}`, 15_000, () => prisma.lead.count({ where })),
   ]);
   // Same enrichment the API route applies — the SWR fallback must be the identical shape.
   const items = await enrichLeadRows(orgId, rows);
@@ -252,9 +277,16 @@ export async function enrichLeadRows<T extends LeadRowBase>(orgId: string, leads
  * The timeline is deliberately NOT included here — it paginates independently, so
  * opening a contact with two years of history doesn't drag the whole record with it.
  */
-export async function getLeadDetail(orgId: string, leadId: string) {
+/**
+ * `scopeWhere` gates access, not just listing. Org scope alone means a rep can
+ * open a colleague's contact — and its whole timeline — by pasting the id into
+ * the URL, which makes the scoped list a UI convention rather than a rule.
+ * Returns null when out of scope, which callers surface as a 404 (not a 403:
+ * confirming a contact exists but is somebody else's is itself a leak).
+ */
+export async function getLeadDetail(orgId: string, leadId: string, scopeWhere?: Prisma.LeadWhereInput) {
   const lead = await prisma.lead.findFirst({
-    where: { id: leadId, organizationId: orgId },
+    where: scopeWhere ? { AND: [scopeWhere], id: leadId } : { id: leadId, organizationId: orgId },
     include: {
       contactIdentities: { select: { id: true, kind: true, value: true, source: true, verifiedAt: true } },
       leadSource: { select: { id: true, key: true, label: true } },
@@ -332,7 +364,18 @@ export type TimelineEntry = {
  * happening to them. The UI must never need to know which table an entry came
  * from — that is the whole point of the unified record.
  */
-export async function getLeadTimeline(orgId: string, leadId: string, limit = 100): Promise<TimelineEntry[]> {
+export async function getLeadTimeline(
+  orgId: string,
+  leadId: string,
+  limit = 100,
+  scopeWhere?: Prisma.LeadWhereInput,
+): Promise<TimelineEntry[]> {
+  // Same gate as getLeadDetail: the timeline is the conversation, so reading it
+  // for somebody else's contact is the leak the list scope exists to prevent.
+  if (scopeWhere) {
+    const allowed = await prisma.lead.findFirst({ where: { AND: [scopeWhere], id: leadId }, select: { id: true } });
+    if (!allowed) return [];
+  }
   const items = await prisma.pipelineItem.findMany({
     where: { organizationId: orgId, leadId },
     select: { id: true },
@@ -447,8 +490,14 @@ export async function getLeadTimeline(orgId: string, leadId: string, limit = 100
 /* Tasks + Home                                                        */
 /* ------------------------------------------------------------------ */
 
-export function getTasks(orgId: string, ownerId?: string) {
-  return getTaskBuckets(orgId, ownerId);
+/**
+ * `ownerIds` is the role scope (lib/scope.ts taskOwnerScope) — who this caller
+ * may see at all. Passing it is not optional for a request-backed read: the SSR
+ * fallback must match what /api/tasks returns, or the screen renders the whole
+ * workspace for a second and then snaps back.
+ */
+export function getTasks(orgId: string, ownerId?: string, ownerIds?: string[] | null) {
+  return getTaskBuckets(orgId, ownerId, ownerIds);
 }
 
 /**
@@ -530,16 +579,25 @@ async function getUnanswered(orgId: string, limit = 8) {
  * owner drilling into that member render through the same path rather than two.
  * Omitted, it behaves exactly as before: the whole workspace.
  */
-export async function getHome(orgId: string, scope?: { where: Prisma.LeadWhereInput; userIds: string[] | null }) {
+export async function getHome(
+  orgId: string,
+  scope?: { where: Prisma.LeadWhereInput; userIds: string[] | null },
+  /** Non-null for roles that may see unassigned contacts — see lib/scope.ts. */
+  unassignedWhere?: Prisma.LeadWhereInput | null,
+) {
   const today = startOfToday();
   const leadWhere: Prisma.LeadWhereInput = scope ? { AND: [scope.where] } : { organizationId: orgId };
   // A single user in scope means "just this person's work", which is what the
   // task buckets key on. Null means unrestricted.
   const ownerId = scope?.userIds?.length === 1 ? scope.userIds[0] : undefined;
+  // More than one user in scope (a manager's department) still has to be
+  // bounded — otherwise Home's task counts would span the whole workspace while
+  // the contact counts beside them do not.
+  const ownerIds = scope ? scope.userIds : null;
 
-  const [attention, buckets, board, newLeads, newLeadsBySource, unreadReplies, overdueItems] = await Promise.all([
+  const [attention, buckets, board, newLeads, newLeadsBySource, unreadReplies, overdueItems, unassigned] = await Promise.all([
     getUnanswered(orgId, 8),
-    getTaskBuckets(orgId, ownerId),
+    getTaskBuckets(orgId, ownerId, ownerIds),
     getBoard(orgId).catch(() => null),
     prisma.lead.count({ where: { ...leadWhere, createdAt: { gte: today } } }),
     // No `leadSourceId: { not: null }` filter: a lead added by hand has no source
@@ -565,6 +623,10 @@ export async function getHome(orgId: string, scope?: { where: Prisma.LeadWhereIn
         ...(ownerId ? { ownerId } : {}),
       },
     }),
+    // Contacts no assignment rule landed on. Zero for a rep — they cannot see
+    // them — and a number for whoever is accountable for the work getting
+    // picked up. This is what stops a broken rule from being invisible.
+    unassignedWhere ? prisma.lead.count({ where: unassignedWhere }) : Promise.resolve(0),
   ]);
 
   const sourceIds = newLeadsBySource.map((r) => r.leadSourceId).filter((s): s is string => !!s);
@@ -586,6 +648,7 @@ export async function getHome(orgId: string, scope?: { where: Prisma.LeadWhereIn
       followUpsDue: followUpsDue.length,
       unreadReplies,
       overdueItems,
+      unassigned,
     },
     attention,
     followUps: followUpsDue.slice(0, 8),

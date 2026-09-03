@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server";
 import { z } from "zod";
 import { ok, fail } from "@/lib/http";
 import { requireOrg } from "@/lib/tenant";
+import { taskOwnerScope } from "@/lib/scope";
 import { createTask, completeTask, reopenTask, updateTask, deleteTask, getTaskBuckets, listTasks, canAssignTo, withOwnerNames } from "@/lib/tasks";
 
 export const runtime = "nodejs";
@@ -29,9 +30,12 @@ export async function GET(req: NextRequest) {
   const url = new URL(req.url);
   const ownerId = url.searchParams.get("mine") ? ctx.userId : undefined;
   const leadId = url.searchParams.get("leadId") ?? undefined;
+  // What this caller is allowed to see, regardless of what they asked for.
+  // Without it the "Everyone" view meant *everyone in the workspace*, to anyone.
+  const ownerIds = await taskOwnerScope(ctx);
 
   if (url.searchParams.get("view") === "buckets") {
-    const b = await getTaskBuckets(ctx.orgId, ownerId);
+    const b = await getTaskBuckets(ctx.orgId, ownerId, ownerIds);
     // Owner names, so the Everyone view can say whose task each one is.
     const [overdue, today, upcoming, done] = await Promise.all([
       withOwnerNames(b.overdue),
@@ -44,7 +48,7 @@ export async function GET(req: NextRequest) {
 
   const raw = url.searchParams.get("scope") ?? "open";
   const scope = (SCOPES as readonly string[]).includes(raw) ? (raw as (typeof SCOPES)[number]) : "open";
-  return ok(await withOwnerNames(await listTasks(ctx.orgId, { scope, ownerId, leadId })));
+  return ok(await withOwnerNames(await listTasks(ctx.orgId, { scope, ownerId, ownerIds, leadId })));
 }
 
 const Create = z.object({

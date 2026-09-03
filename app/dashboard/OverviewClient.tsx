@@ -27,7 +27,7 @@ type Task = {
   lead: { id: string; firstName: string | null; lastName: string | null; email: string | null; company: string | null } | null;
 };
 type Home = {
-  counts: { newLeads: number; followUpsDue: number; unreadReplies: number; overdueItems: number };
+  counts: { newLeads: number; followUpsDue: number; unreadReplies: number; overdueItems: number; unassigned: number };
   attention: Attention[];
   followUps: Task[];
   leadsBySource: { label: string; count: number }[];
@@ -90,6 +90,20 @@ export default function Overview({ checklistDismissed = false }: { checklistDism
     { label: "New replies", value: c?.unreadReplies, icon: Reply, href: "/dashboard/inbox", tone: c?.unreadReplies ? "accent" : "neutral" },
     { label: "Overdue in pipeline", value: c?.overdueItems, icon: AlertTriangle, href: "/dashboard/ageing", tone: c?.overdueItems ? "danger" : "neutral" },
   ];
+
+  // Only appears when there is something to see, and only for the roles that
+  // can. A rep never has unassigned contacts in scope, so a permanent zero tile
+  // would be furniture; for an owner a non-zero count means a rule is not doing
+  // its job, which is worth interrupting for.
+  if (c?.unassigned) {
+    tiles.push({
+      label: "Unassigned",
+      value: c.unassigned,
+      icon: UserPlus,
+      href: "/dashboard/leads?view=unassigned",
+      tone: "danger",
+    });
+  }
 
   return (
     <>

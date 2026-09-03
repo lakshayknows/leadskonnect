@@ -305,14 +305,19 @@ export async function withOwnerNames<T extends { ownerId: string | null }>(
 
 export async function listTasks(
   organizationId: string,
-  opts: { scope?: TaskScope; ownerId?: string; leadId?: string; limit?: number } = {},
+  opts: { scope?: TaskScope; ownerId?: string; ownerIds?: string[] | null; leadId?: string; limit?: number } = {},
 ): Promise<TaskRow[]> {
-  const { scope = "open", ownerId, leadId, limit = 200 } = opts;
+  const { scope = "open", ownerId, ownerIds, leadId, limit = 200 } = opts;
   return prisma.task.findMany({
     where: {
       organizationId,
       ...scopeWhere(scope),
-      ...(ownerId ? { ownerId } : {}),
+      // `ownerId` is the caller narrowing to one person ("my tasks", or an
+      // owner drilling into a member). `ownerIds` is the role scope: who this
+      // caller is allowed to see at all, from lib/scope.ts taskOwnerScope.
+      // Null means unrestricted; an empty array means nobody, which must stay
+      // an empty result rather than silently matching everything.
+      ...(ownerId ? { ownerId } : ownerIds ? { ownerId: { in: ownerIds } } : {}),
       ...(leadId ? { leadId } : {}),
     },
     // Nulls last so dated work leads; done tasks read newest-first instead.
@@ -328,12 +333,12 @@ export async function listTasks(
 }
 
 /** The four buckets the Tasks screen renders, in one round of queries. */
-export async function getTaskBuckets(organizationId: string, ownerId?: string) {
+export async function getTaskBuckets(organizationId: string, ownerId?: string, ownerIds?: string[] | null) {
   const [overdue, today, upcoming, done] = await Promise.all([
-    listTasks(organizationId, { scope: "overdue", ownerId }),
-    listTasks(organizationId, { scope: "today", ownerId }),
-    listTasks(organizationId, { scope: "upcoming", ownerId }),
-    listTasks(organizationId, { scope: "done", ownerId, limit: 25 }),
+    listTasks(organizationId, { scope: "overdue", ownerId, ownerIds }),
+    listTasks(organizationId, { scope: "today", ownerId, ownerIds }),
+    listTasks(organizationId, { scope: "upcoming", ownerId, ownerIds }),
+    listTasks(organizationId, { scope: "done", ownerId, ownerIds, limit: 25 }),
   ]);
   return { overdue, today, upcoming, done };
 }

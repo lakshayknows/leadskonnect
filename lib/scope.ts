@@ -8,14 +8,16 @@
  *
  * The rule:
  *   owner / admin   → the whole workspace
- *   group_leader    → their department's contacts, that department's unassigned
- *                     pool, and anything they added themselves
- *   member          → assigned to them, added by them, or unassigned in their
- *                     department (the pool they may claim from)
+ *   group_leader    → their department's contacts, and anything they added
+ *   member          → assigned to them, or added by them. Nothing else.
  *
- * Unassigned contacts stay visible rather than hidden, deliberately: a freshly
- * imported list belongs to nobody yet, and a pool nobody can see is a pool
- * nobody works.
+ * There is deliberately no shared pool. An earlier version let everyone see
+ * unassigned contacts so a fresh import was workable before anyone claimed it;
+ * that was reversed on the grounds that work assigned to a person should be
+ * visible to that person alone. The consequence is that assignment has to
+ * actually happen — see lib/assignment.ts, which runs on every intake path —
+ * and that unassigned contacts need a home of their own rather than being
+ * quietly unreachable. That is `unassignedScope` below.
  *
  * `viewAs` powers the owner's "View: All team ▼" drill-down. It narrows to one
  * person *within* what the caller may already see, so it can only ever subtract.
@@ -69,27 +71,57 @@ export async function leadScope(ctx: TenantContext, viewAs?: string | null): Pro
 
   if (ctx.role === "group_leader") {
     return {
-      where: {
-        ...org,
-        OR: [
-          { ownerId: { in: ids } },
-          { createdById: { in: ids } },
-          // The department's unclaimed pool.
-          { ownerId: null },
-        ],
-      },
+      where: { ...org, OR: [{ ownerId: { in: ids } }, { createdById: { in: ids } }] },
       userIds: ids,
     };
   }
 
   // Plain member.
   return {
-    where: {
-      ...org,
-      OR: [{ ownerId: ctx.userId }, { createdById: ctx.userId }, { ownerId: null }],
-    },
+    where: { ...org, OR: [{ ownerId: ctx.userId }, { createdById: ctx.userId }] },
     userIds: [ctx.userId],
   };
+}
+
+/**
+ * Contacts nobody owns.
+ *
+ * The scope above deliberately excludes these: work assigned to a person is
+ * theirs alone, so there is no shared pool to browse. That makes an unassigned
+ * contact invisible to every rep — which is correct, and also exactly how an
+ * import could silently vanish if an assignment rule failed.
+ *
+ * So unassigned is a place, not a gap. Owners, admins and managers get a view
+ * of it (and a count on Home), which turns a broken rule into something visible
+ * rather than something nobody notices for a month.
+ */
+export function unassignedScope(ctx: TenantContext): Prisma.LeadWhereInput | null {
+  if (!canSeeUnassigned(ctx.role)) return null;
+  return { organizationId: ctx.orgId, ownerId: null };
+}
+
+/**
+ * Which userIds' tasks this caller may see, or null for "everyone".
+ *
+ * Tasks were never scoped at all: /api/tasks narrowed only on an opt-in
+ * `?mine=1`, so the Tasks screen listed every task in the workspace — titles,
+ * contacts and owner names — to anyone who opened it. Same class of leak as the
+ * contacts one, one screen over.
+ *
+ * Deliberately mirrors `assignableMembers` in lib/tasks.ts: who you can SEE
+ * work for and who you can GIVE work to should be the same set of people, or
+ * the Tasks screen and the assignee picker start disagreeing about the org
+ * chart.
+ */
+export async function taskOwnerScope(ctx: TenantContext): Promise<string[] | null> {
+  if (seesEverything(ctx.role)) return null;
+  if (ctx.role === "group_leader") return departmentUserIds(ctx);
+  return [ctx.userId];
+}
+
+/** Owner, admin and manager — the roles accountable for work landing on someone. */
+export function canSeeUnassigned(role: string): boolean {
+  return seesEverything(role) || role === "group_leader";
 }
 
 /**

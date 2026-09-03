@@ -9,6 +9,19 @@ export const metadata = { title: "Changelog — Followthroo" };
  */
 const ENTRIES = [
   {
+    version: "0.9.3",
+    date: "Sep 2026",
+    items: [
+      "Your contacts are yours. A team member now sees only what is assigned to them or added by them — there is no longer a shared pool everyone can browse",
+      "The same is now true of tasks. The Tasks screen used to show every task in the workspace, with owner names, to anyone who opened it",
+      "Opening a colleague's contact by pasting its link no longer works either — the record and its whole conversation history are gated, not just hidden from the list",
+      "New contacts land on a person automatically. Set a rule per source: always one rep, round-robin, or whoever has the fewest open contacts",
+      "Assignment now runs everywhere leads arrive — webhooks, CSV imports and contacts you add by hand. Only webhook leads used to get an owner",
+      "A CSV import can spread across the team as it loads, one row each in turn, instead of landing in a heap",
+      "New Unassigned view for owners, admins and managers, with a count on your dashboard — so a contact nobody was routed to is visible instead of quietly lost",
+    ],
+  },
+  {
     version: "0.9.2",
     date: "Sep 2026",
     items: [

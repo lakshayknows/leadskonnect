@@ -103,6 +103,10 @@ export async function listSources(organizationId: string) {
       label: s.label,
       monthlyCost: s.monthlyCost ? Number(s.monthlyCost) : null,
       active: s.active,
+      // Who contacts from this source land on — see lib/assignment.ts.
+      assignmentRule: s.assignmentRule,
+      assignedToId: s.assignedToId,
+      assignmentDept: s.assignmentDept,
       instructions: info?.instructions ?? "Custom source — map its payload fields in lib/channels/inbound.ts.",
       ingestUrl: ingestUrlFor(organizationId, s.key),
       // Most sources need only the URL; Meta and Google Ads additionally need env-level

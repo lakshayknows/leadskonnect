@@ -4,9 +4,10 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { ok, fail } from "@/lib/http";
 import { requireOrg } from "@/lib/tenant";
-import { leadScope, resolveViewAs } from "@/lib/scope";
+import { leadScope, resolveViewAs, unassignedScope } from "@/lib/scope";
 import { canAssignTo } from "@/lib/tasks";
 import { ensureSource } from "@/lib/identity";
+import { resolveLeadOwner } from "@/lib/assignment";
 import { resolveSegmentLeadIds } from "@/lib/segments";
 import { enrichLeadRows } from "@/lib/queries";
 import { cached, invalidate } from "@/lib/cache";
@@ -46,7 +47,15 @@ export async function GET(req: NextRequest) {
   // a silently wider list, which would be the worst failure mode here.
   const viewAs = await resolveViewAs(ctx, searchParams.get("member"));
   if (viewAs === null) return fail("You cannot view that member's contacts.", 403);
-  const scope = await leadScope(ctx, viewAs);
+
+  // ?view=unassigned — contacts no rule has landed on. Not part of anyone's
+  // scope by design, so it is a separate view rather than a filter, and only
+  // the roles accountable for the work getting done can open it.
+  const wantsUnassigned = searchParams.get("view") === "unassigned";
+  const unassigned = wantsUnassigned ? unassignedScope(ctx) : null;
+  if (wantsUnassigned && !unassigned) return fail("Only owners, admins and managers can see unassigned contacts.", 403);
+
+  const scope = unassigned ? { where: unassigned, userIds: null } : await leadScope(ctx, viewAs);
 
   const stage = searchParams.get("stage") ?? undefined;
   const q = searchParams.get("q")?.trim() || undefined;
@@ -125,9 +134,14 @@ export async function POST(req: NextRequest) {
   // is why most contacts had none.
   const leadSourceId = await ensureSource(orgId, sourceKey ?? "manual");
 
+  // An explicit pick wins; otherwise the source's rule decides, falling back to
+  // the person adding it. Manual adds default to "manual" source, whose rule is
+  // also `manual`, so the common case still lands on you.
+  const resolvedOwner = ownerId ?? (await resolveLeadOwner(orgId, { sourceKey: sourceKey ?? "manual", actorId: ctx.userId }));
+
   const provenance = {
     leadSourceId,
-    ownerId: ownerId ?? ctx.userId,
+    ownerId: resolvedOwner,
     createdById: ctx.userId,
     createdKind: "user",
   };

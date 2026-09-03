@@ -723,7 +723,28 @@ model LeadSource {
   /// rather than a separate BI exercise.
   monthlyCost    Decimal? @db.Decimal(12, 2)
   active         Boolean  @default(true)
-  createdAt      DateTime @default(now())
+
+  // ---- auto-assignment (lib/assignment.ts) ----
+  // Which rep a contact from this source lands on. Lives here rather than in a
+  // separate rule table because one source has one rule — and Settings → Sources
+  // is already where people manage sources, so the rule sits with the thing it
+  // describes.
+  //
+  // manual      — leave unassigned (it shows in the Unassigned view)
+  // round_robin — rotate through the pool, cursor below
+  // workload    — fewest open contacts in the pool wins
+  // fixed       — always assignedToId
+  assignmentRule     String      @default("manual")
+  /// Only meaningful for `fixed`. A raw userId, matching Task.ownerId's
+  /// convention: memberships are per-org and change without the work moving.
+  assignedToId       String?
+  /// Which department's members form the pool. Null = the whole workspace.
+  assignmentDept     Department?
+  /// Round-robin cursor. Stored per source, so IndiaMART and Meta Ads each
+  /// rotate independently rather than fighting over one shared position.
+  lastAssignedUserId String?
+
+  createdAt DateTime @default(now())
 
   leads Lead[]
   items PipelineItem[]
