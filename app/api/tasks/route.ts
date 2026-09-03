@@ -123,10 +123,16 @@ export async function PATCH(req: NextRequest) {
       ? await completeTask(ctx.orgId, id)
       : action === "reopen"
         ? await reopenTask(ctx.orgId, id)
-        : await updateTask(ctx.orgId, id, {
-            ...rest,
-            ...(dueAt !== undefined ? { dueAt: dueAt ? new Date(dueAt) : null } : {}),
-          });
+        : await updateTask(
+            ctx.orgId,
+            id,
+            {
+              ...rest,
+              ...(dueAt !== undefined ? { dueAt: dueAt ? new Date(dueAt) : null } : {}),
+            },
+            // So reassigning a task to yourself does not notify you.
+            ctx.userId,
+          );
 
   if (!done) return fail("Task not found.", 404);
   return ok({ id, action });

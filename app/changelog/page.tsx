@@ -19,6 +19,10 @@ const ENTRIES = [
       "Assignment now runs everywhere leads arrive — webhooks, CSV imports and contacts you add by hand. Only webhook leads used to get an owner",
       "A CSV import can spread across the team as it loads, one row each in turn, instead of landing in a heap",
       "New Unassigned view for owners, admins and managers, with a count on your dashboard — so a contact nobody was routed to is visible instead of quietly lost",
+      "You are told when work lands on you. Assigning a task or a contact now notifies that person straight away — before, the only thing they ever got was a reminder once it was already due",
+      "A notification bell in the header, with an unread count. Click through to the task or contact it is about",
+      "It stays quiet when it should: nothing for a task you assigned to yourself, nothing for editing a task without reassigning it, and an import that routes 40 contacts to someone sends one message rather than forty",
+      "Two new switches in Settings → Notifications for the assignment emails. The in-app bell is always on",
     ],
   },
   {

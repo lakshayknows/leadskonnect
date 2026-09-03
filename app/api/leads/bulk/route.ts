@@ -6,6 +6,7 @@ import { requireOrg } from "@/lib/tenant";
 import { invalidate } from "@/lib/cache";
 import { canAssignTo } from "@/lib/tasks";
 import { leadScope } from "@/lib/scope";
+import { notifyLeadAssigned } from "@/lib/notifications";
 
 export const runtime = "nodejs";
 
@@ -45,6 +46,24 @@ export async function POST(req: NextRequest) {
       data: { ownerId },
     });
     invalidate("leads:");
+
+    // One message for the batch, not one per contact. Unassigning (ownerId null)
+    // tells nobody — there is no new owner to tell.
+    if (ownerId) {
+      const first = await prisma.lead.findUnique({
+        where: { id: leads[0].id },
+        select: { id: true, firstName: true, lastName: true, email: true },
+      });
+      const name = [first?.firstName, first?.lastName].filter(Boolean).join(" ") || first?.email || "A contact";
+      await notifyLeadAssigned({
+        organizationId: ctx.orgId,
+        userId: ownerId,
+        actorId: ctx.userId,
+        leadId: leads[0].id,
+        leadName: name,
+        count: leads.length,
+      }).catch((e) => console.error("[leads/bulk] assignment notification failed:", e));
+    }
   }
 
   if (addTags?.length || removeTags?.length) {

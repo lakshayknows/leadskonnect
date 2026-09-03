@@ -28,6 +28,8 @@ export async function GET(req: NextRequest) {
 const Body = z.object({
   taskReminders: z.boolean().optional(),
   dailyDigest: z.boolean().optional(),
+  taskAssigned: z.boolean().optional(),
+  leadAssigned: z.boolean().optional(),
 });
 
 export async function PATCH(req: NextRequest) {
@@ -35,7 +37,7 @@ export async function PATCH(req: NextRequest) {
   if (ctx instanceof Response) return ctx;
 
   const parsed = Body.safeParse(await req.json().catch(() => null));
-  if (!parsed.success) return fail("Expected { taskReminders?, dailyDigest? }", 422);
+  if (!parsed.success) return fail("Expected { taskReminders?, dailyDigest?, taskAssigned?, leadAssigned? }", 422);
 
   const current = await prisma.user.findUnique({
     where: { id: ctx.userId },

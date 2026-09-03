@@ -967,6 +967,38 @@ model Task {
   @@index([leadId])
 }
 
+/// In-app notifications.
+///
+/// Assigning work used to be silent: createTask wrote ownerId and returned, and
+/// the only thing that ever reached a person was a due-date reminder (which
+/// fires when it is already too late to plan) and the 8am digest. So work could
+/// sit on someone for days before they knew it existed.
+///
+/// Email alone was not enough either — it lands in the same inbox as the
+/// outreach the product sends, and the person is usually already in the app.
+model Notification {
+  id             String    @id @default(cuid())
+  organizationId String
+  /// Recipient. A raw userId, matching Task.ownerId's convention.
+  userId         String
+  /// task_assigned | lead_assigned | … — what happened, for grouping and icons.
+  kind           String
+  title          String
+  body           String?
+  /// Where clicking it goes.
+  href           String?
+  /// What it is about, so a stale notification can be resolved against reality.
+  entityType     String?
+  entityId       String?
+  /// Null until read. Nullable rather than a boolean so "when" is recoverable.
+  readAt         DateTime?
+  createdAt      DateTime  @default(now())
+
+  // Unread-first, newest-first, for one person — the only query the bell makes.
+  @@index([userId, readAt, createdAt])
+  @@index([organizationId])
+}
+
 /// A human's own words on a contact. Separate from ConversationEvent, which is
 /// reserved for things that actually happened on a channel — a note is internal
 /// and was never sent to anyone.

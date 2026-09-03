@@ -28,7 +28,14 @@ const ESCALATE_AFTER_MS = 24 * 60 * 60_000;
 /** Local hour the morning digest goes out, in the org's own timezone. */
 const DIGEST_HOUR = 8;
 
-export type NotificationPrefs = { taskReminders: boolean; dailyDigest: boolean };
+export type NotificationPrefs = {
+  taskReminders: boolean;
+  dailyDigest: boolean;
+  /** Email when a task is assigned to you (the in-app bell is not opt-out). */
+  taskAssigned: boolean;
+  /** Email when a contact is assigned or routed to you. */
+  leadAssigned: boolean;
+};
 
 /** Null prefs means a user who has never opened the settings — default to on. */
 export function readPrefs(raw: unknown): NotificationPrefs {
@@ -36,6 +43,8 @@ export function readPrefs(raw: unknown): NotificationPrefs {
   return {
     taskReminders: p.taskReminders !== false,
     dailyDigest: p.dailyDigest !== false,
+    taskAssigned: p.taskAssigned !== false,
+    leadAssigned: p.leadAssigned !== false,
   };
 }
 

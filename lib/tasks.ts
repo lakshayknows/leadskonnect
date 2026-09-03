@@ -49,7 +49,7 @@ export async function createTask(input: {
   createdBy?: string | null;
   createdKind?: "user" | "ai" | "system";
 }) {
-  return prisma.task.create({
+  const task = await prisma.task.create({
     data: {
       organizationId: input.organizationId,
       leadId: input.leadId ?? null,
@@ -62,6 +62,53 @@ export async function createTask(input: {
       ownerId: input.ownerId ?? null,
       createdBy: input.createdBy ?? null,
       createdKind: input.createdKind ?? "user",
+    },
+  });
+
+  // Tell the owner now, not when it comes due. Best-effort: a notification that
+  // fails must not lose the task it was about.
+  if (task.ownerId) {
+    await notifyTaskAssigned(task, input.createdBy ?? null).catch((e) =>
+      console.error("[tasks] assignment notification failed:", e),
+    );
+  }
+  return task;
+}
+
+/**
+ * "You have a new task" — the bell always, email unless they turned it off.
+ *
+ * Skips self-assignment via `notify`'s actor check: being told about something
+ * you just did yourself is noise, and noise is how people learn to ignore the
+ * bell entirely.
+ */
+async function notifyTaskAssigned(
+  task: { id: string; organizationId: string; ownerId: string | null; title: string; dueAt: Date | null; leadId: string | null },
+  actorId: string | null,
+) {
+  if (!task.ownerId) return;
+  const { notify } = await import("./notifications");
+  const due = task.dueAt ? ` Due ${task.dueAt.toLocaleDateString("en-IN", { day: "numeric", month: "short" })}.` : "";
+  const href = task.leadId ? `/dashboard/leads/${task.leadId}` : "/dashboard/tasks";
+
+  await notify({
+    organizationId: task.organizationId,
+    userId: task.ownerId,
+    actorId,
+    kind: "task_assigned",
+    title: task.title,
+    body: `A task was assigned to you.${due}`,
+    href,
+    entityType: "task",
+    entityId: task.id,
+    prefKey: "taskAssigned",
+    email: {
+      subject: `New task: ${task.title}`,
+      body: `A task has been assigned to you.
+
+${task.title}${due}
+
+Open it: ${process.env.NEXT_PUBLIC_APP_URL ?? ""}${href}`,
     },
   });
 }
@@ -168,9 +215,26 @@ export async function updateTask(
     ownerId?: string | null;
     status?: TaskStatus;
   },
+  /** Who is making the change, so they are not notified about their own action. */
+  actorId?: string | null,
 ) {
+  // Read the previous owner first: reassignment should tell the new person, and
+  // re-saving a task without touching ownership should tell nobody at all.
+  const before = data.ownerId !== undefined
+    ? await prisma.task.findFirst({ where: { id: taskId, organizationId }, select: { ownerId: true } })
+    : null;
+
   const res = await prisma.task.updateMany({ where: { id: taskId, organizationId }, data });
-  return res.count > 0;
+  if (res.count === 0) return false;
+
+  if (data.ownerId && before && before.ownerId !== data.ownerId) {
+    const task = await prisma.task.findUnique({
+      where: { id: taskId },
+      select: { id: true, organizationId: true, ownerId: true, title: true, dueAt: true, leadId: true },
+    });
+    if (task) await notifyTaskAssigned(task, actorId ?? null).catch((e) => console.error("[tasks] reassignment notification failed:", e));
+  }
+  return true;
 }
 
 export async function deleteTask(organizationId: string, taskId: string) {

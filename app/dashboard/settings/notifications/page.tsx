@@ -5,7 +5,7 @@ import useSWR from "swr";
 import { DashHeader, Panel, Banner, Skeleton } from "@/components/ui";
 import { api } from "@/lib/client";
 
-type Prefs = { taskReminders: boolean; dailyDigest: boolean };
+type Prefs = { taskReminders: boolean; dailyDigest: boolean; taskAssigned: boolean; leadAssigned: boolean };
 
 /**
  * Only what actually sends.
@@ -18,6 +18,16 @@ type Prefs = { taskReminders: boolean; dailyDigest: boolean };
  * them.
  */
 const OPTIONS: { key: keyof Prefs; title: string; desc: string }[] = [
+  {
+    key: "taskAssigned",
+    title: "Task assigned to you",
+    desc: "An email the moment someone hands you a task, rather than waiting for it to come due. It always appears in your notifications either way.",
+  },
+  {
+    key: "leadAssigned",
+    title: "Contact assigned to you",
+    desc: "An email when a contact is routed or handed to you. A batch — an import, say — arrives as one message, not one per contact.",
+  },
   {
     key: "taskReminders",
     title: "Task reminders",
