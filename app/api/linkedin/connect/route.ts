@@ -5,6 +5,7 @@ import { ok, fail } from "@/lib/http";
 import { requireOrg } from "@/lib/tenant";
 import { getOrCreateAccount, genToken } from "@/lib/linkedin/auth";
 import { queueStats } from "@/lib/linkedin/queue";
+import { connectionState, linkedinOAuthConfigured, LINKEDIN_SCOPES } from "@/lib/linkedin/oauth";
 
 export const runtime = "nodejs";
 
@@ -18,6 +19,20 @@ export async function GET(req: NextRequest) {
     extToken: account.extToken,
     status: account.status,
     liMemberName: account.liMemberName,
+    // The connected LinkedIn identity. Note what is absent: the access token
+    // never leaves the server. A browser gets a name, a photo and a date.
+    account: {
+      state: connectionState(account),
+      configured: linkedinOAuthConfigured(),
+      memberName: account.liMemberName,
+      pictureUrl: account.liPictureUrl,
+      email: account.liEmail,
+      expiresAt: account.liTokenExpiresAt,
+      connectedAt: account.liConnectedAt,
+      scopes: account.liScopes,
+      canPost: account.liScopes.includes("w_member_social"),
+      requestedScopes: LINKEDIN_SCOPES.split(" "),
+    },
     lastSeenAt: account.lastSeenAt,
     dailyInviteCap: account.dailyInviteCap,
     minDelaySec: account.minDelaySec,
@@ -27,7 +42,7 @@ export async function GET(req: NextRequest) {
 }
 
 const Body = z.object({
-  action: z.enum(["rotate", "update"]),
+  action: z.enum(["rotate", "update", "disconnect"]),
   dailyInviteCap: z.number().int().min(1).max(50).optional(),
   minDelaySec: z.number().int().min(10).max(600).optional(),
   maxDelaySec: z.number().int().min(15).max(900).optional(),
@@ -42,6 +57,26 @@ export async function POST(req: NextRequest) {
 
   const account = await getOrCreateAccount(ctx.orgId, ctx.userId);
   const data: Record<string, unknown> = {};
+  // Disconnecting forgets the tokens outright rather than marking a flag. A
+  // credential we no longer need is a liability we no longer need to hold, and
+  // the member can reconnect in two clicks.
+  if (parsed.data.action === "disconnect") {
+    await prisma.linkedInAccount.update({
+      where: { id: account.id },
+      data: {
+        liMemberId: null,
+        liPictureUrl: null,
+        liEmail: null,
+        liAccessToken: null,
+        liRefreshToken: null,
+        liTokenExpiresAt: null,
+        liScopes: [],
+        liConnectedAt: null,
+      },
+    });
+    return ok({ disconnected: true });
+  }
+
   if (parsed.data.action === "rotate") {
     data.extToken = genToken();
     data.status = "pending";

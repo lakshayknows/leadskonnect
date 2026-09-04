@@ -617,6 +617,22 @@ model LinkedInAccount {
   selectedCampaignIds String[]  @default([]) // empty = drain all campaigns' LinkedIn actions
   campaignSettings    Json      @default("{}") // per-campaign override: { [campaignId]: { cap, minDelaySec, maxDelaySec, mode, enabled } }
   lastSeenAt          DateTime?
+
+  // ---- Official LinkedIn OAuth ----
+  // Sign In with LinkedIn (OpenID Connect) + Share on LinkedIn. This is the
+  // member's real, consented connection: LinkedIn tells us who they are and
+  // lets us post as them. It does NOT grant search, invites or messaging —
+  // no LinkedIn API tier sells those, which is why the extension still exists
+  // alongside this rather than being replaced by it. See lib/linkedin/oauth.ts.
+  liMemberId          String? // OIDC `sub` — LinkedIn's stable id for the person
+  liPictureUrl        String?
+  liEmail             String?
+  liAccessToken       String? // ENCRYPTED — lib/db-encryption.ts
+  liRefreshToken      String? // ENCRYPTED — partner-gated, usually absent
+  liTokenExpiresAt    DateTime? // 60 days from consent; no refresh for most apps
+  liScopes            String[]  @default([])
+  liConnectedAt       DateTime?
+
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 

@@ -33,6 +33,9 @@ import { decryptField, encryptField, fieldAad, isEncrypted } from "./crypto";
 export const ENCRYPTED_COLUMNS: Record<string, readonly string[]> = {
   sendingAccount: ["pass", "refreshToken", "dkimPrivateKey"],
   account: ["accessToken", "refreshToken", "idToken"],
+  // A member's own LinkedIn OAuth tokens. Never filtered on — the row is found
+  // by (organizationId, userId), so no blind index is needed.
+  linkedInAccount: ["liAccessToken", "liRefreshToken"],
 };
 
 type Row = Record<string, unknown>;

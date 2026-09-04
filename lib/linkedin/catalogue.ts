@@ -53,6 +53,8 @@ export interface CatalogueJob {
   status: "live" | "planned" | "blocked";
   /** Said plainly when it is not live, so nobody waits on a mystery. */
   blockedReason?: string;
+  /** A prerequisite or caveat for a job that IS live — shown the same way. */
+  note?: string;
   /** Needs admin rights on the page in question. */
   requiresAdmin?: boolean;
 }
@@ -275,9 +277,9 @@ export const CATALOGUE: CatalogueJob[] = [
     mechanism: "api",
     input: "Post text and timing",
     limit: "No scraping quota — LinkedIn's official API",
-    status: "planned",
-    blockedReason:
-      "The only job here with a fully official API path (w_member_social). Your LinkedIn app credentials already cover it — worth building for exactly that reason.",
+    status: "live",
+    note:
+      "The only job with a fully official path. Needs a connected LinkedIn account (Settings → LinkedIn) granting w_member_social; it then posts server-side, with no browser and no extension.",
   },
   {
     key: "like",

@@ -9,6 +9,19 @@ export const metadata = { title: "Changelog — Followthroo" };
  */
 const ENTRIES = [
   {
+    version: "0.9.7",
+    date: "Sep 2026",
+    items: [
+      "Connect your LinkedIn account. Settings → LinkedIn now opens LinkedIn’s own consent screen — you sign in on linkedin.com, and your name and photo appear on your account. We never see your password",
+      "A connected account can post to your LinkedIn feed on a schedule, through LinkedIn’s official API — no browser needed, and it runs whether or not your laptop is on",
+      "The LinkedIn settings page now reads as two plain steps — connect your account, then activate it in the browser you prospect from — rather than a token to copy with no explanation of what it was for",
+      "It also answers the question everyone asks: why an extension is needed at all when you have connected your account. LinkedIn sells identity and posting; it does not sell search, invitations or messages at any tier, so the sourcing happens in your own browser",
+      "LinkedIn connections expire after 60 days. We now tell you a week before, instead of letting you find out through a post that did not go out",
+      "Disconnecting deletes the stored tokens outright rather than flagging them as unused",
+      "Your LinkedIn tokens are encrypted at rest, like every other credential you give us",
+    ],
+  },
+  {
     version: "0.9.6",
     date: "Sep 2026",
     items: [

@@ -476,6 +476,13 @@ This document contains extracted content, workflow details, inputs/outputs, and 
 * **How It Works:**
   1. Reads scheduled row from sheet.
   2. Opens post creation box and publishes post.
+* **Our implementation (built 2026-09-04):** `lib/linkedin/post.ts`. The only job in this
+  catalogue with a fully official path — LinkedIn sells `w_member_social`, so we post
+  through `api.linkedin.com/rest/posts` on a member's consented OAuth token. No session
+  cookie, no browser, no extension, and it runs whether or not the member's laptop is on.
+  Requires a connected LinkedIn account (Settings → LinkedIn); see `docs/channels.md`.
+  Text-only for now: images and documents need a separate upload-then-reference flow, and a
+  post that silently loses its attachment is worse than one we have not shipped yet.
 
 ---
 

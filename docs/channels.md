@@ -188,4 +188,84 @@ action per tick (default 45–120s apart); stale in-progress claims are auto-rec
 **⚠️ ToS:** drafting from a personal LinkedIn account is still automation-adjacent even
 with a human sending — keep caps conservative (≤ ~20 invites/day), warm up new accounts,
 don't leave large batches queued unattended. The official "Sign in with LinkedIn (OIDC)" +
-"Share on LinkedIn" APIs remain available for identity/posting and can be wired separately.
+"Share on LinkedIn" APIs cover identity and posting — see the next section, which is now built.
+
+---
+
+## LinkedIn — connecting an account, officially (2026-09-04)
+
+**Why this section exists.** Every competitor advertises "connect your LinkedIn account" and
+we did not have one, which read as a missing feature. It was two things at once: a real gap
+(there was no account connection anywhere in the product, only a bearer token to paste into
+an extension) and a question about architecture. Both are answered here.
+
+### What competitors mean by it
+
+Expandi, Dripify, HeyReach, Waalaxy (cloud mode) and PhantomBuster ask for the member's
+`li_at` session cookie — sometimes directly, sometimes through a "connector" extension whose
+only job is to read the cookie and ship it to the vendor. The vendor stores that session and
+drives LinkedIn as the member from its own cloud, usually behind a dedicated residential
+proxy per account so the traffic looks like it comes from one person.
+
+That is what makes unattended, laptop-off automation possible, and it is also its own
+failure mode: a live session used from an IP the member has never signed in from is the
+clearest signal LinkedIn's enforcement has. Restrictions in this category are routine, and
+a breach of any one vendor exposes every customer's LinkedIn account simultaneously.
+
+### What we built instead
+
+`lib/linkedin/oauth.ts` — LinkedIn's own 3-legged OAuth. The member clicks **Connect
+LinkedIn account** in Settings → LinkedIn, consents on linkedin.com, and returns with their
+verified name, photo and email on their `LinkedInAccount` row.
+
+| | Endpoint |
+|---|---|
+| Authorize | `https://www.linkedin.com/oauth/v2/authorization` |
+| Token | `https://www.linkedin.com/oauth/v2/accessToken` |
+| Identity | `https://api.linkedin.com/v2/userinfo` |
+| Post | `https://api.linkedin.com/rest/posts` (`LinkedIn-Version` header required) |
+
+**Scopes:** `openid profile email` (Sign In with LinkedIn) + `w_member_social` (Share on
+LinkedIn). Overridable via `LINKEDIN_SCOPES`, because scope availability is per-app — asking
+for a scope the app has not been granted fails the whole consent with "Invalid scope"
+rather than degrading gracefully.
+
+**Redirect URI** must be registered verbatim in the Developer Portal:
+`https://app.followthroo.com/api/linkedin/oauth/callback`. LinkedIn strips query parameters
+from it, so the member and org travel in httpOnly cookies (`li_oauth_state` / `_org` /
+`_user`), state-checked in the callback.
+
+**Token lifetime is 60 days with no refresh.** Programmatic refresh tokens are gated behind
+LinkedIn's partner programme, so an ordinary app cannot renew silently. `connectionState()`
+returns `expiring` from 7 days out and the settings page prompts a reconnect, rather than
+letting the member discover it through a post that did not go out.
+
+**Storage:** `liAccessToken` / `liRefreshToken` are in `ENCRYPTED_COLUMNS`
+(`lib/db-encryption.ts`), so they are AES-256-GCM ciphertext at rest like every other tenant
+credential. Neither ever reaches a browser — `GET /api/linkedin/connect` returns a name, a
+photo URL and an expiry date. Disconnecting nulls the columns outright rather than setting a
+flag.
+
+### What the connection does and does not unlock
+
+| Capability | Official API | How we do it |
+|---|---|---|
+| Verified identity | ✅ `openid profile email` | OAuth, this section |
+| Post to own feed | ✅ `w_member_social` | `lib/linkedin/post.ts`, server-side, no browser |
+| Read search results | ❌ not sold at any tier | Extension, member's own tab |
+| Company employees, post likers, group members, event guests | ❌ | Extension |
+| Send connection invitations | ❌ | Extension drafts, human sends |
+| Send messages | ❌ | Extension drafts, human sends |
+
+Sales Navigator and Marketing Developer Platform APIs are partner-gated and closed to
+general applicants; they do not change this table for a self-serve SaaS.
+
+**So both halves are load-bearing.** The account connection is the member's identity and
+their posting rights, and it is genuinely official. The extension is how sourcing and
+drafting happen, in the member's own session where the activity is indistinguishable from
+what it is — a person using LinkedIn. Neither replaces the other, and the settings page says
+so in a disclosure on the page rather than leaving people to wonder.
+
+**Verification:** `npx tsx --env-file=.env.local scripts/verify-linkedin-oauth.ts` — 21
+checks covering the encryption registration and AAD binding, authorize-URL construction, and
+the expiry state machine. No database required.

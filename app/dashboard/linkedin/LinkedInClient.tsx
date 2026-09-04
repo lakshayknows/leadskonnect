@@ -225,8 +225,8 @@ function JobCard({ job }: { job: CatalogueJob }) {
 
       {/* Say what it is waiting on. "Coming soon" with no reason is how a
           roadmap becomes noise. */}
-      {job.blockedReason && (
-        <p className="mt-2 rounded-lg bg-tint px-2.5 py-1.5 text-[11px] text-ink-soft">{job.blockedReason}</p>
+      {(job.blockedReason || job.note) && (
+        <p className="mt-2 rounded-lg bg-tint px-2.5 py-1.5 text-[11px] text-ink-soft">{job.blockedReason ?? job.note}</p>
       )}
     </div>
   );
