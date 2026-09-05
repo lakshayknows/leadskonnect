@@ -1,7 +1,7 @@
 /**
  * Run the real content script against known LinkedIn markup.
  *
- *   node extension/__fixtures__/serve.js
+ *   node scripts/linkedin-fixtures/serve.js
  *   → http://127.0.0.1:4599/modern.html   current markup (attribute hooks, no entity-result classes)
  *   → http://127.0.0.1:4599/legacy.html   the older classes, as a regression check
  *
@@ -18,14 +18,22 @@
  *
  * Deliberately dependency-free: there is no jsdom in this repo and adding one
  * to run two files is not worth the weight.
+ *
+ * These live under scripts/ rather than inside extension/ because Chrome refuses
+ * to load an extension containing any file or directory whose name starts with
+ * an underscore — they are reserved. Putting them in extension/__fixtures__ made
+ * the whole extension unloadable, which is a silent failure until somebody tries
+ * to reload it.
  */
 const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
 
 const FIXTURES = __dirname;
-const EXT = path.join(__dirname, "..");
+const EXT = path.join(__dirname, "..", "..", "extension");
 const TYPES = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css" };
+// Overridable so a stale server on the default port cannot masquerade as a fresh one.
+const PORT = Number(process.env.PORT) || 4599;
 
 http
   .createServer((req, res) => {
@@ -39,4 +47,4 @@ http
       res.end(buf);
     });
   })
-  .listen(4599, () => console.log("fixtures on http://127.0.0.1:4599 (modern.html / legacy.html)"));
+  .listen(PORT, () => console.log(`fixtures on http://127.0.0.1:${PORT} (modern.html / legacy.html)`));

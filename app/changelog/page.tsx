@@ -9,6 +9,14 @@ export const metadata = { title: "Changelog — Followthroo" };
  */
 const ENTRIES = [
   {
+    version: "0.10.5",
+    date: "Sep 2026",
+    items: [
+      "Fixed: the extension could not be installed at all. Test files were added in a folder whose name started with an underscore, and Chrome reserves those — it refuses the entire extension rather than skipping the folder. Every fix since then looked broken because the reload that would have picked them up was itself failing",
+      "The packaging check now catches that before an upload, instead of passing every other test while the thing cannot load",
+    ],
+  },
+  {
     version: "0.10.4",
     date: "Sep 2026",
     items: [

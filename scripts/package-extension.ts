@@ -67,6 +67,34 @@ function main() {
     check(fs.existsSync(path.join(DIR, rel)), `present: ${rel}`);
   }
 
+  /**
+   * Chrome refuses to load an extension containing ANY file or directory whose
+   * name begins with an underscore — those are reserved for `_locales` and
+   * friends. It is not a warning and not a partial load: the whole extension is
+   * rejected with "Could not load manifest."
+   *
+   * This check exists because that happened. Test fixtures were added at
+   * `extension/__fixtures__/`, and from that commit onward the extension could
+   * not be loaded at all — so a shipped fix sat there looking broken, because
+   * the reload that would have picked it up was the thing failing. Every other
+   * check in this file passed the whole time.
+   */
+  const reserved: string[] = [];
+  const walk = (dir: string, rel = "") => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const here = rel ? `${rel}/${entry.name}` : entry.name;
+      if (entry.name.startsWith("_") && entry.name !== "_locales") reserved.push(here);
+      if (entry.isDirectory()) walk(path.join(dir, entry.name), here);
+    }
+  };
+  walk(DIR);
+  check(
+    reserved.length === 0,
+    reserved.length
+      ? `no reserved "_" names — found ${reserved.join(", ")}, which makes Chrome refuse the whole extension`
+      : "no reserved \"_\" names in the package",
+  );
+
   // Remote code is the single most common rejection for extensions like this.
   const js = ["background.js", "popup.js", "options.js", "scrapers.js"]
     .map((f) => fs.readFileSync(path.join(DIR, f), "utf8"))
