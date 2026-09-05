@@ -54,11 +54,22 @@ const OAUTH_ERRORS: Record<string, string> = {
   could_not_read_profile: "LinkedIn accepted the login but wouldn't return your profile. Try again.",
 };
 
+/**
+ * The scope failure deserves more than a line.
+ *
+ * LinkedIn returns `invalid_scope_error` when the app requests a permission it
+ * has not been granted — and it fails the WHOLE consent rather than dropping the
+ * one scope, so a single missing product breaks connecting entirely. It is an
+ * operator problem with an exact fix, and showing the raw code helps nobody.
+ */
+const SCOPE_ERRORS = new Set(["invalid_scope_error", "unauthorized_scope_error", "invalid_scope"]);
+
 export default function LinkedInClient() {
   const { data, mutate, isLoading } = useSWR<Connect>("/api/linkedin/connect");
   const [show, setShow] = useState(false);
   const [copied, setCopied] = useState(false);
   const [msg, setMsg] = useState<{ kind: "error" | "success" | "info"; text: string } | null>(null);
+  const [scopeError, setScopeError] = useState(false);
   const [cap, setCap] = useState<number | "">("");
   const [minD, setMinD] = useState<number | "">("");
   const [maxD, setMaxD] = useState<number | "">("");
@@ -79,6 +90,8 @@ export default function LinkedInClient() {
         kind: "success",
         text: connected === "1" ? "LinkedIn account connected." : `Connected as ${connected}.`,
       });
+    } else if (error && SCOPE_ERRORS.has(error)) {
+      setScopeError(true);
     } else if (error) {
       const known = OAUTH_ERRORS[error];
       setMsg({ kind: known ? "info" : "error", text: known ?? `Could not connect LinkedIn (${error}).` });
@@ -143,6 +156,49 @@ export default function LinkedInClient() {
 
       <div className="max-w-3xl space-y-6 p-8">
         {msg && <Banner kind={msg.kind}>{msg.text}</Banner>}
+
+        {scopeError && (
+          <Banner kind="error">
+            <div className="space-y-2">
+              <p className="font-semibold">
+                LinkedIn refused the permissions this app asked for.
+              </p>
+              <p>
+                This is a setting on your LinkedIn developer app, not something you did wrong. LinkedIn fails the
+                entire consent when an app requests a permission it hasn&apos;t been granted — it doesn&apos;t
+                just skip that one.
+              </p>
+              <p>
+                In the{" "}
+                <a
+                  href="https://www.linkedin.com/developers/apps"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 underline"
+                >
+                  LinkedIn Developer Portal <ExternalLink className="h-3 w-3" />
+                </a>{" "}
+                open your app → <b>Products</b>, and add:
+              </p>
+              <ul className="ml-4 list-disc space-y-1">
+                <li>
+                  <b>Sign In with LinkedIn using OpenID Connect</b> — grants <code>openid</code>,{" "}
+                  <code>profile</code>, <code>email</code>. Without it we cannot read your name.
+                </li>
+                <li>
+                  <b>Share on LinkedIn</b> — grants <code>w_member_social</code>, which is what lets Followthroo
+                  post to your feed.
+                </li>
+              </ul>
+              <p className="text-xs">
+                Both are self-serve, but the app must first be linked to a LinkedIn Page you can verify — that
+                verification is usually what is missing. Once added, come back and press Connect again. If you only
+                want identity for now, set <code>LINKEDIN_SCOPES=&quot;openid profile email&quot;</code> and skip
+                Share on LinkedIn.
+              </p>
+            </div>
+          </Banner>
+        )}
 
         {/* ---- Step 1: the account connection ---- */}
         <Panel>
