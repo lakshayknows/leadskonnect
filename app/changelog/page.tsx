@@ -9,6 +9,13 @@ export const metadata = { title: "Changelog — Followthroo" };
  */
 const ENTRIES = [
   {
+    version: "0.10.4",
+    date: "Sep 2026",
+    items: [
+      "The extension shows which version it is running — in its popup, and at the bottom of the panel on LinkedIn. Chrome keeps serving the old code to tabs that were already open when you reload an extension, so a fixed bug could look unfixed with nothing on screen to say otherwise",
+    ],
+  },
+  {
     version: "0.10.3",
     date: "Sep 2026",
     items: [

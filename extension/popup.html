@@ -64,6 +64,10 @@
       .bar > i { display:block; height:100%; background:var(--accent); width:0; transition:width .4s ease; }
       .foot { margin:13px 0 0; font-size:10.5px; color:var(--soft); line-height:1.55; text-align:center; }
       a { color:var(--accent); }
+      /* Which build is running. Chrome keeps serving an old content script to tabs
+         that were already open when the extension reloaded, so without this a
+         fixed bug can look unfixed with nothing on screen to say otherwise. */
+      .ver { display:inline-block; margin-top:5px; opacity:.65; letter-spacing:.03em; }
     </style>
   </head>
   <body>
@@ -102,6 +106,7 @@
     <p class="foot">
       Runs only in your own logged-in LinkedIn tab. We never store your password
       or session, and never click Send for you.
+      <br /><span id="ver" class="ver"></span>
     </p>
 
     <script src="popup.js"></script>

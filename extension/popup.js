@@ -1,6 +1,15 @@
 const $ = (id) => document.getElementById(id);
 const POLL_ALARM = "ft-linkedin-poll"; // must match background.js — no shared module between contexts
 
+// Stamp the running build straight away, before any storage round-trip, so it
+// is visible even when nothing else in this popup manages to load.
+try {
+  const v = document.getElementById("ver");
+  if (v) v.textContent = `v${chrome.runtime.getManifest().version}`;
+} catch {
+  /* nothing to show; not worth breaking the popup over */
+}
+
 function render(cfg) {
   const on = !!cfg.enabled;
   $("toggle").textContent = on ? "Stop" : "Start";

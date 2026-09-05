@@ -30,6 +30,15 @@
 
   const state = { selected: new Map(), kind: null, busy: false };
 
+  /** The build actually executing in this tab. */
+  const version = () => {
+    try {
+      return chrome.runtime.getManifest().version;
+    } catch {
+      return "?";
+    }
+  };
+
   /* ---------------------------------------------------------------- */
 
   /**
@@ -187,6 +196,8 @@
       #ft-panel button.ft-ghost:hover{background:var(--ft-tint)}
       #ft-panel .ft-note{margin-top:10px;padding:9px;border-radius:9px;background:var(--ft-tint);
         font-size:11px;color:var(--ft-ink);line-height:1.45;opacity:.85}
+      #ft-panel .ft-ver{margin-top:10px;padding-top:9px;border-top:1px solid var(--ft-line);
+        font-size:10px;color:var(--ft-soft);text-align:right;letter-spacing:.02em}
     `;
     document.documentElement.appendChild(el);
   }
@@ -318,7 +329,7 @@
         ) || null,
         structuralRows: structuralCards().length,
         sampleRowClass: sample ? sample.className || "(no class)" : null,
-        extensionVersion: (chrome.runtime.getManifest() || {}).version,
+        extensionVersion: version(),
       },
       null,
       2,
@@ -424,7 +435,7 @@
     el = document.createElement("div");
     el.id = BAR_ID;
     el.innerHTML = `
-      <span class="ft-brand"><span class="ft-mark">F</span> Followthroo</span>
+      <span class="ft-brand" data-ft="brand"><span class="ft-mark">F</span> Followthroo</span>
       <span class="ft-sep"></span>
       <button class="ft-link" data-ft="all">Select all</button>
       <span class="ft-count" data-ft="count">No one selected</span>
@@ -433,6 +444,7 @@
       <button class="ft-link" data-ft="diag" hidden>Copy diagnostics</button>
       <button class="ft-primary" data-ft="add" disabled>Add to Followthroo</button>
     `;
+    el.querySelector('[data-ft="brand"]').title = `Followthroo for LinkedIn v${version()}`;
     el.querySelector('[data-ft="all"]').addEventListener("click", toggleAll);
     el.querySelector('[data-ft="add"]').addEventListener("click", add);
     el.querySelector('[data-ft="every"]').addEventListener("click", addEveryPage);
@@ -821,6 +833,12 @@
       ${action ? `<button class="ft-act" data-ft="act">${action.label}</button>` : ""}
       <button class="ft-ghost" data-ft="app">Open Followthroo</button>
       <div class="ft-msg" data-ft="pmsg" style="margin-top:8px;font-size:12px"></div>
+      <!-- The running version, always visible.
+           Chrome keeps serving the old content script to tabs that were already
+           open when the extension reloaded, so a fixed bug can look unfixed with
+           nothing on screen to contradict it. Costing one line here beats another
+           round of "did you reload it?". -->
+      <div class="ft-ver">v${version()}</div>
     `;
     document.body.appendChild(el);
 
