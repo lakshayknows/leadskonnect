@@ -614,6 +614,14 @@ model LinkedInAccount {
   minDelaySec         Int       @default(45) // humanized pacing floor
   maxDelaySec         Int       @default(120)
   mode                String    @default("auto") // auto | invite | message — default action type
+  /// Whether the extension clicks Send itself, or fills the box and waits.
+  ///
+  /// Off by default, deliberately: automated sending is against LinkedIn's User
+  /// Agreement and the consequence lands on the member's own account. It runs in
+  /// their own browser, on their own IP — not from our servers holding their
+  /// session, which is the shape that gets accounts restricted fastest — but it
+  /// is still their call to make rather than a default we make for them.
+  autoSend            Boolean   @default(false)
   selectedCampaignIds String[]  @default([]) // empty = drain all campaigns' LinkedIn actions
   campaignSettings    Json      @default("{}") // per-campaign override: { [campaignId]: { cap, minDelaySec, maxDelaySec, mode, enabled } }
   lastSeenAt          DateTime?

@@ -33,6 +33,7 @@ export async function GET(req: NextRequest) {
       canPost: account.liScopes.includes("w_member_social"),
       requestedScopes: LINKEDIN_SCOPES.split(" "),
     },
+    autoSend: account.autoSend,
     lastSeenAt: account.lastSeenAt,
     dailyInviteCap: account.dailyInviteCap,
     minDelaySec: account.minDelaySec,
@@ -42,7 +43,9 @@ export async function GET(req: NextRequest) {
 }
 
 const Body = z.object({
-  action: z.enum(["rotate", "update", "disconnect"]),
+  action: z.enum(["rotate", "update", "disconnect", "stop_all"]),
+  /** Whether the extension clicks Send itself. See LinkedInAccount.autoSend. */
+  autoSend: z.boolean().optional(),
   dailyInviteCap: z.number().int().min(1).max(50).optional(),
   minDelaySec: z.number().int().min(10).max(600).optional(),
   maxDelaySec: z.number().int().min(15).max(900).optional(),
@@ -76,6 +79,25 @@ export async function POST(req: NextRequest) {
     });
     return ok({ disconnected: true });
   }
+
+  /**
+   * The panic button. Turns automatic sending off AND clears everything already
+   * queued, in that order.
+   *
+   * Turning the switch off alone is not enough to feel safe: a queue of eighty
+   * pending invites would still be sitting there, and the person pressing this
+   * wants it to stop, not to pause.
+   */
+  if (parsed.data.action === "stop_all") {
+    await prisma.linkedInAccount.update({ where: { id: account.id }, data: { autoSend: false } });
+    const cleared = await prisma.linkedInAction.updateMany({
+      where: { organizationId: ctx.orgId, status: { in: ["pending", "in_progress", "drafted"] } },
+      data: { status: "skipped", result: "cancelled — everything stopped from the app" },
+    });
+    return ok({ stopped: true, cleared: cleared.count });
+  }
+
+  if (parsed.data.autoSend !== undefined) data.autoSend = parsed.data.autoSend;
 
   if (parsed.data.action === "rotate") {
     data.extToken = genToken();

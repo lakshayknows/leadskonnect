@@ -5,7 +5,7 @@ import Link from "next/link";
 import useSWR from "swr";
 import {
   Linkedin, ChevronDown, Clock, Copy, Check, RefreshCw, Eye, EyeOff,
-  ExternalLink, ShieldCheck,
+  ExternalLink, ShieldCheck, Square,
 } from "lucide-react";
 import { api } from "@/lib/client";
 import { Banner, DashHeader, Input, Label, useConfirm } from "@/components/ui";
@@ -38,6 +38,7 @@ type Connect = {
   dailyInviteCap: number;
   minDelaySec: number;
   maxDelaySec: number;
+  autoSend: boolean;
   account: {
     state: AccountState;
     configured: boolean;
@@ -364,6 +365,35 @@ function Limits({
   const [cap, setCap] = useState<number | "">("");
   const [minD, setMinD] = useState<number | "">("");
   const [maxD, setMaxD] = useState<number | "">("");
+  const confirm = useConfirm();
+
+  async function setAuto(on: boolean) {
+    if (on) {
+      const ok = await confirm({
+        title: "Send automatically?",
+        body: "Connection requests and messages will go out on their own, from your browser, without you reviewing each one. This is against LinkedIn's User Agreement and accounts do get restricted for it. You can stop it at any time.",
+        confirmLabel: "Turn it on",
+        tone: "danger",
+      });
+      if (!ok) return;
+    }
+    await api("/api/linkedin/connect", { body: { action: "update", autoSend: on } });
+    setMsg({ kind: on ? "info" : "success", text: on ? "Sending automatically." : "Back to drafting — you send each one." });
+    onSaved();
+  }
+
+  async function stopAll() {
+    const ok = await confirm({
+      title: "Stop everything?",
+      body: "Turns automatic sending off and cancels everything still queued. Nothing already sent is affected.",
+      confirmLabel: "Stop everything",
+      tone: "danger",
+    });
+    if (!ok) return;
+    const res = await api<{ cleared: number }>("/api/linkedin/connect", { body: { action: "stop_all" } });
+    setMsg({ kind: "success", text: `Stopped. ${res.cleared} queued action${res.cleared === 1 ? "" : "s"} cancelled.` });
+    onSaved();
+  }
 
   async function save() {
     const body: Record<string, number> = {};
@@ -382,7 +412,36 @@ function Limits({
       title="Limits"
       summary={`${data?.dailyInviteCap ?? 20} actions a day, ${data?.minDelaySec ?? 45}–${data?.maxDelaySec ?? 120}s apart`}
     >
-      <p className="text-sm text-ink-soft">
+      {/* The one control that changes what the product does to your account, so
+          it leads, states the trade in a sentence, and sits next to its undo. */}
+      <div className="rounded-xl border border-line bg-canvas p-4">
+        <label className="flex cursor-pointer items-start gap-3">
+          <input
+            type="checkbox"
+            checked={!!data?.autoSend}
+            onChange={(e) => setAuto(e.target.checked)}
+            className="mt-0.5 h-4 w-4 accent-accent"
+          />
+          <span className="min-w-0">
+            <span className="block text-sm font-medium">Send automatically</span>
+            <span className="mt-0.5 block text-xs text-ink-soft">
+              Connection requests and messages go out on their own, in your browser, at the pace below. Leave this off
+              and each one opens a tab with the text filled in for you to send.
+            </span>
+          </span>
+        </label>
+        <p className="mt-3 text-xs text-ink-soft">
+          Automated sending is against LinkedIn&apos;s User Agreement and accounts do get restricted for it. It runs in
+          your own browser on your own connection — never from our servers — but the risk is to your account.
+        </p>
+        {data?.autoSend && (
+          <button onClick={stopAll} className="btn btn-ghost mt-3 !py-1.5 !text-xs !text-danger">
+            <Square className="h-3.5 w-3.5" /> Stop everything
+          </button>
+        )}
+      </div>
+
+      <p className="mt-4 text-sm text-ink-soft">
         Set once and rarely touched. These exist to keep your account in good standing, not to ration you — LinkedIn
         restricts accounts that behave like software.
       </p>

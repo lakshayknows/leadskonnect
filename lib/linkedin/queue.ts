@@ -56,6 +56,8 @@ export interface ClaimAccount {
   mode: string;
   selectedCampaignIds: string[];
   campaignSettings: unknown;
+  /** Optional so existing callers and tests compile; absent reads as off. */
+  autoSend?: boolean;
 }
 
 /**
@@ -129,6 +131,10 @@ export async function claimActions(account: ClaimAccount, limit: number) {
 
   return picked.map((a) => ({
     ...a,
+    // Told per action rather than read from the extension's own settings, so the
+    // switch lives in one place. Turning it off in the app stops the very next
+    // action, with no need for the extension to notice a config change.
+    autoSend: account.autoSend === true,
     // An explicit kind on the action is an instruction from the campaign step
     // that created it; the account/campaign mode is only a preference for
     // actions that never said. This used to read

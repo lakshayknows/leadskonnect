@@ -9,6 +9,17 @@ export const metadata = { title: "Changelog — Followthroo" };
  */
 const ENTRIES = [
   {
+    version: "0.11.0",
+    date: "Sep 2026",
+    items: [
+      "LinkedIn can now send on its own. Turn on “Send automatically” under LinkedIn → Limits and connection requests and messages go out without you clicking anything",
+      "It runs in your own browser, at your own pace — 45–120 seconds apart, under your daily cap. It is off until you turn it on, and there is a Stop everything button that also clears whatever is queued",
+      "Worth knowing before you switch it on: automated sending is against LinkedIn’s User Agreement, and the risk is to your account",
+      "It confirms rather than assumes. If the Send button is missing, disabled, or the dialog does not close, the action is recorded as failed — never as sent. A CRM that claims you contacted someone you did not is worse than one that admits it failed",
+      "Fixed: LinkedIn messages were being cut off at 300 characters. That is the limit on a connection note, not a message",
+    ],
+  },
+  {
     version: "0.10.6",
     date: "Sep 2026",
     items: [

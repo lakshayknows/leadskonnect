@@ -296,9 +296,18 @@ async function fillLinkedInAction(action) {
 
   await sleep(2500 + Math.random() * 2500); // let the profile settle
 
-  const note = (action.note || "").slice(0, 300);
+  // The 300-character ceiling is LinkedIn's limit on an INVITE note. A direct
+  // message has no such limit worth worrying about (~8k), and clamping both
+  // meant every DM longer than 300 characters was silently cut mid-sentence.
+  const raw = action.note || "";
+  const inviteNote = raw.slice(0, 300);
+  const autoSend = action.autoSend === true;
+
   const pending = btnByLabel(/pending/i);
   const messageBtn = btnByLabel(/^Message\b/i);
+
+  /** The modal LinkedIn opens for an invitation, if one is open. */
+  const openModal = () => document.querySelector('.artdeco-modal[role="dialog"], div[role="dialog"]');
 
   async function fillMessage() {
     const mb = messageBtn || btnByLabel(/^Message\b/i);
@@ -310,8 +319,31 @@ async function fillLinkedInAction(action) {
     );
     if (!box) return { status: "failed", result: "message box not found" };
     box.focus();
-    document.execCommand("insertText", false, note || "Hi!");
-    return { status: "drafted", result: "message drafted — review it and click Send yourself", kind: "message" };
+    document.execCommand("insertText", false, raw || "Hi!");
+    if (!autoSend) {
+      return { status: "drafted", result: "message drafted — review it and click Send yourself", kind: "message" };
+    }
+
+    await sleep(600 + Math.random() * 700);
+    const send =
+      document.querySelector("button.msg-form__send-button:not([disabled])") ||
+      all('button, a[role="button"]').find(
+        (b) => /^send$/i.test((b.getAttribute("aria-label") || b.textContent || "").trim()) && !b.disabled,
+      );
+    if (!send) return { status: "failed", result: "auto-send on, but no enabled Send button in the message form" };
+    send.click();
+
+    // Confirm rather than assume. A click that did nothing must not be recorded
+    // as a sent message — the CRM would claim contact that never happened, and
+    // the sequence would move on to a follow-up.
+    await sleep(1800);
+    const after = document.querySelector(
+      '.msg-form__contenteditable[contenteditable="true"], div[role="textbox"][contenteditable="true"]'
+    );
+    const cleared = !after || !(after.textContent || "").trim();
+    return cleared
+      ? { status: "sent", result: "message sent", kind: "message" }
+      : { status: "failed", result: "clicked Send but the message box still has text — treating as not sent", kind: "message" };
   }
 
   async function fillInvite() {
@@ -324,13 +356,31 @@ async function fillLinkedInAction(action) {
     connect.click();
     await sleep(2200);
     const addNote = all("button").find((b) => /add a note/i.test((b.getAttribute("aria-label") || b.textContent || "")));
-    if (note && addNote) {
+    if (inviteNote && addNote) {
       addNote.click();
       await sleep(1200);
       const ta = document.querySelector('textarea#custom-message, textarea[name="message"], textarea');
-      if (ta) { ta.focus(); ta.value = note; ta.dispatchEvent(new Event("input", { bubbles: true })); }
+      if (ta) { ta.focus(); ta.value = inviteNote; ta.dispatchEvent(new Event("input", { bubbles: true })); }
     }
-    return { status: "drafted", result: "invitation drafted — review it and click Send yourself", kind: "invite" };
+    if (!autoSend) {
+      return { status: "drafted", result: "invitation drafted — review it and click Send yourself", kind: "invite" };
+    }
+
+    await sleep(700 + Math.random() * 900);
+    const scope = openModal() || document;
+    const send =
+      scope.querySelector('button[aria-label="Send now"]:not([disabled]), button[aria-label*="Send invitation"]:not([disabled])') ||
+      Array.from(scope.querySelectorAll("button")).find(
+        (b) => /^send( now| invitation)?$/i.test(((b.getAttribute("aria-label") || b.textContent || "").trim())) && !b.disabled,
+      );
+    if (!send) return { status: "failed", result: "auto-send on, but no enabled Send button in the invite dialog", kind: "invite" };
+    send.click();
+
+    // The dialog closing is the only evidence the invitation actually went.
+    await sleep(2000);
+    return !openModal()
+      ? { status: "sent", result: "invitation sent", kind: "invite" }
+      : { status: "failed", result: "clicked Send but the invite dialog is still open — treating as not sent", kind: "invite" };
   }
 
   try {
