@@ -2,7 +2,7 @@ import { emailChannel } from "./email";
 import { whatsappChannel } from "./whatsapp";
 import { linkedinChannel } from "./linkedin";
 import { socialChannel } from "./social";
-import type { Channel, Lead, SendResult } from "./types";
+import type { Channel, Lead, SendResult, SendContext } from "./types";
 import type { RenderedMessage } from "../templates";
 import { acquire } from "../ratelimit";
 import { isSuppressed } from "../crm";
@@ -30,7 +30,9 @@ export async function safeSend(
   orgId = "global",
   /** RFC-822 Message-ID to stamp on the outgoing mail, so a reply can be
    *  matched back to this exact send (lib/inbox/threading.ts). Email only. */
-  rfcMessageId?: string
+  rfcMessageId?: string,
+  /** Which campaign/step this came from, and for LinkedIn which gesture to draft. */
+  ctx?: SendContext
 ): Promise<SendResult> {
   const channel = channels[channelName];
 
@@ -53,7 +55,7 @@ export async function safeSend(
 
   // orgId goes to the adapter too: per-tenant credentials must be looked up scoped to
   // the owning org, never by a bare account id.
-  const result = await channel.send(lead, rendered, account, orgId, rfcMessageId);
+  const result = await channel.send(lead, rendered, account, orgId, rfcMessageId, ctx);
 
   // LinkedIn's "ok" here means "queued for the extension to draft," not "a human actually
   // sent it" — that confirmation writes its own ConversationEvent later, from

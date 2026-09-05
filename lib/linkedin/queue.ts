@@ -129,7 +129,16 @@ export async function claimActions(account: ClaimAccount, limit: number) {
 
   return picked.map((a) => ({
     ...a,
-    type: settings[a.campaignId ?? ""]?.mode || account.mode || a.type || "auto",
+    // An explicit kind on the action is an instruction from the campaign step
+    // that created it; the account/campaign mode is only a preference for
+    // actions that never said. This used to read
+    // `settings[...]?.mode || account.mode || a.type`, and since
+    // LinkedInAccount.mode defaults to the non-empty string "auto", account.mode
+    // always won and `a.type` was unreachable — which would have made every
+    // step-level invite/message choice a silent no-op.
+    type: a.type && a.type !== "auto"
+      ? a.type
+      : settings[a.campaignId ?? ""]?.mode || account.mode || "auto",
     leadName: [a.lead?.firstName, a.lead?.lastName].filter(Boolean).join(" ") || null,
   }));
 }

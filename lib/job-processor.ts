@@ -1,5 +1,5 @@
 import { prisma } from "./db";
-import { safeSend } from "./channels";
+import { safeSend, channels } from "./channels";
 import { renderMessage } from "./templates";
 import { logActivity } from "./crm";
 import { recordOutbound } from "./inbox/store";
@@ -14,7 +14,8 @@ import type { SendJob } from "./queue";
  * Performs the actual send, updates message status in Postgres, and logs the CRM activity.
  */
 export async function processSendJob(jobData: SendJob) {
-  const { organizationId, channel, leadId, campaignId, templateId, templateVersionId, account } = jobData;
+  const { organizationId, channel, leadId, campaignId, templateId, templateVersionId, account, nodeId, linkedinAction } =
+    jobData;
 
   // Scope the lead to the job's organization — never send to another tenant's lead.
   const lead = await prisma.lead.findFirst({ where: { id: leadId, organizationId } });
@@ -76,8 +77,16 @@ export async function processSendJob(jobData: SendJob) {
     outbound,
     account,
     organizationId,
-    rfcMessageId
+    rfcMessageId,
+    // Which campaign and which LinkedIn gesture. Without this the queue could
+    // not tell an invite from a message, or apply a campaign's own caps.
+    { campaignId, nodeId, linkedinAction }
   );
+
+  // Whether delivery happens on our servers or in a person's browser. LinkedIn
+  // says `humanAssisted: true`, which is what stops a queued action being
+  // recorded as a completed send.
+  const humanAssisted = channels[channel].capabilities?.().humanAssisted === true;
 
   await prisma.message.create({
     data: {
@@ -89,13 +98,18 @@ export async function processSendJob(jobData: SendJob) {
       templateId,
       renderedSubject: rendered.subject,
       renderedBody: rendered.body, // store the clean body, not the tracked one
-      status: result.ok ? "sent" : result.skipped ? "queued" : "failed",
+      // "ok" from a human-assisted channel means "queued for a person to send",
+      // not "delivered". LinkedIn wrote `sent` here AND a second `sent` Message
+      // from completeAction once the human confirmed, so every LinkedIn step was
+      // counted twice in reports. The adapter already declares
+      // `humanAssisted: true`; read it rather than special-casing the name.
+      status: result.ok ? (humanAssisted ? "queued" : "sent") : result.skipped ? "queued" : "failed",
       providerId: result.providerId,
       // What actually went on the wire — the poller matches inbound
       // In-Reply-To/References against this.
       rfcMessageId: result.rfcMessageId ?? rfcMessageId ?? null,
       idempotencyKey: randomUUID(),
-      sentAt: result.ok ? new Date() : null,
+      sentAt: result.ok && !humanAssisted ? new Date() : null,
     },
   });
 

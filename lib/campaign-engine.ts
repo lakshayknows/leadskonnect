@@ -19,10 +19,24 @@ import type { Enrollment } from "@prisma/client";
 
 const CHANNELS = ["email", "linkedin", "whatsapp", "social"] as const;
 
+export const LINKEDIN_ACTIONS = ["invite", "message", "auto"] as const;
+export type LinkedInAction = (typeof LINKEDIN_ACTIONS)[number];
+
 export const SendNode = z.object({
   id: z.string(),
   type: z.literal("send"),
   channel: z.enum(CHANNELS),
+  /// Which LinkedIn gesture this step performs — a connection request or a
+  /// direct message. It lives here rather than as two extra `channel` values
+  /// because `channel` is a Prisma enum shared by Message, Template and
+  /// ConversationEvent: splitting it would mean a migration across three tables
+  /// and templates authored per-kind, when an invite note and a follow-up
+  /// message are quite reasonably the same LinkedIn template.
+  ///
+  /// Absent on every campaign built before LinkedIn steps existed. Those resolve
+  /// to "auto", which is exactly what they already did — invite, falling back to
+  /// a message if the person is already a connection.
+  linkedinAction: z.enum(LINKEDIN_ACTIONS).optional(),
   templateId: z.string().nullable().optional(),
   /// Pins this step to one snapshot of the template's wording. Without it the
   /// body is resolved live at send time, so editing the template rewrites every
@@ -54,6 +68,18 @@ export const ExitNode = z.object({ id: z.string(), type: z.literal("exit") });
 
 export const CampaignNode = z.discriminatedUnion("type", [SendNode, ConditionNode, WaitNode, ExitNode]);
 export type CampaignNode = z.infer<typeof CampaignNode>;
+
+/**
+ * What a step actually does on LinkedIn.
+ *
+ * One place decides it, so the engine, the validator and the builder cannot
+ * disagree about what an older campaign with no explicit kind means.
+ */
+export function linkedinActionFor(node: CampaignNode): LinkedInAction {
+  return node.type === "send" && node.channel === "linkedin"
+    ? node.linkedinAction ?? "auto"
+    : "auto";
+}
 
 export const GraphSequence = z.object({
   nodes: z.array(CampaignNode),
@@ -258,6 +284,8 @@ export async function advanceEnrollment(enrollmentId: string): Promise<void> {
       kind: "send",
       organizationId: orgId,
       channel: node.channel,
+      linkedinAction: node.channel === "linkedin" ? linkedinActionFor(node) : undefined,
+      nodeId: node.id,
       leadId: enr.leadId,
       campaignId: enr.campaignId,
       templateId: node.templateId ?? undefined,

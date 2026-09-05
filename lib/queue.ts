@@ -32,6 +32,11 @@ export interface SendJob {
   /** Pinned template snapshot; falls back to the template's live copy. */
   templateVersionId?: string;
   account?: string;
+  /** The sequence node this came from, so an action traces back to its step. */
+  nodeId?: string;
+  /** LinkedIn only: which gesture to draft. Rides the payload so a queued send
+   *  keeps its kind across the wire. */
+  linkedinAction?: "invite" | "message" | "auto";
 }
 
 export interface AdvanceJob {
