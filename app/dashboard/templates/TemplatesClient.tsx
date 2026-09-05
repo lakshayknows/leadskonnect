@@ -4,7 +4,8 @@ import { useMemo, useState } from "react";
 import useSWR from "swr";
 import { api } from "@/lib/client";
 import { Banner, DashHeader, EmptyState, Input, Label, Panel, Select, Textarea, useConfirm } from "@/components/ui";
-import { FileText, Pencil, Copy, Archive, Eye, Send, History, Search, Plus, X, AlertTriangle } from "lucide-react";
+import { FileText, Pencil, Copy, Archive, Eye, Send, History, Search, Plus, X, AlertTriangle, Bot } from "lucide-react";
+import Link from "next/link";
 
 type Template = { id: string; channel: string; name: string; subject: string | null; body: string; updatedAt?: string };
 type Version = { id: string; version: number; subject: string | null; body: string; createdAt: string };
@@ -114,7 +115,18 @@ export default function TemplatesPage() {
 
   return (
     <>
-      <DashHeader title="Templates" subtitle="Write once, personalize for everyone with {{variables}}." />
+      <DashHeader
+        title="Templates"
+        subtitle="Write once, personalize for everyone with {{variables}}."
+        action={
+          /* Test emails lost its rail row — it is a harness for checking a model
+             change against one lead, not a daily destination. It belongs next to
+             the wording it tests. */
+          <Link href="/dashboard/agent" className="btn btn-ghost !py-2 !text-sm">
+            <Bot className="h-4 w-4" /> Test emails
+          </Link>
+        }
+      />
       <div className="grid gap-6 p-8 lg:grid-cols-[380px_1fr]">
         <Panel className="h-fit">
           <h2 className="flex items-center gap-2 font-display text-lg font-bold">

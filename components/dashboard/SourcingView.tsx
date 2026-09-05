@@ -47,9 +47,9 @@ const KIND_LABEL: Record<string, string> = {
  * Everything that came back from LinkedIn, and the review step before any of it
  * becomes a contact.
  *
- * Lives as a view on the Leads screen rather than its own sidebar row — the
- * result is leads, and CLAUDE.md is clear that the rail is not an index of the
- * codebase. See docs/linkedin-sourcing-ux.md.
+ * Lives on the LinkedIn screen, which is the one place sourcing happens. It was
+ * briefly mounted on Leads as well, behind ?view=sourcing — a URL nothing in the
+ * app ever linked to. That branch is gone. See docs/linkedin-sourcing-ux.md.
  */
 export function SourcingView() {
   // Polls while anything is running: the work happens in another tab and the

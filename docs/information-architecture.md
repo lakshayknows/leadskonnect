@@ -37,19 +37,22 @@ mobile drawer both read it, so they cannot drift.
               Home         /dashboard
 SALES         Leads        /dashboard/leads
               Pipeline     /dashboard/pipeline
-              Companies    /dashboard/companies
 COMMUNICATE   Inbox        /dashboard/inbox
               Tasks        /dashboard/tasks
-              Calendar     (soon)
 AUTOMATE      Campaigns    /dashboard/campaigns
+              LinkedIn     /dashboard/linkedin
               Templates    /dashboard/templates
-              Test emails  /dashboard/agent
 ANALYZE       Reports      /dashboard/reports
               Settings     /dashboard/settings
 ```
 
-This replaced an 18-row, five-group rail. Nothing was deleted — the rail simply
-stopped being an index of the codebase:
+Ten rows, as of 2026-09-05. This replaced an 18-row, five-group rail, and then
+lost three more — Companies (a way of looking at leads, reached from Leads), Test
+emails (a model-testing harness, reached from Templates) and Calendar (a `soon`
+stub that could not be clicked). LinkedIn gained one, for sourcing only; see the
+narrowed exception in CLAUDE.md.
+
+Nothing was deleted — the rail simply stopped being an index of the codebase:
 
 | Was a top-level row | Now lives |
 |---|---|

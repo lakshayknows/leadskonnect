@@ -13,7 +13,7 @@ import {
 export const runtime = "nodejs";
 
 function backTo(kind: "connected" | "error", detail?: string) {
-  const url = new URL(`${env.appUrl}/dashboard/settings/linkedin`);
+  const url = new URL(`${env.appUrl}/dashboard/linkedin`);
   url.searchParams.set(kind, detail ?? "1");
   return NextResponse.redirect(url.toString());
 }

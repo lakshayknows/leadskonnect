@@ -6,14 +6,13 @@ import useSWR from "swr";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   Trash2, Upload, Plus, Tag, FolderPlus, X, Pencil, Check, Users, Linkedin,
-  AlertTriangle, CircleDot, Search, Sparkles, ArrowRight,
+  AlertTriangle, CircleDot, Search, Sparkles, ArrowRight, Building2,
 } from "lucide-react";
 import { api } from "@/lib/client";
 import { cn } from "@/lib/cn";
 import { Badge, Banner, DashHeader, Dialog, EmptyState, Input, Label, NoResults, Panel, Select, Skeleton, useConfirm, usePrompt } from "@/components/ui";
 import { tourTarget } from "@/components/dashboard/tour/target";
 import { FindLeadsPanel } from "@/components/dashboard/FindLeadsPanel";
-import { SourcingView } from "@/components/dashboard/SourcingView";
 
 type NextAction = { taskId: string | null; label: string; kind: string; dueAt: string | null; urgent: boolean; source: string };
 type Lead = {
@@ -82,7 +81,6 @@ export default function LeadsPage() {
   // query and refuses it for anyone who is not an owner, admin or manager.
   const view = useSearchParams().get("view");
   const unassignedView = view === "unassigned";
-  const sourcingView = view === "sourcing";
   const router = useRouter();
 
   const params = new URLSearchParams({ page: String(page), pageSize: String(PAGE_SIZE) });
@@ -282,13 +280,11 @@ export default function LeadsPage() {
   return (
     <>
       <DashHeader
-        title={sourcingView ? "Sourced from LinkedIn" : unassignedView ? "Unassigned leads" : "Leads"}
+        title={unassignedView ? "Unassigned leads" : "Leads"}
         subtitle={
-          sourcingView
-            ? "Read from LinkedIn in your own browser. Review before anything becomes a contact."
-            : unassignedView
-              ? `${total.toLocaleString()} waiting for an owner — nobody sees these until they are assigned`
-              : `${total.toLocaleString()} in your list`
+          unassignedView
+            ? `${total.toLocaleString()} waiting for an owner — nobody sees these until they are assigned`
+            : `${total.toLocaleString()} in your list`
         }
         action={
           <div className="flex items-center gap-2">
@@ -297,9 +293,17 @@ export default function LeadsPage() {
                 Back to my leads
               </Link>
             ) : (
-              <button onClick={() => setGroupsOpen(true)} className="btn btn-ghost !py-2 !text-sm">
-                <FolderPlus className="h-4 w-4" /> Groups
-              </button>
+              <>
+                {/* Companies lost its rail row: it is a way of looking at these
+                    same leads, grouped, rather than a separate thing. It keeps
+                    its screen, reached from here. */}
+                <Link href="/dashboard/companies" className="btn btn-ghost !py-2 !text-sm">
+                  <Building2 className="h-4 w-4" /> Companies
+                </Link>
+                <button onClick={() => setGroupsOpen(true)} className="btn btn-ghost !py-2 !text-sm">
+                  <FolderPlus className="h-4 w-4" /> Groups
+                </button>
+              </>
             )}
             <button {...tourTarget("leads-import")} onClick={() => setAddOpen(true)} className="btn btn-primary !py-2 !text-sm">
               <Plus className="h-4 w-4" /> Add Lead
@@ -315,13 +319,6 @@ export default function LeadsPage() {
       <div className="space-y-4 p-8">
         {msg ? <Banner kind={msg.kind}>{msg.text}</Banner> : error ? <Banner kind="error">{(error as Error).message}</Banner> : null}
 
-        {sourcingView && <SourcingView />}
-
-        {/* Sourcing replaces the table rather than sitting above it — they are two
-            different things, and stacking them would leave the person scrolling
-            past a review table to reach their contacts. */}
-        {!sourcingView && (
-        <>
         {/* Filters */}
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex rounded-xl border border-line p-1">
@@ -512,8 +509,6 @@ export default function LeadsPage() {
               <button onClick={() => setPage((p) => Math.min(p + 1, totalPages))} disabled={isLoading || page >= totalPages} className="rounded-lg border border-line px-3 py-1.5 transition hover:bg-tint disabled:opacity-40">Next</button>
             </div>
           </div>
-        )}
-        </>
         )}
       </div>
 

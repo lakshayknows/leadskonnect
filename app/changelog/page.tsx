@@ -9,6 +9,18 @@ export const metadata = { title: "Changelog — Followthroo" };
  */
 const ENTRIES = [
   {
+    version: "0.10.1",
+    date: "Sep 2026",
+    items: [
+      "The LinkedIn screen is one screen now. Paste a URL, see what came back, and check your account — in that order, on one page",
+      "Gone: the catalogue of 32 job cards, 19 of them greyed-out things we had not built, under a heading that claimed 35. None of them were buttons. The roadmap lives in our docs now, not in your product",
+      "Gone with it: the essay about session cookies that took up half the screen you land on",
+      "Your LinkedIn settings and your LinkedIn screen used to be two different pages for one subject. They are one page. The old link still works",
+      "Daily limits are folded away until you want them, because you set them once",
+      "The sidebar is down from thirteen rows to ten. Companies is reached from Leads, where those companies come from; Test emails from Templates, where the wording it tests lives; and Calendar has stopped promising something that does not exist yet",
+    ],
+  },
+  {
     version: "0.10.0",
     date: "Sep 2026",
     items: [

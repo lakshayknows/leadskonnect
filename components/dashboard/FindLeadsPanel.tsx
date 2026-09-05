@@ -45,7 +45,7 @@ export function FindLeadsPanel({ onQueued }: { onQueued: (jobId: string) => void
             </p>
           </div>
         </div>
-        <Link href="/dashboard/settings/linkedin" className="btn btn-primary w-full justify-center text-sm">
+        <Link href="/dashboard/linkedin" className="btn btn-primary w-full justify-center text-sm">
           Set up the extension <ArrowRight className="h-4 w-4" />
         </Link>
       </div>

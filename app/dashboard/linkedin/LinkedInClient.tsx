@@ -1,233 +1,417 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import useSWR from "swr";
 import {
-  Linkedin, Search, BookOpen, Send, Heart, Wrench,
-  Eye, MousePointerClick, ShieldCheck, Lock, AlertTriangle, ArrowRight, type LucideIcon,
+  Linkedin, ChevronDown, Clock, Copy, Check, RefreshCw, Eye, EyeOff,
+  ExternalLink, ShieldCheck,
 } from "lucide-react";
-import { Badge, DashHeader, Panel, Skeleton } from "@/components/ui";
+import { api } from "@/lib/client";
+import { Banner, DashHeader, Input, Label, useConfirm } from "@/components/ui";
 import { FindLeadsPanel } from "@/components/dashboard/FindLeadsPanel";
 import { SourcingView } from "@/components/dashboard/SourcingView";
-import {
-  CATEGORIES, MECHANISM_LABEL, byCategory, liveCount,
-  type CatalogueJob, type JobCategory, type Mechanism,
-} from "@/lib/linkedin/catalogue";
-
-type Usage = { cap: number; used: number; remaining: number; connected: boolean };
-
-const CATEGORY_ICON: Record<JobCategory, LucideIcon> = {
-  "Find people": Search,
-  Research: BookOpen,
-  "Reach out": Send,
-  Engage: Heart,
-  "Maintain your network": Wrench,
-};
-
-const MECHANISM_ICON: Record<Mechanism, LucideIcon> = {
-  read: Eye,
-  confirm: MousePointerClick,
-  api: ShieldCheck,
-  vendor: Lock,
-};
 
 /**
- * LinkedIn — everything Followthroo can do there, in one place.
+ * LinkedIn — one screen, for the one thing that happens here.
  *
- * This screen has a sidebar row, which is an explicit exception to the rule in
- * CLAUDE.md about not growing the rail. The rule is about not giving every
- * feature equal billing; LinkedIn turned out to be a workspace of its own — 35
- * distinct jobs with their own inputs, limits and mechanisms. The previous
- * version hid the entrance in a dialog tab on Leads and failed the only test
- * that matters: the person who asked for it could not find it.
+ * This used to be three tabs, and the default one gave half its width to three
+ * paragraphs about session cookies. Behind the third tab were 32 job cards, 19
+ * of them greyed-out roadmap, under a heading that claimed 35. None of the cards
+ * did anything: they were a `<div>`. A roadmap rendered as product surface is
+ * still a roadmap, and it now lives in docs/phantombuster.md where it belongs.
  *
- * The organising idea is the *mechanism*, not the feature list. What a person
- * needs to know before running anything is whether it only reads, whether it
- * will ask them to click send, or whether it goes through LinkedIn's own API —
- * because that is what decides the risk to their account.
+ * What is left is what the screen is for: getting people out of LinkedIn and
+ * into the CRM, plus the state of the connection that makes it possible.
+ *
+ * Outreach is deliberately not here. Sending a connection request or a message
+ * is a step in a campaign, next to Email and WhatsApp, because a channel is a
+ * property of a step and not a place you visit. The line at the bottom of this
+ * screen exists to say so, once, to anyone who came looking.
  */
-export default function LinkedInClient() {
-  const { data } = useSWR<{ usage: Usage }>("/api/linkedin/scrape");
-  const [tab, setTab] = useState<"start" | "activity" | "catalogue">("start");
 
-  const usage = data?.usage;
-  const live = liveCount();
+type Usage = { cap: number; used: number; remaining: number; connected: boolean };
+type AccountState = "disconnected" | "expiring" | "expired" | "connected";
+type Connect = {
+  extToken: string;
+  lastSeenAt: string | null;
+  dailyInviteCap: number;
+  minDelaySec: number;
+  maxDelaySec: number;
+  account: {
+    state: AccountState;
+    configured: boolean;
+    memberName: string | null;
+    pictureUrl: string | null;
+    email: string | null;
+    expiresAt: string | null;
+    canPost: boolean;
+  };
+  queue: { pending: number; sentToday: number; failedToday: number };
+};
+
+const appOrigin = typeof window !== "undefined" ? window.location.origin : "https://app.followthroo.com";
+
+const recentlySeen = (iso: string | null) => !!iso && Date.now() - new Date(iso).getTime() < 15 * 60 * 1000;
+const daysLeft = (iso: string | null) => (iso ? Math.floor((new Date(iso).getTime() - Date.now()) / 86_400_000) : null);
+
+/** LinkedIn's own cancellations are choices, not faults. */
+const OAUTH_ERRORS: Record<string, string> = {
+  user_cancelled_login: "You closed LinkedIn's sign-in before finishing. Nothing was connected.",
+  user_cancelled_authorize: "You declined the permissions, so nothing was connected.",
+  state_mismatch: "That connection link expired. Please try again.",
+  could_not_read_profile: "LinkedIn accepted the login but wouldn't return your profile. Try again.",
+};
+const SCOPE_ERRORS = new Set(["invalid_scope_error", "unauthorized_scope_error", "invalid_scope"]);
+
+export default function LinkedInClient() {
+  const { data: scrape } = useSWR<{ usage: Usage }>("/api/linkedin/scrape");
+  const { data, mutate, isLoading } = useSWR<Connect>("/api/linkedin/connect");
+  const [msg, setMsg] = useState<{ kind: "error" | "success" | "info"; text: string } | null>(null);
+  const [scopeError, setScopeError] = useState(false);
+  const confirm = useConfirm();
+
+  const usage = scrape?.usage;
+  const acct = data?.account;
+  const helperRunning = data ? recentlySeen(data.lastSeenAt) : false;
+  const expiry = daysLeft(acct?.expiresAt ?? null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const connected = params.get("connected");
+    const error = params.get("error");
+    if (!connected && !error) return;
+    if (connected) {
+      setMsg({ kind: "success", text: connected === "1" ? "LinkedIn connected." : `Connected as ${connected}.` });
+    } else if (error && SCOPE_ERRORS.has(error)) {
+      setScopeError(true);
+    } else if (error) {
+      const known = OAUTH_ERRORS[error];
+      setMsg({ kind: known ? "info" : "error", text: known ?? `Could not connect LinkedIn (${error}).` });
+    }
+    window.history.replaceState({}, "", window.location.pathname);
+    mutate();
+  }, [mutate]);
+
+  async function disconnect() {
+    const ok = await confirm({
+      title: "Disconnect your LinkedIn account?",
+      body: "We'll delete the stored tokens. Campaign steps that use LinkedIn will queue up until you reconnect. Your contacts are unaffected.",
+      confirmLabel: "Disconnect",
+      tone: "danger",
+    });
+    if (!ok) return;
+    await api("/api/linkedin/connect", { body: { action: "disconnect" } });
+    setMsg({ kind: "info", text: "LinkedIn disconnected." });
+    mutate();
+  }
 
   return (
     <>
       <DashHeader
         title="LinkedIn"
-        subtitle={`${live} of 35 jobs live. Everything runs in your own browser — nothing of yours is stored on our servers.`}
-        action={
-          usage &&
-          (usage.connected ? (
-            <div className="text-right">
-              <Badge tone="success">Extension connected</Badge>
-              <p className="mt-1 font-mono text-[11px] text-ink-faint">
-                {usage.remaining.toLocaleString()} / {usage.cap.toLocaleString()} rows left today
+        subtitle="Bring people into your CRM from LinkedIn. Sending happens in campaigns."
+      />
+
+      <div className="mx-auto max-w-3xl space-y-8 p-8">
+        {msg && <Banner kind={msg.kind}>{msg.text}</Banner>}
+        {scopeError && <ScopeErrorBanner />}
+
+        {/* ---- The one thing this screen is for ---- */}
+        <section>
+          <h2 className="font-display text-lg font-extrabold">Bring people in</h2>
+          <p className="mt-1 text-sm text-ink-soft">
+            Paste any LinkedIn page. We work out what it is — you never pick a tool.
+          </p>
+          <div className="mt-4">
+            <FindLeadsPanel onQueued={() => mutate()} />
+          </div>
+          <p className="mt-3 text-xs text-ink-faint">
+            A people search, everyone at a company, who reacted to a post, a group, an event, or your
+            own connections.
+          </p>
+        </section>
+
+        <section>
+          <div className="mb-3 flex items-baseline justify-between">
+            <h2 className="font-display text-base font-bold">Recent</h2>
+            {usage && (
+              <span className="font-mono text-[11px] text-ink-faint">
+                {usage.remaining.toLocaleString()} of {usage.cap.toLocaleString()} rows left today
+              </span>
+            )}
+          </div>
+          <SourcingView />
+        </section>
+
+        {/* ---- The connection that makes it work ---- */}
+        <section className="border-t border-line pt-6">
+          <h2 className="font-display text-base font-bold">Your LinkedIn</h2>
+
+          {isLoading ? (
+            <div className="mt-4 h-16 animate-pulse rounded-xl bg-tint" />
+          ) : !acct?.configured ? (
+            <Banner kind="error" className="mt-4">
+              LinkedIn sign-in isn&apos;t configured on this deployment. Set <code>LINKEDIN_CLIENT_ID</code> and{" "}
+              <code>LINKEDIN_CLIENT_SECRET</code>, and register <code>{appOrigin}/api/linkedin/oauth/callback</code> in
+              the LinkedIn Developer Portal.
+            </Banner>
+          ) : acct.state === "disconnected" ? (
+            <div className="mt-4 rounded-2xl border border-line bg-tint/30 p-5">
+              <p className="text-sm text-ink-soft">
+                Connect your account so we know who you are, and so campaigns can post to your feed.
+              </p>
+              <a href="/api/linkedin/oauth/start" className="btn btn-primary mt-4 !py-2.5 !text-sm">
+                <Linkedin className="h-4 w-4" /> Connect LinkedIn
+              </a>
+              <p className="mt-3 text-xs text-ink-faint">
+                Opens LinkedIn&apos;s own consent screen. You sign in on linkedin.com — we never see your password.
               </p>
             </div>
           ) : (
-            <Link href="/dashboard/settings/linkedin" className="btn btn-primary !py-2 !text-sm">
-              Connect the extension <ArrowRight className="h-4 w-4" />
-            </Link>
-          ))
-        }
-      />
-
-      <div className="space-y-6 p-8">
-        {usage && !usage.connected && (
-          <div className="flex gap-3 rounded-xl border border-warning/30 bg-warning-soft p-4 text-sm text-warning-strong">
-            <AlertTriangle className="h-4 w-4 shrink-0 translate-y-0.5" />
-            <div>
-              <p className="font-medium">Nothing here works until the extension is connected.</p>
-              <p className="mt-1 text-xs">
-                It runs inside your own logged-in LinkedIn tab. That is the whole design — we never
-                hold your password or your session, so there is nothing of yours for us to lose.
-              </p>
-            </div>
-          </div>
-        )}
-
-        <div className="flex gap-1 rounded-xl border border-line p-1">
-          {([
-            ["start", "Get people"],
-            ["activity", "Activity"],
-            ["catalogue", "Everything it can do"],
-          ] as const).map(([k, label]) => (
-            <button
-              key={k}
-              onClick={() => setTab(k)}
-              className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition ${
-                tab === k ? "bg-ink text-ink-invert" : "text-ink-soft hover:bg-tint"
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {tab === "start" && (
-          <div className="grid gap-6 lg:grid-cols-[400px_1fr]">
-            <Panel className="h-fit">
-              <h2 className="flex items-center gap-2 font-display text-base font-bold">
-                <Linkedin className="h-4 w-4 text-accent" /> Get people from LinkedIn
-              </h2>
-              <p className="mt-1 text-xs text-ink-soft">
-                Paste any LinkedIn page. We work out what it is — you do not pick a tool.
-              </p>
-              <FindLeadsPanel onQueued={() => setTab("activity")} />
-            </Panel>
-
-            <Panel className="h-fit">
-              <h2 className="font-display text-base font-bold">How this stays safe</h2>
-              <div className="mt-3 space-y-3 text-sm text-ink-soft">
-                <p>
-                  Every tool in the market for this asks you to hand over a LinkedIn session cookie,
-                  which then lets their servers browse as you. We do not, because the extension{" "}
-                  <em>is</em> your session — there is no credential to hand over, and none for us to
-                  leak.
-                </p>
-                <p>
-                  Reading is unlimited by us and capped by common sense. Sending is never automatic:
-                  we fill the box and stop, and a real person clicks send. That distinction is what
-                  keeps accounts alive.
-                </p>
-                <p className="text-xs text-ink-faint">
-                  Daily ceilings follow the rates the market has settled on — 20 invites, 80
-                  messages, 80 profile loads. They exist to protect your account, not to ration you.
-                </p>
+            <div className="mt-4 flex items-center gap-3 rounded-2xl border border-line bg-surface p-4">
+              {acct.pictureUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={acct.pictureUrl} alt="" className="h-10 w-10 rounded-full object-cover" />
+              ) : (
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-[#0A66C2] font-display text-sm font-bold text-white">
+                  {(acct.memberName ?? "?").slice(0, 1).toUpperCase()}
+                </span>
+              )}
+              <div className="min-w-0 flex-1">
+                <div className="truncate font-display text-sm font-bold">{acct.memberName ?? "LinkedIn member"}</div>
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-ink-soft">
+                  <span className="inline-flex items-center gap-1">
+                    <ShieldCheck className="h-3 w-3" />
+                    {acct.canPost ? "Can post to your feed" : "Identity only"}
+                  </span>
+                  {expiry !== null && (
+                    <span className={expiry <= 7 ? "text-warning" : ""}>
+                      {expiry < 0 ? "Expired" : `Renews in ${expiry} day${expiry === 1 ? "" : "s"}`}
+                    </span>
+                  )}
+                </div>
               </div>
-            </Panel>
-          </div>
-        )}
+              {(acct.state === "expiring" || acct.state === "expired") && (
+                <a href="/api/linkedin/oauth/start" className="btn btn-primary !py-1.5 !text-xs">
+                  <RefreshCw className="h-3.5 w-3.5" /> Reconnect
+                </a>
+              )}
+              <button onClick={disconnect} className="btn btn-ghost !py-1.5 !text-xs">Disconnect</button>
+            </div>
+          )}
 
-        {tab === "activity" && <SourcingView />}
+          {/* Reading LinkedIn pages needs the browser helper, which is a
+              different thing from the account and only matters when it is not
+              running — so it stays folded away until it does. */}
+          <BrowserHelper data={data} running={helperRunning} onChange={mutate} setMsg={setMsg} />
+          <Limits data={data} onSaved={mutate} setMsg={setMsg} />
+        </section>
 
-        {tab === "catalogue" && <Catalogue />}
+        <p className="border-t border-line pt-6 text-sm text-ink-soft">
+          Sending connection requests and messages?{" "}
+          <Link href="/dashboard/campaigns" className="font-medium text-ink underline">
+            Those are campaign steps
+          </Link>
+          , alongside email and WhatsApp — so one sequence can use all three.
+        </p>
       </div>
     </>
   );
 }
 
-/**
- * The full 35, grouped by what the person is trying to do rather than by the
- * tool's name — and honest about which are live, which are next, and which are
- * waiting on something outside our control.
- */
-function Catalogue() {
+/** The operator-facing fix for the one error that stops connecting entirely. */
+function ScopeErrorBanner() {
   return (
-    <div className="space-y-6">
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        {(Object.keys(MECHANISM_LABEL) as Mechanism[]).map((m) => {
-          const Icon = MECHANISM_ICON[m];
-          return (
-            <div key={m} className="rounded-xl border border-line p-3">
-              <div className="flex items-center gap-2 text-sm font-medium">
-                <Icon className="h-4 w-4 text-ink-soft" /> {MECHANISM_LABEL[m].label}
-              </div>
-              <p className="mt-1 text-xs text-ink-soft">{MECHANISM_LABEL[m].detail}</p>
-            </div>
-          );
-        })}
-      </div>
-
-      {CATEGORIES.map((category) => {
-        const Icon = CATEGORY_ICON[category];
-        const jobs = byCategory(category);
-        return (
-          <section key={category}>
-            <h2 className="mb-3 flex items-center gap-2 font-display text-base font-bold">
-              <Icon className="h-4 w-4 text-ink-soft" /> {category}
-              <span className="font-sans text-xs font-normal text-ink-faint">
-                {jobs.filter((j) => j.status === "live").length} of {jobs.length} live
-              </span>
-            </h2>
-            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-              {jobs.map((job) => (
-                <JobCard key={job.key} job={job} />
-              ))}
-            </div>
-          </section>
-        );
-      })}
-    </div>
-  );
-}
-
-function JobCard({ job }: { job: CatalogueJob }) {
-  const Icon = MECHANISM_ICON[job.mechanism];
-  const dim = job.status !== "live";
-  return (
-    <div className={`rounded-xl border border-line p-3.5 ${dim ? "bg-tint/30" : "bg-surface"}`}>
-      <div className="flex items-start justify-between gap-2">
-        <h3 className={`text-sm font-semibold ${dim ? "text-ink-soft" : ""}`}>{job.name}</h3>
-        {job.status === "live" ? (
-          <Badge tone="success">Live</Badge>
-        ) : job.status === "planned" ? (
-          <Badge tone="neutral">Next</Badge>
-        ) : (
-          <Badge tone="warning">Blocked</Badge>
-        )}
-      </div>
-
-      <p className="mt-1 text-xs text-ink-soft">{job.summary}</p>
-
-      <div className="mt-2.5 space-y-1 border-t border-line pt-2.5 text-[11px] text-ink-faint">
-        <p className="flex items-center gap-1.5">
-          <Icon className="h-3 w-3 shrink-0" /> {MECHANISM_LABEL[job.mechanism].label}
+    <Banner kind="error">
+      <div className="space-y-2">
+        <p className="font-semibold">LinkedIn refused the permissions this app asked for.</p>
+        <p>
+          LinkedIn fails the whole consent when an app requests a permission it hasn&apos;t been granted, rather than
+          skipping that one. In the{" "}
+          <a
+            href="https://www.linkedin.com/developers/apps"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1 underline"
+          >
+            Developer Portal <ExternalLink className="h-3 w-3" />
+          </a>{" "}
+          open your app → <b>Products</b> and add <b>Sign In with LinkedIn using OpenID Connect</b> and{" "}
+          <b>Share on LinkedIn</b>. Both are self-serve once the app is linked to a LinkedIn Page you can verify.
         </p>
-        <p>Needs: {job.input}</p>
-        {job.limit && <p>Limit: {job.limit}</p>}
-        {job.requiresAdmin && <p>You must be an admin of that page.</p>}
       </div>
-
-      {/* Say what it is waiting on. "Coming soon" with no reason is how a
-          roadmap becomes noise. */}
-      {(job.blockedReason || job.note) && (
-        <p className="mt-2 rounded-lg bg-tint px-2.5 py-1.5 text-[11px] text-ink-soft">{job.blockedReason ?? job.note}</p>
-      )}
-    </div>
+    </Banner>
   );
 }
+
+function Disclosure({
+  title,
+  summary,
+  children,
+  tone,
+}: {
+  title: string;
+  summary: string;
+  children: React.ReactNode;
+  tone?: "warning";
+}) {
+  return (
+    <details className="group mt-3 rounded-xl border border-line bg-surface">
+      <summary className="flex cursor-pointer list-none items-center gap-3 p-4">
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-medium">{title}</div>
+          <div className={`mt-0.5 text-xs ${tone === "warning" ? "text-warning" : "text-ink-soft"}`}>{summary}</div>
+        </div>
+        <ChevronDown className="h-4 w-4 shrink-0 text-ink-soft transition group-open:rotate-180" />
+      </summary>
+      <div className="border-t border-line p-4">{children}</div>
+    </details>
+  );
+}
+
+function BrowserHelper({
+  data,
+  running,
+  onChange,
+  setMsg,
+}: {
+  data?: Connect;
+  running: boolean;
+  onChange: () => void;
+  setMsg: (m: { kind: "error" | "success" | "info"; text: string }) => void;
+}) {
+  const [show, setShow] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const confirm = useConfirm();
+
+  async function rotate() {
+    const ok = await confirm({
+      title: "Rotate the pairing token?",
+      body: "The current token stops working immediately. Paste the new one into the extension before it can read again.",
+      confirmLabel: "Rotate",
+      tone: "danger",
+    });
+    if (!ok) return;
+    await api("/api/linkedin/connect", { body: { action: "rotate" } });
+    setMsg({ kind: "success", text: "Token rotated. Paste the new one into the extension." });
+    onChange();
+  }
+
+  return (
+    <Disclosure
+      title="Browser helper"
+      summary={running ? "Running — reading pages in your own tab" : "Not running. Reading LinkedIn pages needs it."}
+      tone={running ? undefined : "warning"}
+    >
+      <p className="text-sm text-ink-soft">
+        LinkedIn&apos;s API cannot read search results, so reading happens in your own logged-in tab through a small
+        Chrome extension. Nothing about your login reaches us.
+      </p>
+
+      <div className="mt-4">
+        <Label>Pairing token</Label>
+        <div className="mt-1.5 flex items-center gap-2">
+          <div className="relative flex-1">
+            <Input readOnly value={show ? data?.extToken ?? "" : "•".repeat(28)} className="!pr-10 font-mono" />
+            <button
+              onClick={() => setShow((v) => !v)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-ink-soft hover:text-ink"
+              aria-label="Toggle token visibility"
+            >
+              {show ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </button>
+          </div>
+          <button
+            onClick={() => {
+              if (!data) return;
+              navigator.clipboard.writeText(data.extToken);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 1500);
+            }}
+            className="btn btn-ghost !py-2 !text-sm"
+          >
+            {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+            {copied ? "Copied" : "Copy"}
+          </button>
+          <button onClick={rotate} className="btn btn-ghost !py-2 !text-sm">
+            <RefreshCw className="h-4 w-4" /> Rotate
+          </button>
+        </div>
+      </div>
+
+      <ol className="mt-4 space-y-1.5 text-sm text-ink-soft">
+        <li><b className="text-ink">1.</b> Install <b>Followthroo for LinkedIn</b> from the Chrome Web Store.</li>
+        <li><b className="text-ink">2.</b> Click its icon → Settings → App URL <code>{appOrigin}</code>, paste the token, Connect.</li>
+        <li><b className="text-ink">3.</b> Stay signed in to LinkedIn in the same browser.</li>
+      </ol>
+      <p className="mt-3 text-xs text-ink-faint">
+        <Link href="/extension-privacy" className="underline">What it can access</Link>
+      </p>
+    </Disclosure>
+  );
+}
+
+function Limits({
+  data,
+  onSaved,
+  setMsg,
+}: {
+  data?: Connect;
+  onSaved: () => void;
+  setMsg: (m: { kind: "error" | "success" | "info"; text: string }) => void;
+}) {
+  const [cap, setCap] = useState<number | "">("");
+  const [minD, setMinD] = useState<number | "">("");
+  const [maxD, setMaxD] = useState<number | "">("");
+
+  async function save() {
+    const body: Record<string, number> = {};
+    if (cap !== "") body.dailyInviteCap = Number(cap);
+    if (minD !== "") body.minDelaySec = Number(minD);
+    if (maxD !== "") body.maxDelaySec = Number(maxD);
+    if (!Object.keys(body).length) return;
+    await api("/api/linkedin/connect", { body: { action: "update", ...body } });
+    setMsg({ kind: "success", text: "Limits saved." });
+    setCap(""); setMinD(""); setMaxD("");
+    onSaved();
+  }
+
+  return (
+    <Disclosure
+      title="Limits"
+      summary={`${data?.dailyInviteCap ?? 20} actions a day, ${data?.minDelaySec ?? 45}–${data?.maxDelaySec ?? 120}s apart`}
+    >
+      <p className="text-sm text-ink-soft">
+        Set once and rarely touched. These exist to keep your account in good standing, not to ration you — LinkedIn
+        restricts accounts that behave like software.
+      </p>
+      <div className="mt-4 grid gap-4 sm:grid-cols-3">
+        <div>
+          <Label>Actions per day</Label>
+          <Input type="number" min={1} max={50} placeholder={String(data?.dailyInviteCap ?? 20)} value={cap} onChange={(e) => setCap(e.target.value === "" ? "" : Number(e.target.value))} />
+        </div>
+        <div>
+          <Label>Min gap (sec)</Label>
+          <Input type="number" min={10} placeholder={String(data?.minDelaySec ?? 45)} value={minD} onChange={(e) => setMinD(e.target.value === "" ? "" : Number(e.target.value))} />
+        </div>
+        <div>
+          <Label>Max gap (sec)</Label>
+          <Input type="number" min={15} placeholder={String(data?.maxDelaySec ?? 120)} value={maxD} onChange={(e) => setMaxD(e.target.value === "" ? "" : Number(e.target.value))} />
+        </div>
+      </div>
+      <div className="mt-3 flex items-center gap-2 text-xs text-ink-soft">
+        <Clock className="h-3.5 w-3.5" /> A random pause inside that range is taken between actions.
+      </div>
+      <button onClick={save} className="btn btn-primary mt-4 !py-2 !text-sm">Save limits</button>
+      {data && (data.queue.pending > 0 || data.queue.sentToday > 0 || data.queue.failedToday > 0) && (
+        <div className="mt-4 flex gap-4 border-t border-line pt-3 text-xs text-ink-soft">
+          <span><b className="text-ink">{data.queue.pending}</b> queued</span>
+          <span><b className="text-ink">{data.queue.sentToday}</b> sent today</span>
+          {data.queue.failedToday > 0 && <span className="text-danger"><b>{data.queue.failedToday}</b> failed</span>}
+        </div>
+      )}
+    </Disclosure>
+  );
+}
+
