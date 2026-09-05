@@ -4,7 +4,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { ok, fail } from "@/lib/http";
 import { requireOrg, requireRole } from "@/lib/tenant";
-import { CampaignSequence } from "@/lib/campaign-engine";
+import { CampaignSequence, validateSequence } from "@/lib/campaign-engine";
 import { CAMPAIGN_INCLUDE } from "@/lib/queries";
 
 export const runtime = "nodejs";
@@ -52,8 +52,12 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   const data: Prisma.CampaignUpdateInput = {};
   if (parsed.data.name !== undefined) data.name = parsed.data.name;
   if (parsed.data.status !== undefined) data.status = parsed.data.status;
-  if (parsed.data.sequence !== undefined)
+  if (parsed.data.sequence !== undefined) {
+    // Same guard as create: the builder is not the only writer.
+    const valid = await validateSequence(ctx.orgId, parsed.data.sequence);
+    if (!valid.ok) return fail(valid.message);
     data.sequence = parsed.data.sequence as unknown as Prisma.InputJsonValue;
+  }
   if ("sendingAccountId" in parsed.data) {
     // Scope the connect to this org: `connect: { id }` alone would happily attach
     // another tenant's mailbox and send their customers' mail through it.

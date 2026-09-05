@@ -4,7 +4,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { ok, fail } from "@/lib/http";
 import { requireOrg, requireRole } from "@/lib/tenant";
-import { CampaignSequence } from "@/lib/campaign-engine";
+import { CampaignSequence, validateSequence } from "@/lib/campaign-engine";
 import { enrollLeads } from "@/lib/enroll";
 import { CAMPAIGN_INCLUDE } from "@/lib/queries";
 
@@ -47,6 +47,12 @@ export async function POST(req: NextRequest) {
   if (parsed.data.sendingAccountId && !(await ownsSendingAccount(ctx.orgId, parsed.data.sendingAccountId))) {
     return fail("Sending account not found", 404);
   }
+  // Beyond Zod's shape check: a sequence can be well-formed and still impossible
+  // to run — a connection note that will exceed LinkedIn's 300 characters once
+  // personalised, or a template from another workspace.
+  const valid = await validateSequence(ctx.orgId, parsed.data.sequence);
+  if (!valid.ok) return fail(valid.message);
+
   const campaign = await prisma.campaign.create({
     data: {
       organizationId: ctx.orgId,

@@ -16,6 +16,7 @@ import { jitterMs } from "./ratelimit";
 import { enqueueJob } from "./queue";
 import { processSendJob } from "./job-processor";
 import type { Enrollment } from "@prisma/client";
+import { INVITE_NOTE_MAX, worstCaseNoteLength } from "./linkedin/note";
 
 const CHANNELS = ["email", "linkedin", "whatsapp", "social"] as const;
 
@@ -107,6 +108,71 @@ export type CampaignSequence = z.infer<typeof CampaignSequence>;
 export interface NormalizedGraph {
   nodes: Record<string, CampaignNode>;
   startNodeId: string | null;
+}
+
+/**
+ * Refuse a sequence that cannot work, at the moment it is saved.
+ *
+ * This lives on the server rather than in the builder because the builder is not
+ * the only writer — the agent and any API client save campaigns through the same
+ * two routes, and a check that only runs in one client is not a check.
+ *
+ * It is deliberately about things that are knowable now. The exact rendered
+ * length of a note is not (a variable can be any length), so this uses the
+ * worst case and `lib/channels/linkedin.ts` still measures the real string at
+ * send time.
+ */
+export async function validateSequence(
+  organizationId: string,
+  raw: unknown,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const graph = normalizeSequence(raw);
+  const nodes = Object.values(graph.nodes);
+
+  // Step numbers are what the person sees in the builder, so errors name those
+  // rather than internal node ids.
+  const numberOf = new Map(nodes.map((n, i) => [n.id, i + 1]));
+
+  for (const node of nodes) {
+    if (node.type !== "send") continue;
+    if (node.linkedinAction && node.channel !== "linkedin") {
+      return {
+        ok: false,
+        message: `Step ${numberOf.get(node.id)} is not a LinkedIn step, so it cannot have a LinkedIn action.`,
+      };
+    }
+  }
+
+  const inviteSteps = nodes.filter(
+    (n) => n.type === "send" && n.channel === "linkedin" && linkedinActionFor(n) === "invite" && n.templateId,
+  );
+  if (!inviteSteps.length) return { ok: true };
+
+  // One query, scoped to the org — an unscoped `id: { in: [...] }` here would
+  // read another tenant's templates.
+  const ids = inviteSteps.map((n) => (n.type === "send" ? n.templateId! : "")).filter(Boolean);
+  const templates = await prisma.template.findMany({
+    where: { id: { in: ids }, organizationId },
+    select: { id: true, body: true },
+  });
+  const byId = new Map(templates.map((t) => [t.id, t.body ?? ""]));
+
+  for (const node of inviteSteps) {
+    if (node.type !== "send") continue;
+    const body = byId.get(node.templateId!);
+    if (body === undefined) {
+      return { ok: false, message: `Step ${numberOf.get(node.id)} uses a template that no longer exists.` };
+    }
+    const length = worstCaseNoteLength(body);
+    if (length > INVITE_NOTE_MAX) {
+      return {
+        ok: false,
+        message: `Step ${numberOf.get(node.id)}'s connection note reaches about ${length} characters once personalised, and LinkedIn allows ${INVITE_NOTE_MAX}. Shorten the template.`,
+      };
+    }
+  }
+
+  return { ok: true };
 }
 
 /** Convert a stored sequence (graph OR legacy flat array) into a node map. */

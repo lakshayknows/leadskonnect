@@ -9,6 +9,19 @@ export const metadata = { title: "Changelog — Followthroo" };
  */
 const ENTRIES = [
   {
+    version: "0.10.0",
+    date: "Sep 2026",
+    items: [
+      "LinkedIn is now a step in a campaign. Pick “LinkedIn connection request” or “LinkedIn message” the same way you pick Email, put them in whatever order you want, and stop thinking about the browser extension",
+      "Which one you get is now decided by the step you built, not by a setting buried in the extension’s options page",
+      "Connection notes are checked against LinkedIn’s 300-character limit while you build the campaign, counting what your variables could grow to — not after it fails on the one lead with a long company name",
+      "Fixed: editing a campaign quietly unpinned any step that was pinned to a specific version of a template. Re-saving a campaign no longer changes what it sends",
+      "Fixed: opening a campaign that had a wait or end step and saving it turned those steps into messages. They are now left exactly as they are",
+      "Fixed: per-campaign LinkedIn limits never applied to campaign steps at all, because the step never recorded which campaign it came from. If you have restricted the extension to certain campaigns, that setting now works — and takes effect",
+      "Fixed: every LinkedIn step was counted twice in reports, once when queued and again when you sent it",
+    ],
+  },
+  {
     version: "0.9.9",
     date: "Sep 2026",
     items: [

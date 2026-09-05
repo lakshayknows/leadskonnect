@@ -21,7 +21,7 @@
  * without throwing.
  */
 import { prisma } from "../lib/db";
-import { linkedinActionFor, SendNode, normalizeSequence } from "../lib/campaign-engine";
+import { linkedinActionFor, SendNode, normalizeSequence, validateSequence } from "../lib/campaign-engine";
 import { linkedinChannel } from "../lib/channels/linkedin";
 import { claimActions } from "../lib/linkedin/queue";
 import { INVITE_NOTE_MAX, worstCaseNoteLength } from "../lib/linkedin/note";
@@ -152,6 +152,48 @@ async function main() {
       ok(dm.ok === true, "the same text is allowed as a direct message, which has no such limit");
     }
 
+    console.log("\n— the campaign-save guard —");
+    {
+      const shortTpl = await prisma.template.create({
+        data: { organizationId: org.id, name: `short-${stamp}`, channel: "linkedin", body: "Hi {{firstName}}, connecting." },
+      });
+      const longTpl = await prisma.template.create({
+        data: { organizationId: org.id, name: `long-${stamp}`, channel: "linkedin", body: "x".repeat(290) + " {{company}}" },
+      });
+
+      const inviteWith = (templateId: string) => ({
+        nodes: [{ id: "n0", type: "send", channel: "linkedin", linkedinAction: "invite", templateId, waitDays: 0 }],
+      });
+
+      let v = await validateSequence(org.id, inviteWith(shortTpl.id));
+      ok(v.ok === true, "a note that fits is accepted");
+
+      v = await validateSequence(org.id, inviteWith(longTpl.id));
+      ok(v.ok === false, "a note that will not fit once personalised is refused at save");
+      ok(v.ok === false && /Step 1/.test(v.message), "…and names the step, not an internal node id");
+
+      v = await validateSequence(org.id, {
+        nodes: [{ id: "n0", type: "send", channel: "linkedin", linkedinAction: "message", templateId: longTpl.id, waitDays: 0 }],
+      });
+      ok(v.ok === true, "the same template is fine on a message step");
+
+      v = await validateSequence(org.id, {
+        nodes: [{ id: "n0", type: "send", channel: "email", linkedinAction: "invite", waitDays: 0 }],
+      });
+      ok(v.ok === false, "a LinkedIn action on an email step is refused");
+
+      // The template lookup is org-scoped; an unscoped `id: { in: [...] }` here
+      // would read another tenant's wording.
+      const other = await prisma.organization.create({ data: { name: `other-${stamp}`, slug: `other-${stamp}` } });
+      const foreign = await prisma.template.create({
+        data: { organizationId: other.id, name: `foreign-${stamp}`, channel: "linkedin", body: "hello" },
+      });
+      v = await validateSequence(org.id, inviteWith(foreign.id));
+      ok(v.ok === false, "a template belonging to another workspace is refused, not read");
+      await prisma.template.deleteMany({ where: { organizationId: other.id } });
+      await prisma.organization.delete({ where: { id: other.id } }).catch(() => {});
+    }
+
     console.log("\n— what the extension is finally told —");
     {
       // Re-assigned after every update: claimActions reads mode/settings off the
@@ -221,6 +263,7 @@ async function main() {
     await prisma.linkedInAccount.deleteMany({ where: { organizationId: org.id } });
     await prisma.message.deleteMany({ where: { organizationId: org.id } });
     await prisma.activityLog.deleteMany({ where: { organizationId: org.id } });
+    await prisma.template.deleteMany({ where: { organizationId: org.id } });
     await prisma.campaign.deleteMany({ where: { organizationId: org.id } });
     await prisma.lead.deleteMany({ where: { organizationId: org.id } });
     await prisma.organization.delete({ where: { id: org.id } }).catch(() => {});
