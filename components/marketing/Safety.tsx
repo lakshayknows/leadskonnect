@@ -47,7 +47,7 @@ export default function Safety() {
 
           <div className="mt-10 grid gap-4 sm:grid-cols-3">
             {GUARDRAILS.map((g) => (
-              <div key={g.channel} className="lk-guard rounded-2xl bg-white p-6 shadow-sm">
+              <div key={g.channel} className="lk-guard rounded-2xl border border-line bg-surface p-6 shadow-sm">
                 <div className="flex items-center gap-2">
                   <span className="h-2.5 w-2.5 rounded-full" style={{ background: g.color }} />
                   <span className="text-sm font-semibold">{g.channel}</span>

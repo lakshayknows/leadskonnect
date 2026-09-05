@@ -9,6 +9,18 @@ export const metadata = { title: "Changelog — Followthroo" };
  */
 const ENTRIES = [
   {
+    version: "0.10.2",
+    date: "Sep 2026",
+    items: [
+      "Dark mode works on the public site. It never did: the theme switch only existed inside the app, so a visitor who prefers dark got a dark page with white panels sitting on it and no way to change either",
+      "There is a theme switch in the site footer now — light, dark, or follow your system",
+      "Fixed roughly thirty places that were painted white regardless of theme, including the sign-in and sign-up forms, the pricing table, and the contact form",
+      "Fixed the ones that were worse than white-on-dark: several dark bands inverted to near-white while their text stayed white, so whole sections were white on white",
+      "Fixed the illustration in the hero — the lead avatar’s initials had vanished, and the logo’s hollow circle had gone solid",
+      "Checked every public page in both themes rather than assuming: sixteen pages, no remaining contrast failures",
+    ],
+  },
+  {
     version: "0.10.1",
     date: "Sep 2026",
     items: [

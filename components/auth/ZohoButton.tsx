@@ -47,7 +47,7 @@ export function ZohoButton({
         type="button"
         onClick={go}
         disabled={busy}
-        className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-line bg-white px-3.5 py-2.5 text-sm font-medium transition hover:bg-tint disabled:opacity-50"
+        className="flex w-full items-center justify-center gap-2.5 rounded-xl border border-line bg-surface px-3.5 py-2.5 text-sm font-medium transition hover:bg-tint disabled:opacity-50"
       >
         {/* Zoho's four-bar mark, simplified. */}
         <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden>

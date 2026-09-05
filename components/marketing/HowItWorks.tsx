@@ -54,7 +54,7 @@ export default function HowItWorks() {
           <div className="flex flex-col gap-10">
             {STEPS.map((s) => (
               <div key={s.n} className="lk-step relative flex gap-5 sm:gap-7">
-                <div className="relative z-10 flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-line bg-white shadow-sm">
+                <div className="relative z-10 flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-line bg-surface shadow-sm">
                   <s.icon className="h-6 w-6 text-brand" />
                 </div>
                 <div className="pt-1.5">
