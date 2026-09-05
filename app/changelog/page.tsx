@@ -9,6 +9,17 @@ export const metadata = { title: "Changelog — Followthroo" };
  */
 const ENTRIES = [
   {
+    version: "0.9.9",
+    date: "Sep 2026",
+    items: [
+      "Fixed: picking people on a LinkedIn search added nobody. The bar counted the rows correctly but could not read a single one of them, because LinkedIn renamed the markup its names live in",
+      "Company, job title and location were coming through empty for the same reason — so anything using {{company}} in a template was sending a blank",
+      "We now read a person by the shape of their row rather than by LinkedIn’s class names, and connection degree is picked up properly",
+      "The count on the bar is now the number we can actually add, not the number we can see. A button that says “Add 10” adds 10",
+      "And if we ever can’t read a page again, it says “found 10, read none” instead of failing after you click",
+    ],
+  },
+  {
     version: "0.9.8",
     date: "Sep 2026",
     items: [

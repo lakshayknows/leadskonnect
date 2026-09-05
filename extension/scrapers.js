@@ -115,6 +115,28 @@ function structuralCards(doc) {
   return best;
 }
 
+/**
+ * A row's text lines, in reading order, minus the ones that are not content.
+ *
+ * The subtitle classes died with the title classes, so a row could come back
+ * with a correct name and an empty company — quietly emptying {{company}} in
+ * every template that used it. LinkedIn rows read name, then headline, then
+ * location, so when the labelled selectors miss, fall back to that order.
+ */
+function leafBlocks(card, name) {
+  const out = [];
+  for (const el of card.querySelectorAll("div, p, span, h3")) {
+    if (el.querySelector("div, p, span, a, button")) continue; // leaves only
+    if (el.closest("button")) continue;
+    const t = (el.textContent || "").trim().replace(/\s+/g, " ");
+    if (t.length < 3) continue;
+    if (t === name || t.startsWith(name)) continue; // the name, and its a11y copy
+    if (/^[·•|\s]*(1st|2nd|3rd)\+?[·•|\s]*$/i.test(t)) continue;
+    if (!out.includes(t)) out.push(t);
+  }
+  return out;
+}
+
 /** People search, company employees, group members, event guests all render as person cards. */
 function readPersonCards(doc) {
   let cards = pick(doc, CARD_SELECTORS);
@@ -135,19 +157,31 @@ function readPersonCards(doc) {
       // Last resort: the profile link's own text. A row whose name we cannot
       // read is not a row we can use, so this is the floor rather than a guess.
       text(card, ['a[href*="/in/"] span[aria-hidden="true"]', 'a[href*="/in/"]']);
-    const { name, degree } = cleanName(raw);
+    const { name, degree: inlineDegree } = cleanName(raw);
     if (!name) continue;
-    const headline = text(card, [
-      ".entity-result__primary-subtitle",
-      ".artdeco-entity-lockup__subtitle",
-      ".t-14.t-black.t-normal",
-    ]);
+
+    // The degree lives in a sibling span in current markup rather than inside
+    // the name, and it decides what we can do with someone — only a 1st-degree
+    // connection can be messaged — so read the whole row if the name lacked it.
+    const cardText = (card.textContent || "").replace(/\s+/g, " ");
+    const degree = inlineDegree || (cardText.match(/\b(1st|2nd|3rd)\b/) || [])[1] || "";
+
+    const blocks = leafBlocks(card, name);
+    const headline =
+      text(card, [
+        ".entity-result__primary-subtitle",
+        ".artdeco-entity-lockup__subtitle",
+        ".t-14.t-black.t-normal",
+      ]) || blocks[0] || "";
     rows.push({
       profileUrl: url,
       fullName: name,
       ...splitName(name),
       headline,
-      location: text(card, [".entity-result__secondary-subtitle", ".artdeco-entity-lockup__caption"]),
+      location:
+        text(card, [".entity-result__secondary-subtitle", ".artdeco-entity-lockup__caption"]) ||
+        blocks[1] ||
+        "",
       // "Head of HR at Acme" → company is what follows " at ".
       company: (headline.split(/\s+at\s+/i)[1] || "").trim(),
       title: (headline.split(/\s+at\s+/i)[0] || headline).trim(),

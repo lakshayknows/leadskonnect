@@ -185,6 +185,37 @@
   }
 
   /**
+   * The rows we can actually read.
+   *
+   * Counting and extracting used to be different questions answered by different
+   * functions: paint() counted rowCards(), and only addAllOnPage() ever called
+   * rowData(). So the bar could promise "10 on this page" while all ten were
+   * unreadable, and nothing found out until somebody pressed the button. One
+   * function now answers both, so the number on screen is always a number we can
+   * deliver.
+   *
+   * Memoised for a tick because rowCards() is a fresh DOM walk with a
+   * first-match selector ladder and a max-by-count structural election — two
+   * calls in the same frame are not guaranteed to return the same elements, and
+   * paint() and decorate() must agree.
+   */
+  let readCache = null;
+  function readableRows() {
+    if (readCache) return readCache;
+    const cards = rowCards();
+    const pairs = [];
+    for (const card of cards) {
+      const data = rowData(card);
+      if (data) pairs.push({ card, data });
+    }
+    readCache = { found: cards.length, pairs };
+    // One frame: long enough for everything in this tick to see the same answer,
+    // short enough that rows streaming in on scroll are picked up.
+    setTimeout(() => { readCache = null; }, 0);
+    return readCache;
+  }
+
+  /**
    * What the page looks like to us, for when it looks like nothing.
    *
    * scrapers.js states the rule this file was missing: a selector miss and an
@@ -247,11 +278,47 @@
       ".entity-result__title-text a span",
       "span[dir='ltr'] span[aria-hidden='true']",
       ".artdeco-entity-lockup__title",
+      // Last resort: the profile link's own text. Three of the four selectors
+      // above are class names this file's own comment calls dead, which left one
+      // live path — and when the current markup stopped matching it, every row
+      // returned null while rowCards() still counted ten. scrapers.js has always
+      // had this line; content.js was a copy that dropped it.
+      'a[href*="/in/"] span[aria-hidden="true"]',
+      'a[href*="/in/"]',
     ]);
-    const degree = (raw.match(/\b(1st|2nd|3rd)\b/) || [])[1] || "";
     const fullName = raw.replace(/\b(1st|2nd|3rd)\b/g, "").replace(/[·•|]/g, " ").replace(/\s+/g, " ").trim();
     if (!fullName) return null;
-    const headline = grab([".entity-result__primary-subtitle", ".artdeco-entity-lockup__subtitle"]);
+
+    // Degree decides what we can even do with someone — you can only message a
+    // 1st-degree connection — so read it from the whole row, not just the name.
+    // Modern markup puts it in a sibling span, older markup inlines it.
+    const cardText = (card.textContent || "").replace(/\s+/g, " ");
+    const degree = (cardText.match(/\b(1st|2nd|3rd)\b/) || [])[1] || "";
+
+    /**
+     * Headline and location when the labelled classes are gone.
+     *
+     * The name selectors were not the only casualties — `entity-result__*` is
+     * dead for the subtitle rows too, which is why a row could come back with a
+     * correct name and an empty company, quietly emptying {{company}} in every
+     * template. LinkedIn's rows read top to bottom (name, headline, location),
+     * so fall back to that order: take the card's leaf text blocks, drop the
+     * ones that are the name, a degree marker, a screen-reader duplicate or a
+     * button, and the first two survivors are what we want.
+     */
+    const blocks = [];
+    for (const el of card.querySelectorAll("div, p, span, h3")) {
+      if (el.querySelector("div, p, span, a, button")) continue; // leaves only
+      if (el.closest("button")) continue;
+      const t = (el.textContent || "").trim().replace(/\s+/g, " ");
+      if (t.length < 3) continue;
+      if (t === fullName || t.startsWith(fullName)) continue; // name + a11y copy
+      if (/^[·•|\s]*(1st|2nd|3rd)\+?[·•|\s]*$/i.test(t)) continue;
+      if (!blocks.includes(t)) blocks.push(t);
+    }
+
+    const headline = grab([".entity-result__primary-subtitle", ".artdeco-entity-lockup__subtitle"]) || blocks[0] || "";
+    const location = grab([".entity-result__secondary-subtitle", ".artdeco-entity-lockup__caption"]) || blocks[1] || "";
     const parts = fullName.split(/\s+/);
     return {
       profileUrl,
@@ -259,7 +326,7 @@
       firstName: parts[0] || "",
       lastName: parts.slice(1).join(" "),
       headline,
-      location: grab([".entity-result__secondary-subtitle", ".artdeco-entity-lockup__caption"]),
+      location,
       company: (headline.split(/\s+at\s+/i)[1] || "").trim(),
       title: (headline.split(/\s+at\s+/i)[0] || headline).trim(),
       degree,
@@ -329,14 +396,17 @@
     const el = document.getElementById(BAR_ID);
     if (!el) return;
     const n = state.selected.size;
-    const total = rowCards().length;
+    const { found, pairs } = readableRows();
+    const total = pairs.length;
     const diag = el.querySelector('[data-ft="diag"]');
 
-    // Zero rows on a page full of profile links means we failed to read it, not
-    // that the search found nobody. Say so, and offer the evidence.
+    // Zero readable rows on a page full of profile links means we failed to read
+    // it, not that the search found nobody. Naming both numbers is the whole
+    // point: "0 of 10" says the rows are there and we are the problem.
     if (total === 0) {
-      el.querySelector('[data-ft="count"]').textContent =
-        "Can't read this page's layout — LinkedIn may have changed it.";
+      el.querySelector('[data-ft="count"]').textContent = found
+        ? `Found ${found} people but couldn't read them — LinkedIn may have changed its layout.`
+        : "Can't read this page's layout — LinkedIn may have changed it.";
       el.querySelector('[data-ft="all"]').hidden = true;
       el.querySelector('[data-ft="every"]').hidden = true;
       el.querySelector('[data-ft="add"]').hidden = true;
@@ -377,10 +447,25 @@
 
   /** A checkbox per row, positioned in the gutter so it never covers content. */
   function decorate() {
-    for (const card of rowCards()) {
+    const { pairs } = readableRows();
+    const live = new Set(pairs.map((p) => p.card));
+
+    // Drop checkboxes on rows we can no longer read. LinkedIn re-renders a row's
+    // internals while our appended node survives, so a stale checkbox can sit on
+    // a card whose name no longer extracts — tickable, and silently absent from
+    // whatever gets sent. Previously decorate() short-circuited on the presence
+    // of a checkbox before ever re-reading the row, so this went unnoticed.
+    for (const box of document.querySelectorAll(`.${CHECK_CLASS}`)) {
+      const card = box.closest(".ft-anchor");
+      if (!card || !live.has(card)) {
+        const stale = card && rowData(card);
+        if (stale) state.selected.delete(stale.profileUrl);
+        box.remove();
+      }
+    }
+
+    for (const { card, data } of pairs) {
       if (card.querySelector(`.${CHECK_CLASS}`)) continue;
-      const data = rowData(card);
-      if (!data) continue;
       card.classList.add("ft-anchor");
       const box = document.createElement("input");
       box.type = "checkbox";
@@ -398,14 +483,11 @@
   }
 
   function toggleAll() {
-    const cards = rowCards();
-    const all = state.selected.size >= cards.length && cards.length > 0;
+    const { pairs } = readableRows();
+    const all = state.selected.size >= pairs.length && pairs.length > 0;
     state.selected.clear();
     if (!all) {
-      for (const card of cards) {
-        const d = rowData(card);
-        if (d) state.selected.set(d.profileUrl, d);
-      }
+      for (const { data } of pairs) state.selected.set(data.profileUrl, data);
     }
     document.querySelectorAll(`.${CHECK_CLASS}`).forEach((b) => { b.checked = !all; });
     paint();
@@ -613,16 +695,24 @@
     el.style.top = `${Math.max(8, Math.min(window.innerHeight - 240, box.top))}px`;
     el.style.right = "52px";
 
-    const rows = rowCards();
+    const { found, pairs } = readableRows();
     const profile = currentProfile();
     const kind = pageKind();
 
     let bodyHtml;
     let action = null;
 
-    if (rows.length) {
-      bodyHtml = `<h4>${rows.length} people on this page</h4><p>Tick the ones you want, or take the lot.</p>`;
-      action = { label: `Add all ${rows.length}`, run: addAllOnPage };
+    if (pairs.length) {
+      bodyHtml = `<h4>${pairs.length} people on this page</h4><p>Tick the ones you want, or take the lot.</p>`;
+      action = { label: `Add all ${pairs.length}`, run: addAllOnPage };
+    } else if (found) {
+      // Rows are there; we just cannot read them. This is the case that used to
+      // render "Add all 10" and then refuse.
+      bodyHtml =
+        `<h4>Found ${found}, read none</h4>` +
+        `<p>The people are on the page but their layout has changed and we can't pull the names out.</p>` +
+        `<div class="ft-note">Nothing was skipped quietly — copy the diagnostics and send them to us and this is usually a one-line fix.</div>`;
+      action = { label: "Copy diagnostics", run: copyDiagnostics };
     } else if (profile) {
       bodyHtml = `<h4>${profile.fullName}</h4><p>${profile.headline || "Save this profile to Followthroo."}</p>`;
       action = { label: "Save this profile", run: saveCurrentProfile };
@@ -684,10 +774,15 @@
   }
 
   async function addAllOnPage() {
-    const rows = rowCards().map(rowData).filter(Boolean);
-    if (!rows.length) return panelMessage("Nothing readable on this page.", true);
-    panelMessage(`Adding ${rows.length}…`, false);
-    await postRows(rows, panelMessage);
+    const { found, pairs } = readableRows();
+    if (!pairs.length) {
+      return panelMessage(
+        found ? `Read 0 of ${found} rows — copy the diagnostics.` : "No people on this page.",
+        true,
+      );
+    }
+    panelMessage(`Adding ${pairs.length}…`, false);
+    await postRows(pairs.map((p) => p.data), panelMessage);
   }
 
   /* ---------------------------------------------------------------- */
