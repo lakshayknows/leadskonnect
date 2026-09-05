@@ -32,33 +32,102 @@
 
   /* ---------------------------------------------------------------- */
 
+  /**
+   * Take our colours from the page we landed on.
+   *
+   * LinkedIn's dark mode is an account setting, not a browser one, so
+   * `prefers-color-scheme` is the wrong question — a member can be in LinkedIn
+   * dark on a light OS. The reliable signal is what the page is actually
+   * painting, so read the body's background luminance and derive from that. It
+   * also means a third LinkedIn theme, or a change to the existing ones, needs
+   * no work here.
+   */
+  function applyTheme() {
+    const root = document.documentElement;
+
+    /**
+     * Luminance of an actually-painted background, or null.
+     *
+     * The alpha check is the whole point: an element with no background of its
+     * own computes to `rgba(0, 0, 0, 0)`, and read naively that is pure black.
+     * A transparent <body> is completely ordinary, so without this the bar goes
+     * dark on a perfectly white page.
+     */
+    const painted = (el) => {
+      if (!el) return null;
+      const m = /^rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?/.exec(getComputedStyle(el).backgroundColor || "");
+      if (!m) return null;
+      if (m[4] !== undefined && Number(m[4]) < 0.5) return null; // see-through
+      return 0.2126 * +m[1] + 0.7152 * +m[2] + 0.0722 * +m[3];
+    };
+
+    // body first, then <html>, then give up and assume light — a white bar that
+    // corrects to dark a moment later is less jarring than the reverse.
+    const lum = painted(document.body) ?? painted(root) ?? 255;
+    const dark = lum < 128;
+    if (root.dataset.ftDark === String(dark)) return;
+    root.dataset.ftDark = String(dark);
+
+    const set = (k, v) => root.style.setProperty(k, v);
+    set("--ft-surface", dark ? "#1b1f23" : "#ffffff");
+    set("--ft-raised", dark ? "#26292d" : "#ffffff");
+    set("--ft-ink", dark ? "#e8e8ea" : "#0a0a0a");
+    set("--ft-soft", dark ? "#9aa0a6" : "#5b5b66");
+    set("--ft-line", dark ? "rgba(255,255,255,.14)" : "#e3e3e6");
+    set("--ft-shadow", dark ? "rgba(0,0,0,.55)" : "rgba(10,10,10,.13)");
+    set("--ft-ok", dark ? "#4ade80" : "#0f7b52");
+    set("--ft-err", dark ? "#f87171" : "#b91c1c");
+    set("--ft-tint", dark ? "rgba(139,123,255,.16)" : "#f3f1fe");
+    // The accent is the one thing that does not move: it is the identity.
+    set("--ft-accent", ACCENT);
+    set("--ft-on-accent", "#ffffff");
+  }
+
   function styles() {
     if (document.getElementById("ft-style")) return;
     const el = document.createElement("style");
     el.id = "ft-style";
     el.textContent = `
-      #${BAR_ID}{position:sticky;top:56px;z-index:400;display:flex;align-items:center;gap:14px;
-        margin:0 0 12px;padding:10px 14px;border:1px solid #e5e5e5;border-radius:12px;
-        background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06);
-        font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:13px;color:#0a0a0a}
+      /* Every colour comes from applyTheme(), which reads what LinkedIn is
+         actually painting. The accent is the exception — that is us. */
+
+      /* ---- The bar ----------------------------------------------------
+         Two states. Dormant it is a thin, quiet strip that says what it can do.
+         Active it carries weight and one primary action, so ticking somebody
+         feels like it changed something. It used to look identical either way. */
+      #${BAR_ID}{position:sticky;top:56px;z-index:400;display:flex;align-items:center;gap:12px;
+        margin:0 0 12px;padding:9px 14px;border:1px solid var(--ft-line);border-radius:12px;
+        background:var(--ft-surface);box-shadow:0 1px 2px var(--ft-shadow);
+        font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:13px;color:var(--ft-ink);
+        transition:box-shadow .18s ease,border-color .18s ease}
+      #${BAR_ID}.ft-active{border-color:color-mix(in srgb,${ACCENT} 45%,transparent);
+        box-shadow:0 2px 14px color-mix(in srgb,${ACCENT} 18%,transparent)}
       #${BAR_ID} .ft-brand{display:flex;align-items:center;gap:7px;font-weight:700;flex:0 0 auto}
-      #${BAR_ID} .ft-mark{width:18px;height:18px;border-radius:5px;background:${ACCENT};color:#fff;
-        display:grid;place-items:center;font-size:11px;font-weight:800}
-      #${BAR_ID} .ft-sep{width:1px;height:20px;background:#e5e5e5;flex:0 0 auto}
-      #${BAR_ID} .ft-count{color:#6b6b6b;flex:1 1 auto}
-      #${BAR_ID} button{border:0;border-radius:8px;padding:8px 14px;font-size:13px;font-weight:600;
-        cursor:pointer;font-family:inherit}
-      #${BAR_ID} .ft-link{background:none;color:#6b6b6b;padding:8px 4px}
-      #${BAR_ID} .ft-link:hover{color:#0a0a0a;text-decoration:underline}
-      #${BAR_ID} .ft-primary{background:${ACCENT};color:#fff}
-      #${BAR_ID} .ft-primary:disabled{opacity:.45;cursor:default}
+      #${BAR_ID} .ft-mark{width:18px;height:18px;border-radius:5px;background:${ACCENT};
+        color:var(--ft-on-accent);display:grid;place-items:center;font-size:11px;font-weight:800}
+      #${BAR_ID} .ft-sep{width:1px;height:20px;background:var(--ft-line);flex:0 0 auto}
+      #${BAR_ID} .ft-count{color:var(--ft-soft);flex:1 1 auto;min-width:0}
+      #${BAR_ID}.ft-active .ft-count{color:var(--ft-ink);font-weight:600}
+      #${BAR_ID} button{border:0;border-radius:8px;padding:7px 13px;font-size:13px;font-weight:600;
+        cursor:pointer;font-family:inherit;transition:background .15s ease,color .15s ease}
+      #${BAR_ID} .ft-link{background:none;color:var(--ft-soft);padding:7px 6px}
+      #${BAR_ID} .ft-link:hover{color:var(--ft-ink);background:var(--ft-tint)}
+      #${BAR_ID} .ft-primary{background:${ACCENT};color:var(--ft-on-accent)}
+      #${BAR_ID} .ft-primary:hover:not(:disabled){filter:brightness(1.08)}
+      #${BAR_ID} .ft-primary:disabled{background:var(--ft-tint);color:var(--ft-soft);cursor:default}
       #${BAR_ID} .ft-msg{font-size:12px}
-      #${BAR_ID} .ft-ok{color:#0f7b52}
-      #${BAR_ID} .ft-err{color:#b91c1c}
-      .${CHECK_CLASS}{position:absolute;left:-30px;top:22px;width:18px;height:18px;cursor:pointer;
-        accent-color:${ACCENT};z-index:399}
+      #${BAR_ID} .ft-ok{color:var(--ft-ok)}
+      #${BAR_ID} .ft-err{color:var(--ft-err)}
+      #${BAR_ID} :focus-visible,#ft-launcher :focus-visible,#ft-panel :focus-visible{
+        outline:2px solid ${ACCENT};outline-offset:2px}
+
+      /* The checkbox sits INSIDE the row's own padding. At -30px it lived
+         outside the card, which is why it collided with LinkedIn's layout at
+         some widths and vanished at others. */
+      .${CHECK_CLASS}{position:absolute;left:8px;top:12px;width:17px;height:17px;cursor:pointer;
+        accent-color:${ACCENT};z-index:399;margin:0}
       .ft-anchor{position:relative}
-      @media (max-width:1200px){.${CHECK_CLASS}{left:6px;top:6px}}
+      .ft-anchor:has(.${CHECK_CLASS}:checked){background:var(--ft-tint);border-radius:8px}
 
       /* ---- Floating launcher ----------------------------------------
          Present on every LinkedIn page, because the bar only makes sense on a
@@ -66,44 +135,58 @@
          could not read. Draggable, because a fixed overlay will eventually sit
          on top of something that matters. */
       #ft-launcher{position:fixed!important;right:0;top:40%;z-index:2147483646;
-        display:flex;align-items:center;gap:2px;padding:6px 4px 6px 2px;
-        background:#fff;border:1px solid #e5e5e5;border-right:0;
-        border-radius:10px 0 0 10px;box-shadow:0 2px 10px rgba(0,0,0,.12);
+        display:flex;align-items:center;gap:3px;padding:7px 5px 7px 3px;
+        background:var(--ft-surface);border:1px solid var(--ft-line);border-right:0;
+        border-radius:12px 0 0 12px;box-shadow:0 3px 16px var(--ft-shadow);
         font-family:-apple-system,Segoe UI,Roboto,sans-serif;cursor:default;
-        user-select:none;touch-action:none}
-      #ft-launcher .ft-grip{width:12px;height:26px;cursor:grab;flex:0 0 auto;
-        background-image:radial-gradient(#c4c4c4 1.1px, transparent 1.2px);
-        background-size:5px 5px;background-position:center;opacity:.9}
-      #ft-launcher.ft-dragging .ft-grip{cursor:grabbing}
-      #ft-launcher .ft-open{width:30px;height:30px;border:0;border-radius:8px;
-        background:${ACCENT};color:#fff;font-weight:800;font-size:14px;cursor:pointer;
-        display:grid;place-items:center;font-family:inherit}
-      #ft-launcher .ft-dot{position:absolute;left:14px;top:2px;width:8px;height:8px;
-        border-radius:50%;border:1.5px solid #fff}
-      #ft-launcher .ft-dot.on{background:#0f7b52}
-      #ft-launcher .ft-dot.off{background:#b91c1c}
+        user-select:none;touch-action:none;
+        transition:box-shadow .2s ease,transform .2s ease}
+      #ft-launcher:hover{transform:translateX(-2px);box-shadow:0 6px 22px var(--ft-shadow)}
+      #ft-launcher .ft-grip{width:11px;height:28px;cursor:grab;flex:0 0 auto;border-radius:3px;
+        background-image:radial-gradient(var(--ft-soft) 1.1px, transparent 1.2px);
+        background-size:5px 5px;background-position:center;opacity:.55}
+      #ft-launcher .ft-grip:hover{opacity:1}
+      #ft-launcher.ft-dragging{transition:none}
+      #ft-launcher.ft-dragging .ft-grip{cursor:grabbing;opacity:1}
+      #ft-launcher .ft-open{position:relative;width:34px;height:34px;border:0;border-radius:10px;
+        background:${ACCENT};color:var(--ft-on-accent);font-weight:800;font-size:15px;cursor:pointer;
+        display:grid;place-items:center;font-family:inherit;line-height:1}
+      /* The status dot is the only thing that answers "is this on?" at a glance,
+         so it sits on the corner of the mark at a size you can actually see. */
+      #ft-launcher .ft-dot{position:absolute;right:-3px;bottom:-3px;width:11px;height:11px;
+        border-radius:50%;border:2px solid var(--ft-surface);box-sizing:border-box}
+      #ft-launcher .ft-dot.on{background:var(--ft-ok)}
+      #ft-launcher .ft-dot.off{background:var(--ft-err)}
 
-      /* ---- Panel ---- */
-      #ft-panel{position:fixed!important;z-index:2147483647;width:290px;
-        background:#fff;border:1px solid #e5e5e5;border-radius:12px;
-        box-shadow:0 8px 30px rgba(0,0,0,.18);padding:14px;
-        font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:13px;color:#0a0a0a}
-      #ft-panel h4{margin:0 0 2px;font-size:13px;font-weight:700}
-      #ft-panel p{margin:0;color:#6b6b6b;font-size:12px;line-height:1.45}
-      #ft-panel .ft-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+      /* ---- Panel ----
+         Anchored to the launcher with a pointer, because it belongs to it. A
+         floating card would read as a modal, and this is a menu. */
+      #ft-panel{position:fixed!important;z-index:2147483647;width:296px;
+        background:var(--ft-surface);border:1px solid var(--ft-line);border-radius:14px;
+        box-shadow:0 12px 40px var(--ft-shadow);padding:15px;
+        font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:13px;color:var(--ft-ink)}
+      #ft-panel::after{content:"";position:absolute;right:-6px;top:22px;width:10px;height:10px;
+        background:var(--ft-surface);border-right:1px solid var(--ft-line);
+        border-top:1px solid var(--ft-line);transform:rotate(45deg)}
+      #ft-panel h4{margin:0 0 3px;font-size:14px;font-weight:700;letter-spacing:-.01em}
+      #ft-panel p{margin:0;color:var(--ft-soft);font-size:12px;line-height:1.5}
+      #ft-panel .ft-head{display:flex;align-items:center;gap:8px;margin-bottom:12px}
       #ft-panel .ft-mark{width:20px;height:20px;border-radius:6px;background:${ACCENT};
-        color:#fff;display:grid;place-items:center;font-size:11px;font-weight:800}
+        color:var(--ft-on-accent);display:grid;place-items:center;font-size:11px;font-weight:800}
       #ft-panel .ft-x{margin-left:auto;border:0;background:none;cursor:pointer;
-        color:#6b6b6b;font-size:16px;line-height:1;padding:2px 4px}
-      #ft-panel button.ft-act{width:100%;margin-top:10px;border:0;border-radius:8px;
-        padding:9px 12px;background:${ACCENT};color:#fff;font-weight:600;font-size:13px;
-        cursor:pointer;font-family:inherit}
+        color:var(--ft-soft);font-size:17px;line-height:1;padding:2px 5px;border-radius:6px}
+      #ft-panel .ft-x:hover{background:var(--ft-tint);color:var(--ft-ink)}
+      #ft-panel button.ft-act{width:100%;margin-top:12px;border:0;border-radius:9px;
+        padding:10px 12px;background:${ACCENT};color:var(--ft-on-accent);font-weight:600;
+        font-size:13px;cursor:pointer;font-family:inherit}
+      #ft-panel button.ft-act:hover{filter:brightness(1.08)}
       #ft-panel button.ft-act:disabled{opacity:.45;cursor:default}
-      #ft-panel button.ft-ghost{width:100%;margin-top:6px;border:1px solid #e5e5e5;
-        border-radius:8px;padding:8px 12px;background:#fff;color:#0a0a0a;font-size:12px;
-        cursor:pointer;font-family:inherit}
-      #ft-panel .ft-note{margin-top:8px;padding:8px;border-radius:8px;background:#f6f5fd;
-        font-size:11px;color:#4a4a4a;line-height:1.4}
+      #ft-panel button.ft-ghost{width:100%;margin-top:6px;border:1px solid var(--ft-line);
+        border-radius:9px;padding:9px 12px;background:transparent;color:var(--ft-ink);
+        font-size:12px;cursor:pointer;font-family:inherit}
+      #ft-panel button.ft-ghost:hover{background:var(--ft-tint)}
+      #ft-panel .ft-note{margin-top:10px;padding:9px;border-radius:9px;background:var(--ft-tint);
+        font-size:11px;color:var(--ft-ink);line-height:1.45;opacity:.85}
     `;
     document.documentElement.appendChild(el);
   }
@@ -417,8 +500,9 @@
     el.querySelector('[data-ft="add"]').hidden = false;
     diag.hidden = true;
 
+    el.classList.toggle("ft-active", n > 0);
     el.querySelector('[data-ft="count"]').textContent =
-      n === 0 ? `No one selected · ${total} on this page` : `${n} selected`;
+      n === 0 ? `${total} on this page` : `${n} selected`;
     el.querySelector('[data-ft="all"]').textContent = n >= total && total > 0 ? "Clear selection" : "Select all";
     const btn = el.querySelector('[data-ft="add"]');
     btn.disabled = n === 0 || state.busy;
@@ -635,8 +719,7 @@
     el.id = LAUNCHER_ID;
     el.innerHTML = `
       <span class="ft-grip" data-ft="grip" title="Drag to move"></span>
-      <button class="ft-open" data-ft="open" title="Followthroo">F</button>
-      <span class="ft-dot off" data-ft="dot"></span>
+      <button class="ft-open" data-ft="open" title="Followthroo">F<span class="ft-dot off" data-ft="dot"></span></button>
     `;
     document.body.appendChild(el);
 
@@ -797,6 +880,7 @@
   function refresh() {
     clearTimeout(timer);
     timer = setTimeout(() => {
+      applyTheme();
       styles();
       // The launcher mounts on every LinkedIn page, whether or not there is a
       // list here. It is the only thing that proves the extension is installed

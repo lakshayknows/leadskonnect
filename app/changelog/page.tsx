@@ -9,6 +9,18 @@ export const metadata = { title: "Changelog — Followthroo" };
  */
 const ENTRIES = [
   {
+    version: "0.10.3",
+    date: "Sep 2026",
+    items: [
+      "The extension follows LinkedIn’s own theme. If you use LinkedIn in dark mode, it is no longer a white slab bolted onto a dark page",
+      "The bar looks different once you have picked someone — it used to look identical whether you had selected nobody or forty people",
+      "The Followthroo button on LinkedIn has a clearer status light, so you can see at a glance whether it is actually connected",
+      "Its menu is attached to the button now, with a pointer, instead of floating like a dialog",
+      "Row checkboxes sit inside the row instead of hanging off the left edge, where they used to collide with LinkedIn’s layout at some window widths",
+      "The extension’s own popup and settings pages follow your system light or dark setting",
+    ],
+  },
+  {
     version: "0.10.2",
     date: "Sep 2026",
     items: [
