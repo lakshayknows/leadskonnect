@@ -9,6 +9,15 @@ export const metadata = { title: "Changelog — Followthroo" };
  */
 const ENTRIES = [
   {
+    version: "0.10.6",
+    date: "Sep 2026",
+    items: [
+      "Fixed: adding people from a LinkedIn search failed with “String must contain at most 200 characters”. One person with a very long job title took the whole batch down with them",
+      "Long headlines and titles are now trimmed to fit rather than refused. Losing the end of a job title is a much smaller problem than losing the ten people you just picked",
+      "Job title is read more sensibly too — for a headline with no “at Company” in it, we take the role rather than the person’s entire résumé",
+    ],
+  },
+  {
     version: "0.10.5",
     date: "Sep 2026",
     items: [

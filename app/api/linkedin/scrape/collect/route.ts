@@ -13,17 +13,34 @@ export function OPTIONS() {
   return corsPreflight();
 }
 
+/**
+ * Trim to fit instead of refusing.
+ *
+ * These were `.max(n)`, and a single verbose LinkedIn headline — the kind that
+ * reads "Deputy Manager | Influencer Marketing | Brand Management at Acme.
+ * Ex-Ogilvy | Ex-FCB" — failed the whole request with "String must contain at
+ * most 200 character(s)". Ten people the person had deliberately ticked, lost to
+ * one long job title.
+ *
+ * A length ceiling here is a storage concern, not a correctness one. Losing the
+ * import is a far worse outcome than losing the tail of a headline, so the
+ * ceiling truncates. The extension clamps at source too (content.js rowData);
+ * this is the backstop for older extension builds, which is exactly the case
+ * that produced the bug report.
+ */
+const capped = (n: number) => z.string().transform((s) => s.slice(0, n));
+
 const Row = z
   .object({
-    profileUrl: z.string().max(500),
-    fullName: z.string().max(200).optional(),
-    firstName: z.string().max(120).optional(),
-    lastName: z.string().max(120).optional(),
-    headline: z.string().max(500).optional(),
-    location: z.string().max(200).optional(),
-    company: z.string().max(200).optional(),
-    title: z.string().max(200).optional(),
-    degree: z.string().max(20).optional(),
+    profileUrl: capped(500),
+    fullName: capped(200).optional(),
+    firstName: capped(120).optional(),
+    lastName: capped(120).optional(),
+    headline: capped(500).optional(),
+    location: capped(200).optional(),
+    company: capped(200).optional(),
+    title: capped(200).optional(),
+    degree: capped(20).optional(),
   })
   .strip();
 

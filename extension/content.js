@@ -414,16 +414,35 @@
     const headline = grab([".entity-result__primary-subtitle", ".artdeco-entity-lockup__subtitle"]) || blocks[0] || "";
     const location = grab([".entity-result__secondary-subtitle", ".artdeco-entity-lockup__caption"]) || blocks[1] || "";
     const parts = fullName.split(/\s+/);
+
+    /**
+     * Never hand the server a value it will refuse.
+     *
+     * The structural fallback reads whole text blocks, so a headline can easily
+     * be "Deputy Manager - Marketing | Influencer Marketing | Brand Management at
+     * The Man Company. Ex-Ogilvy | Ex-FCB" — and `title`, derived from it, then
+     * exceeded the API's 200-character limit and failed the ENTIRE import with
+     * "String must contain at most 200 character(s)". Ten good leads lost to one
+     * verbose profile.
+     */
+    const clamp = (s, n) => (s || "").slice(0, n).trim();
+
+    // "Head of HR at Acme" -> company is what follows " at ". When there is no
+    // " at ", the whole headline used to become the title; take the first
+    // segment instead, which is the role rather than the person's entire pitch.
+    const atSplit = headline.split(/\s+at\s+/i);
+    const rawTitle = atSplit.length > 1 ? atSplit[0] : headline.split(/\s*[|·•]\s*/)[0];
+
     return {
-      profileUrl,
-      fullName,
-      firstName: parts[0] || "",
-      lastName: parts.slice(1).join(" "),
-      headline,
-      location,
-      company: (headline.split(/\s+at\s+/i)[1] || "").trim(),
-      title: (headline.split(/\s+at\s+/i)[0] || headline).trim(),
-      degree,
+      profileUrl: clamp(profileUrl, 500),
+      fullName: clamp(fullName, 200),
+      firstName: clamp(parts[0], 120),
+      lastName: clamp(parts.slice(1).join(" "), 120),
+      headline: clamp(headline, 500),
+      location: clamp(location, 200),
+      company: clamp(atSplit[1], 200),
+      title: clamp(rawTitle, 200),
+      degree: clamp(degree, 20),
     };
   }
 
