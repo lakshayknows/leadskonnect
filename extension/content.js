@@ -59,27 +59,156 @@
         accent-color:${ACCENT};z-index:399}
       .ft-anchor{position:relative}
       @media (max-width:1200px){.${CHECK_CLASS}{left:6px;top:6px}}
+
+      /* ---- Floating launcher ----------------------------------------
+         Present on every LinkedIn page, because the bar only makes sense on a
+         list and people need a way in from a profile, a company, or a page we
+         could not read. Draggable, because a fixed overlay will eventually sit
+         on top of something that matters. */
+      #ft-launcher{position:fixed!important;right:0;top:40%;z-index:2147483646;
+        display:flex;align-items:center;gap:2px;padding:6px 4px 6px 2px;
+        background:#fff;border:1px solid #e5e5e5;border-right:0;
+        border-radius:10px 0 0 10px;box-shadow:0 2px 10px rgba(0,0,0,.12);
+        font-family:-apple-system,Segoe UI,Roboto,sans-serif;cursor:default;
+        user-select:none;touch-action:none}
+      #ft-launcher .ft-grip{width:12px;height:26px;cursor:grab;flex:0 0 auto;
+        background-image:radial-gradient(#c4c4c4 1.1px, transparent 1.2px);
+        background-size:5px 5px;background-position:center;opacity:.9}
+      #ft-launcher.ft-dragging .ft-grip{cursor:grabbing}
+      #ft-launcher .ft-open{width:30px;height:30px;border:0;border-radius:8px;
+        background:${ACCENT};color:#fff;font-weight:800;font-size:14px;cursor:pointer;
+        display:grid;place-items:center;font-family:inherit}
+      #ft-launcher .ft-dot{position:absolute;left:14px;top:2px;width:8px;height:8px;
+        border-radius:50%;border:1.5px solid #fff}
+      #ft-launcher .ft-dot.on{background:#0f7b52}
+      #ft-launcher .ft-dot.off{background:#b91c1c}
+
+      /* ---- Panel ---- */
+      #ft-panel{position:fixed!important;z-index:2147483647;width:290px;
+        background:#fff;border:1px solid #e5e5e5;border-radius:12px;
+        box-shadow:0 8px 30px rgba(0,0,0,.18);padding:14px;
+        font-family:-apple-system,Segoe UI,Roboto,sans-serif;font-size:13px;color:#0a0a0a}
+      #ft-panel h4{margin:0 0 2px;font-size:13px;font-weight:700}
+      #ft-panel p{margin:0;color:#6b6b6b;font-size:12px;line-height:1.45}
+      #ft-panel .ft-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+      #ft-panel .ft-mark{width:20px;height:20px;border-radius:6px;background:${ACCENT};
+        color:#fff;display:grid;place-items:center;font-size:11px;font-weight:800}
+      #ft-panel .ft-x{margin-left:auto;border:0;background:none;cursor:pointer;
+        color:#6b6b6b;font-size:16px;line-height:1;padding:2px 4px}
+      #ft-panel button.ft-act{width:100%;margin-top:10px;border:0;border-radius:8px;
+        padding:9px 12px;background:${ACCENT};color:#fff;font-weight:600;font-size:13px;
+        cursor:pointer;font-family:inherit}
+      #ft-panel button.ft-act:disabled{opacity:.45;cursor:default}
+      #ft-panel button.ft-ghost{width:100%;margin-top:6px;border:1px solid #e5e5e5;
+        border-radius:8px;padding:8px 12px;background:#fff;color:#0a0a0a;font-size:12px;
+        cursor:pointer;font-family:inherit}
+      #ft-panel .ft-note{margin-top:8px;padding:8px;border-radius:8px;background:#f6f5fd;
+        font-size:11px;color:#4a4a4a;line-height:1.4}
     `;
     document.documentElement.appendChild(el);
   }
 
   /* ---------------------------------------------------------------- */
 
-  /** Person cards, using the same selector list the bulk readers use. */
-  function rowCards() {
-    const selectors = [
-      "li.reusable-search__result-container",
-      "div.entity-result",
-      "li.artdeco-list__item",
-      ".scaffold-finite-scroll__content > ul > li",
-    ];
-    for (const sel of selectors) {
-      const found = Array.from(document.querySelectorAll(sel)).filter((el) =>
-        el.querySelector('a[href*="/in/"]'),
+  /**
+   * Known row markup, newest first.
+   *
+   * LinkedIn ships several variants at once and retires old ones without notice
+   * — `reusable-search__result-container` and `entity-result` were the search
+   * result classes for years and are now gone from people search. Attribute
+   * hooks (`data-view-name`, `data-chameleon-result-urn`) have outlived the
+   * class names, so they lead.
+   */
+  const ROW_SELECTORS = [
+    '[data-view-name="search-entity-result"]',
+    "[data-chameleon-result-urn]",
+    "li.reusable-search__result-container",
+    "div.entity-result",
+    "li.artdeco-list__item",
+    ".scaffold-finite-scroll__content > ul > li",
+  ];
+
+  const isPerson = (el) => !!el.querySelector('a[href*="/in/"]');
+
+  /**
+   * Find rows without knowing any class names.
+   *
+   * This is the part that survives a redesign. A results list is the element
+   * with the most sibling children that each contain exactly one distinct
+   * profile link — a shape that holds regardless of what LinkedIn calls things
+   * this quarter. Scoped to <main> so the "People you may know" rail and the
+   * nav don't win.
+   */
+  function structuralCards() {
+    const scope = document.querySelector("main") || document.body;
+    const anchors = Array.from(scope.querySelectorAll('a[href*="/in/"]'));
+    if (anchors.length < 3) return [];
+
+    // For each anchor, register every ancestor against its parent, so each
+    // parent accumulates the set of children that lead to a profile.
+    const byParent = new Map();
+    for (const a of anchors) {
+      let node = a;
+      for (let depth = 0; depth < 8 && node && node !== scope; depth++) {
+        const parent = node.parentElement;
+        if (!parent) break;
+        if (!byParent.has(parent)) byParent.set(parent, new Set());
+        byParent.get(parent).add(node);
+        node = parent;
+      }
+    }
+
+    let best = [];
+    for (const children of byParent.values()) {
+      const rows = Array.from(children).filter(isPerson);
+      if (rows.length < 3) continue;
+      // Each row should be a different person; a container whose children all
+      // point at the same profile is a card's internals, not the list.
+      const distinct = new Set(
+        rows.map((r) => {
+          const a = r.querySelector('a[href*="/in/"]');
+          return a ? a.getAttribute("href").split("?")[0] : "";
+        }),
       );
+      if (distinct.size < rows.length) continue;
+      if (rows.length > best.length) best = rows;
+    }
+    return best;
+  }
+
+  function rowCards() {
+    for (const sel of ROW_SELECTORS) {
+      const found = Array.from(document.querySelectorAll(sel)).filter(isPerson);
       if (found.length) return found;
     }
-    return [];
+    return structuralCards();
+  }
+
+  /**
+   * What the page looks like to us, for when it looks like nothing.
+   *
+   * scrapers.js states the rule this file was missing: a selector miss and an
+   * empty result must not be indistinguishable. Copying this into a bug report
+   * turns "the extension is broken" into a one-line selector fix.
+   */
+  function diagnostics() {
+    const scope = document.querySelector("main") || document.body;
+    const anchors = Array.from(scope.querySelectorAll('a[href*="/in/"]'));
+    const sample = anchors[0] && anchors[0].closest("li, div[class]");
+    return JSON.stringify(
+      {
+        url: location.href.split("?")[0],
+        profileLinksOnPage: anchors.length,
+        matchedSelector: ROW_SELECTORS.find(
+          (sel) => Array.from(document.querySelectorAll(sel)).filter(isPerson).length,
+        ) || null,
+        structuralRows: structuralCards().length,
+        sampleRowClass: sample ? sample.className || "(no class)" : null,
+        extensionVersion: (chrome.runtime.getManifest() || {}).version,
+      },
+      null,
+      2,
+    );
   }
 
   /**
@@ -151,17 +280,44 @@
       <span class="ft-count" data-ft="count">No one selected</span>
       <span class="ft-msg" data-ft="msg"></span>
       <button class="ft-link" data-ft="every" hidden></button>
+      <button class="ft-link" data-ft="diag" hidden>Copy diagnostics</button>
       <button class="ft-primary" data-ft="add" disabled>Add to Followthroo</button>
     `;
     el.querySelector('[data-ft="all"]').addEventListener("click", toggleAll);
     el.querySelector('[data-ft="add"]').addEventListener("click", add);
     el.querySelector('[data-ft="every"]').addEventListener("click", addEveryPage);
+    el.querySelector('[data-ft="diag"]').addEventListener("click", () => {
+      navigator.clipboard.writeText(diagnostics()).then(
+        () => message("Diagnostics copied — paste them into a bug report.", "ok"),
+        () => message("Could not copy. Open the console: the details are logged there.", "err"),
+      );
+      console.log("[followthroo] diagnostics", diagnostics());
+    });
     return el;
   }
 
+  /**
+   * Mount above the results list.
+   *
+   * It also mounts when NO rows were found, which is the point: previously a
+   * selector miss meant the bar never appeared, so a broken extension and an
+   * extension that had nothing to do looked identical — to the user and to us.
+   * Now the page says which of the two it is.
+   */
   function mountBar() {
     const cards = rowCards();
-    if (!cards.length) return false;
+
+    if (!cards.length) {
+      // Only complain where people are actually expected. A profile page or the
+      // feed having no result rows is correct, not a failure.
+      const scope = document.querySelector("main") || document.body;
+      const looksLikeAList = scope.querySelectorAll('a[href*="/in/"]').length >= 3;
+      if (!looksLikeAList || !scope.parentElement) return false;
+      const el = bar();
+      if (el.parentElement !== scope.parentElement) scope.parentElement.insertBefore(el, scope);
+      return true;
+    }
+
     const list = cards[0].closest("ul") || cards[0].parentElement;
     if (!list || !list.parentElement) return false;
     const el = bar();
@@ -174,6 +330,23 @@
     if (!el) return;
     const n = state.selected.size;
     const total = rowCards().length;
+    const diag = el.querySelector('[data-ft="diag"]');
+
+    // Zero rows on a page full of profile links means we failed to read it, not
+    // that the search found nobody. Say so, and offer the evidence.
+    if (total === 0) {
+      el.querySelector('[data-ft="count"]').textContent =
+        "Can't read this page's layout — LinkedIn may have changed it.";
+      el.querySelector('[data-ft="all"]').hidden = true;
+      el.querySelector('[data-ft="every"]').hidden = true;
+      el.querySelector('[data-ft="add"]').hidden = true;
+      diag.hidden = false;
+      return;
+    }
+    el.querySelector('[data-ft="all"]').hidden = false;
+    el.querySelector('[data-ft="add"]').hidden = false;
+    diag.hidden = true;
+
     el.querySelector('[data-ft="count"]').textContent =
       n === 0 ? `No one selected · ${total} on this page` : `${n} selected`;
     el.querySelector('[data-ft="all"]').textContent = n >= total && total > 0 ? "Clear selection" : "Select all";
@@ -309,6 +482,217 @@
   /* ---------------------------------------------------------------- */
 
   /**
+   * The floating launcher.
+   *
+   * The bar only exists where there is a list to act on. That left a profile, a
+   * company page, or any page we could not read with no visible sign the
+   * extension was installed at all — indistinguishable from broken. This is
+   * always present on LinkedIn, and it is the thing that says "we are here".
+   *
+   * It is draggable and its position is remembered, because a fixed overlay
+   * will eventually sit on top of something the person needs.
+   */
+
+  const LAUNCHER_ID = "ft-launcher";
+  const PANEL_ID = "ft-panel";
+
+  /** Rough page classification from the URL alone — cheap and layout-proof. */
+  function pageKind() {
+    const p = location.pathname;
+    if (p.startsWith("/in/")) return "profile";
+    if (p.startsWith("/search/results/people")) return "search";
+    if (p.startsWith("/company/")) return "company";
+    if (p.startsWith("/groups/")) return "group";
+    if (p.startsWith("/events/")) return "event";
+    if (p.startsWith("/mynetwork")) return "network";
+    return "other";
+  }
+
+  /** The person whose profile is open, read from the page. */
+  function currentProfile() {
+    if (pageKind() !== "profile") return null;
+    const h1 = document.querySelector("main h1, h1");
+    const fullName = h1 && h1.textContent ? h1.textContent.trim().replace(/\s+/g, " ") : "";
+    if (!fullName) return null;
+    const hEl = document.querySelector("main .text-body-medium, .pv-text-details__left-panel .text-body-medium");
+    const headline = hEl && hEl.textContent ? hEl.textContent.trim().replace(/\s+/g, " ") : "";
+    const parts = fullName.split(" ");
+    return {
+      profileUrl: "https://www.linkedin.com" + location.pathname.replace(/\/+$/, ""),
+      fullName,
+      firstName: parts[0] || "",
+      lastName: parts.slice(1).join(" "),
+      headline,
+      company: (headline.split(/\s+at\s+/i)[1] || "").trim(),
+      title: (headline.split(/\s+at\s+/i)[0] || headline).trim(),
+    };
+  }
+
+  /** Send rows to Followthroo. Shared by the bar and the panel. */
+  async function postRows(rows, onDone) {
+    const cfg = await chrome.storage.local.get(["apiBase", "token"]);
+    if (!cfg.apiBase || !cfg.token) return onDone("Connect the extension first — click its icon.", true);
+    try {
+      const res = await fetch(`${cfg.apiBase}/api/linkedin/scrape/collect`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${cfg.token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceUrl: location.href, rows }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json.ok) throw new Error(json.error || `server said ${res.status}`);
+      const { created = 0, duplicates = 0 } = json.data || {};
+      onDone(duplicates ? `Added ${created}, ${duplicates} already yours` : `Added ${created}`, false);
+    } catch (e) {
+      onDone(String((e && e.message) || e), true);
+    }
+  }
+
+  function mountLauncher() {
+    if (document.getElementById(LAUNCHER_ID)) return;
+    const el = document.createElement("div");
+    el.id = LAUNCHER_ID;
+    el.innerHTML = `
+      <span class="ft-grip" data-ft="grip" title="Drag to move"></span>
+      <button class="ft-open" data-ft="open" title="Followthroo">F</button>
+      <span class="ft-dot off" data-ft="dot"></span>
+    `;
+    document.body.appendChild(el);
+
+    // Restore where they last put it.
+    chrome.storage.local.get(["launcherTop"], (v) => {
+      if (v && typeof v.launcherTop === "number") el.style.top = `${v.launcherTop}px`;
+    });
+
+    // Connected state, so the icon itself answers "is this thing on?".
+    chrome.storage.local.get(["token", "apiBase"], (v) => {
+      const dot = el.querySelector('[data-ft="dot"]');
+      const on = !!(v && v.token && v.apiBase);
+      dot.className = `ft-dot ${on ? "on" : "off"}`;
+      dot.title = on ? "Connected to Followthroo" : "Not connected — click to set up";
+    });
+
+    el.querySelector('[data-ft="open"]').addEventListener("click", togglePanel);
+
+    // Vertical drag only: it is docked to the right edge, and letting it roam
+    // horizontally just creates ways to lose it.
+    const grip = el.querySelector('[data-ft="grip"]');
+    let startY = 0;
+    let startTop = 0;
+    grip.addEventListener("pointerdown", (e) => {
+      startY = e.clientY;
+      startTop = el.getBoundingClientRect().top;
+      el.classList.add("ft-dragging");
+      grip.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    grip.addEventListener("pointermove", (e) => {
+      if (!el.classList.contains("ft-dragging")) return;
+      const top = Math.max(8, Math.min(window.innerHeight - 50, startTop + (e.clientY - startY)));
+      el.style.top = `${top}px`;
+    });
+    grip.addEventListener("pointerup", () => {
+      if (!el.classList.contains("ft-dragging")) return;
+      el.classList.remove("ft-dragging");
+      chrome.storage.local.set({ launcherTop: el.getBoundingClientRect().top });
+      closePanel();
+    });
+  }
+
+  function closePanel() {
+    const p = document.getElementById(PANEL_ID);
+    if (p) p.remove();
+  }
+
+  function togglePanel() {
+    if (document.getElementById(PANEL_ID)) return closePanel();
+
+    const launcher = document.getElementById(LAUNCHER_ID);
+    const box = launcher.getBoundingClientRect();
+    const el = document.createElement("div");
+    el.id = PANEL_ID;
+    el.style.top = `${Math.max(8, Math.min(window.innerHeight - 240, box.top))}px`;
+    el.style.right = "52px";
+
+    const rows = rowCards();
+    const profile = currentProfile();
+    const kind = pageKind();
+
+    let bodyHtml;
+    let action = null;
+
+    if (rows.length) {
+      bodyHtml = `<h4>${rows.length} people on this page</h4><p>Tick the ones you want, or take the lot.</p>`;
+      action = { label: `Add all ${rows.length}`, run: addAllOnPage };
+    } else if (profile) {
+      bodyHtml = `<h4>${profile.fullName}</h4><p>${profile.headline || "Save this profile to Followthroo."}</p>`;
+      action = { label: "Save this profile", run: saveCurrentProfile };
+    } else if (kind === "search" || kind === "company" || kind === "group" || kind === "event") {
+      bodyHtml =
+        `<h4>Can't read this page</h4>` +
+        `<p>This looks like it should list people, but LinkedIn's layout has changed and we can't find them.</p>` +
+        `<div class="ft-note">Nothing was skipped silently — we would rather say so. Copy the diagnostics and send them to us.</div>`;
+      action = { label: "Copy diagnostics", run: copyDiagnostics };
+    } else {
+      bodyHtml =
+        `<h4>Nothing to add here</h4>` +
+        `<p>Open a people search, a company's people, a group, an event, or someone's profile.</p>`;
+    }
+
+    el.innerHTML = `
+      <div class="ft-head">
+        <span class="ft-mark">F</span>
+        <b>Followthroo</b>
+        <button class="ft-x" data-ft="close" title="Close">&times;</button>
+      </div>
+      ${bodyHtml}
+      ${action ? `<button class="ft-act" data-ft="act">${action.label}</button>` : ""}
+      <button class="ft-ghost" data-ft="app">Open Followthroo</button>
+      <div class="ft-msg" data-ft="pmsg" style="margin-top:8px;font-size:12px"></div>
+    `;
+    document.body.appendChild(el);
+
+    el.querySelector('[data-ft="close"]').addEventListener("click", closePanel);
+    el.querySelector('[data-ft="app"]').addEventListener("click", async () => {
+      const cfg = await chrome.storage.local.get(["apiBase"]);
+      window.open(`${cfg.apiBase || "https://app.followthroo.com"}/dashboard/linkedin`, "_blank");
+    });
+    if (action) el.querySelector('[data-ft="act"]').addEventListener("click", action.run);
+  }
+
+  function panelMessage(text, isError) {
+    const el = document.getElementById(PANEL_ID);
+    if (!el) return;
+    const m = el.querySelector('[data-ft="pmsg"]');
+    if (!m) return;
+    m.textContent = text;
+    m.style.color = isError ? "#b91c1c" : "#0f7b52";
+  }
+
+  function copyDiagnostics() {
+    navigator.clipboard.writeText(diagnostics()).then(
+      () => panelMessage("Copied. Paste it into a bug report.", false),
+      () => panelMessage("Could not copy — details are in the console.", true),
+    );
+    console.log("[followthroo] diagnostics", diagnostics());
+  }
+
+  async function saveCurrentProfile() {
+    const profile = currentProfile();
+    if (!profile) return panelMessage("Could not read this profile.", true);
+    panelMessage("Saving…", false);
+    await postRows([profile], panelMessage);
+  }
+
+  async function addAllOnPage() {
+    const rows = rowCards().map(rowData).filter(Boolean);
+    if (!rows.length) return panelMessage("Nothing readable on this page.", true);
+    panelMessage(`Adding ${rows.length}…`, false);
+    await postRows(rows, panelMessage);
+  }
+
+  /* ---------------------------------------------------------------- */
+
+  /**
    * LinkedIn is a single-page app: navigating between searches replaces the
    * list without a page load, and results stream in as you scroll. So rather
    * than running once, watch and re-apply — debounced, because the feed mutates
@@ -319,6 +703,10 @@
     clearTimeout(timer);
     timer = setTimeout(() => {
       styles();
+      // The launcher mounts on every LinkedIn page, whether or not there is a
+      // list here. It is the only thing that proves the extension is installed
+      // and connected, so it must not depend on the bar succeeding.
+      mountLauncher();
       if (mountBar()) {
         decorate();
         paint();

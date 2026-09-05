@@ -67,27 +67,74 @@ function cleanName(raw) {
 }
 
 const CARD_SELECTORS = [
+  // Attribute hooks first: these have outlived the class names, which LinkedIn
+  // retires without notice. `reusable-search__result-container` and
+  // `entity-result` were people-search staples for years and are now gone.
+  '[data-view-name="search-entity-result"]',
+  "[data-chameleon-result-urn]",
   "li.reusable-search__result-container",
   "div.entity-result",
   "li.artdeco-list__item",
   ".scaffold-finite-scroll__content li",
 ];
 
+/**
+ * Rows without class names.
+ *
+ * Rule 2 in this file's header says selectors should be lists, not strings.
+ * This is the end of that list: the results container is whichever element has
+ * the most sibling children that each hold one distinct profile link. That
+ * shape is what a list of people IS, so it survives a redesign that renames
+ * everything.
+ */
+function structuralCards(doc) {
+  const scope = doc.querySelector("main") || doc.body;
+  if (!scope) return [];
+  if (scope.querySelectorAll('a[href*="/in/"]').length < 3) return [];
+
+  const byParent = new Map();
+  for (const a of scope.querySelectorAll('a[href*="/in/"]')) {
+    let node = a;
+    for (let depth = 0; depth < 8 && node && node !== scope; depth++) {
+      const parent = node.parentElement;
+      if (!parent) break;
+      if (!byParent.has(parent)) byParent.set(parent, new Set());
+      byParent.get(parent).add(node);
+      node = parent;
+    }
+  }
+
+  let best = [];
+  for (const children of byParent.values()) {
+    const rows = Array.from(children).filter((c) => c.querySelector('a[href*="/in/"]'));
+    if (rows.length < 3) continue;
+    const distinct = new Set(rows.map((r) => profileHref(r)));
+    if (distinct.size < rows.length) continue; // a card's internals, not the list
+    if (rows.length > best.length) best = rows;
+  }
+  return best;
+}
+
 /** People search, company employees, group members, event guests all render as person cards. */
 function readPersonCards(doc) {
-  const cards = pick(doc, CARD_SELECTORS);
+  let cards = pick(doc, CARD_SELECTORS);
+  if (!cards.length) cards = structuralCards(doc);
   if (!cards.length) return { rows: null }; // container missing → selector miss
 
   const rows = [];
   for (const card of cards) {
     const url = profileHref(card);
     if (!url) continue;
-    const raw = text(card, [
-      "span.entity-result__title-text span[aria-hidden='true']",
-      ".entity-result__title-text a span",
-      "span[dir='ltr'] span[aria-hidden='true']",
-      ".artdeco-entity-lockup__title",
-    ]);
+    const raw =
+      text(card, [
+        "span.entity-result__title-text span[aria-hidden='true']",
+        ".entity-result__title-text a span",
+        "span[dir='ltr'] span[aria-hidden='true']",
+        ".artdeco-entity-lockup__title",
+      ]) ||
+      // Last resort: the profile link's own text. A row whose name we cannot
+      // read is not a row we can use, so this is the floor rather than a guess.
+      text(card, ['a[href*="/in/"] span[aria-hidden="true"]', 'a[href*="/in/"]']);
     const { name, degree } = cleanName(raw);
     if (!name) continue;
     const headline = text(card, [

@@ -9,6 +9,17 @@ export const metadata = { title: "Changelog — Followthroo" };
  */
 const ENTRIES = [
   {
+    version: "0.9.8",
+    date: "Sep 2026",
+    items: [
+      "The extension now puts a Followthroo button on every LinkedIn page, so you can see at a glance that it is installed and connected. Drag it up or down; it stays where you put it",
+      "Click it anywhere: on a profile it saves that person, on a search it adds everyone on the page, and elsewhere it tells you what to open",
+      "Fixed the big one: LinkedIn changed the markup of its people search, and we were still looking for the old layout. Searches read as empty when they were full",
+      "We now find people by the shape of the page rather than by LinkedIn’s class names, so the next redesign should not break it the same way",
+      "And when we genuinely cannot read a page, the bar says so instead of quietly not appearing — with a button that copies the details for a bug report",
+    ],
+  },
+  {
     version: "0.9.7",
     date: "Sep 2026",
     items: [
